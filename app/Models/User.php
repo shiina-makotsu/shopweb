@@ -1,0 +1,154 @@
+<?php
+
+namespace App\Models;
+
+use App\Support\AdminAccess;
+use Filament\Models\Contracts\FilamentUser;
+use Filament\Panel;
+use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\Notifiable;
+
+class User extends Authenticatable implements FilamentUser
+{
+    use HasFactory;
+    use Notifiable;
+
+    protected $fillable = [
+        'name',
+        'public_id',
+        'email',
+        'password',
+        'role',
+        'account_type',
+        'forum_role',
+        'nickname',
+        'avatar_path',
+        'preferred_locale',
+        'interface_settings',
+        'privacy_settings',
+        'can_view_order_numbers',
+        'can_view_tracking_numbers',
+    ];
+
+    protected $hidden = [
+        'password',
+        'remember_token',
+    ];
+
+    protected function casts(): array
+    {
+        return [
+            'email_verified_at' => 'datetime',
+            'password' => 'hashed',
+            'interface_settings' => 'array',
+            'privacy_settings' => 'array',
+            'can_view_order_numbers' => 'boolean',
+            'can_view_tracking_numbers' => 'boolean',
+        ];
+    }
+
+    public function canAccessPanel(Panel $panel): bool
+    {
+        return AdminAccess::canAccessPanel($this);
+    }
+
+    public function isAdmin(): bool
+    {
+        return $this->role === 'admin';
+    }
+
+    public function isSuperAdmin(): bool
+    {
+        return $this->role === AdminAccess::ROLE_ADMIN;
+    }
+
+    public function isBackofficeUser(): bool
+    {
+        return AdminAccess::canAccessPanel($this);
+    }
+
+    public function orders(): HasMany
+    {
+        return $this->hasMany(Order::class);
+    }
+
+    public function intentVotes(): HasMany
+    {
+        return $this->hasMany(ProductIntentVote::class);
+    }
+
+    public function priceVotes(): HasMany
+    {
+        return $this->hasMany(ProductPriceVote::class);
+    }
+
+    public function browsingHistories(): HasMany
+    {
+        return $this->hasMany(ProductBrowsingHistory::class);
+    }
+
+    public function wishlists(): HasMany
+    {
+        return $this->hasMany(ProductWishlist::class);
+    }
+
+    public function favorites(): HasMany
+    {
+        return $this->hasMany(ProductFavorite::class);
+    }
+
+    public function productComments(): HasMany
+    {
+        return $this->hasMany(ProductComment::class);
+    }
+
+    public function forumThreads(): HasMany
+    {
+        return $this->hasMany(ForumThread::class);
+    }
+
+    public function procurementAllocations(): HasMany
+    {
+        return $this->hasMany(ProcurementUserAllocation::class);
+    }
+
+    public function afterSalesRequests(): HasMany
+    {
+        return $this->hasMany(AfterSalesRequest::class);
+    }
+
+    public function moderatedForumSections(): BelongsToMany
+    {
+        return $this->belongsToMany(ForumSection::class, 'forum_moderators')->withTimestamps();
+    }
+
+    public function sentMessages(): HasMany
+    {
+        return $this->hasMany(PrivateMessage::class, 'sender_id');
+    }
+
+    public function receivedMessages(): HasMany
+    {
+        return $this->hasMany(PrivateMessage::class, 'recipient_id');
+    }
+
+    public function getRouteKeyName(): string
+    {
+        return 'public_id';
+    }
+
+    public function displayName(): string
+    {
+        return $this->nickname ?: $this->name;
+    }
+
+    public function isForumModeratorFor(ForumSection $section): bool
+    {
+        return $this->role === 'admin'
+            || $this->moderatedForumSections()->whereKey($section->id)->exists();
+    }
+}

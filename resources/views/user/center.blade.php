@@ -1,0 +1,91 @@
+<x-layouts.app title="用户中心">
+    <section class="mb-4 rounded-sm border border-slate-300 bg-white">
+        <div class="flex flex-wrap items-center gap-4 border-b border-slate-200 bg-slate-100 px-4 py-4">
+            <div class="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border border-slate-300 bg-white text-xl font-semibold text-blue-700">
+                @if($user->avatar_path)
+                    <img class="h-full w-full object-cover" src="{{ \Illuminate\Support\Facades\Storage::disk('public_uploads')->url($user->avatar_path) }}" alt="{{ $user->name }}">
+                @else
+                    {{ mb_substr($user->nickname ?: $user->name, 0, 1) }}
+                @endif
+            </div>
+            <div>
+                <h1 class="text-xl font-semibold">{{ $user->nickname ?: $user->name }}</h1>
+                <p class="mt-1 text-sm text-slate-600">用户 ID：{{ $user->public_id }} / {{ $user->email }}</p>
+            </div>
+        </div>
+
+        <div class="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-5">
+            <a class="rounded-sm border border-slate-200 bg-white px-4 py-3 hover:border-blue-300 hover:bg-blue-50" href="{{ route('orders.index') }}">
+                <p class="text-xs text-slate-500">待付款</p>
+                <p class="mt-1 text-2xl font-semibold">{{ $pendingPaymentCount }}</p>
+            </a>
+            <a class="rounded-sm border border-slate-200 bg-white px-4 py-3 hover:border-blue-300 hover:bg-blue-50" href="{{ route('orders.index') }}">
+                <p class="text-xs text-slate-500">待发货 / 进货中</p>
+                <p class="mt-1 text-2xl font-semibold">{{ $pendingShipmentCount }}</p>
+            </a>
+            <a class="rounded-sm border border-slate-200 bg-white px-4 py-3 hover:border-blue-300 hover:bg-blue-50" href="{{ route('orders.index') }}">
+                <p class="text-xs text-slate-500">待收货</p>
+                <p class="mt-1 text-2xl font-semibold">{{ $awaitingReceiptCount }}</p>
+            </a>
+            <a class="rounded-sm border border-slate-200 bg-white px-4 py-3 hover:border-blue-300 hover:bg-blue-50" href="{{ route('orders.index') }}">
+                <p class="text-xs text-slate-500">已完成</p>
+                <p class="mt-1 text-2xl font-semibold">{{ $fulfilledCount }}</p>
+            </a>
+            <div class="rounded-sm border border-slate-200 bg-white px-4 py-3">
+                <p class="text-xs text-slate-500">退款售后</p>
+                <p class="mt-1 text-2xl font-semibold">0</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="mb-4 grid gap-4 lg:grid-cols-[1fr_320px]">
+        <div class="rounded-sm border border-slate-300 bg-white">
+            <div class="border-b border-slate-200 bg-slate-100 px-4 py-3">
+                <h2 class="text-base font-semibold">浏览记录</h2>
+            </div>
+            <div class="divide-y divide-slate-100">
+                @forelse($recentHistories as $history)
+                    @if($history->product)
+                        <a class="flex items-center gap-3 px-4 py-3 hover:bg-slate-50" href="{{ route('products.show', $history->product) }}">
+                            @if($history->product->coverMedia)
+                                <img class="h-12 w-12 rounded-sm object-cover" src="{{ $history->product->coverMedia->url() }}" alt="{{ $history->product->title }}">
+                            @else
+                                <div class="h-12 w-12 rounded-sm bg-slate-100"></div>
+                            @endif
+                            <div class="min-w-0 flex-1">
+                                <p class="truncate text-sm font-medium">{{ $history->product->title }}</p>
+                                <p class="mt-1 text-xs text-slate-500">{{ $history->viewed_at?->format('Y-m-d H:i') }} / {{ $history->view_count }} 次</p>
+                            </div>
+                        </a>
+                    @endif
+                @empty
+                    <p class="px-4 py-8 text-sm text-slate-600">暂无浏览记录。</p>
+                @endforelse
+            </div>
+        </div>
+
+        <aside class="space-y-4">
+            <div class="rounded-sm border border-slate-300 bg-white">
+                <div class="border-b border-slate-200 bg-slate-100 px-4 py-3">
+                    <h2 class="text-base font-semibold">商品偏好</h2>
+                </div>
+                <dl class="space-y-2 px-4 py-4 text-sm">
+                    <a class="flex justify-between rounded-sm px-2 py-2 hover:bg-blue-50" href="{{ route('user.section', 'wishlists') }}"><span>愿望单</span><span>{{ $user->wishlists_count }}</span></a>
+                    <a class="flex justify-between rounded-sm px-2 py-2 hover:bg-blue-50" href="{{ route('user.section', 'favorites') }}"><span>收藏商品</span><span>{{ $user->favorites_count }}</span></a>
+                </dl>
+            </div>
+
+            <div class="rounded-sm border border-slate-300 bg-white">
+                <div class="border-b border-slate-200 bg-slate-100 px-4 py-3">
+                    <h2 class="text-base font-semibold">设置</h2>
+                </div>
+                <div class="grid gap-2 px-4 py-4 text-sm">
+                    <a class="rounded-sm border border-slate-200 px-3 py-2 text-slate-600 hover:bg-blue-50 hover:text-blue-800" href="{{ route('user.section', 'addresses') }}">地址设置</a>
+                    <a class="rounded-sm border border-slate-200 px-3 py-2 text-slate-600 hover:bg-blue-50 hover:text-blue-800" href="{{ route('user.section', 'privacy') }}">隐私设置</a>
+                    <a class="rounded-sm border border-slate-200 px-3 py-2 text-slate-600 hover:bg-blue-50 hover:text-blue-800" href="{{ route('user.section', 'interface') }}">界面设置</a>
+                    <a class="rounded-sm border border-slate-200 px-3 py-2 text-slate-600 hover:bg-blue-50 hover:text-blue-800" href="{{ route('user.section', 'membership') }}">注册会员</a>
+                </div>
+            </div>
+        </aside>
+    </section>
+</x-layouts.app>

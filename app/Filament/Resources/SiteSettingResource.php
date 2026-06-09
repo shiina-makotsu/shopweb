@@ -1,0 +1,265 @@
+<?php
+
+namespace App\Filament\Resources;
+
+use App\Filament\Concerns\ChecksAdminAccess;
+use App\Filament\Resources\SiteSettingResource\Pages\EditSiteSetting;
+use App\Filament\Resources\SiteSettingResource\Pages\ListSiteSettings;
+use App\Models\MediaAsset;
+use App\Models\SiteSetting;
+use Filament\Actions\EditAction;
+use Filament\Forms\Components\ColorPicker;
+use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
+use Filament\Resources\Resource;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Schema;
+use Filament\Support\Icons\Heroicon;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Model;
+
+class SiteSettingResource extends Resource
+{
+    use ChecksAdminAccess;
+
+    protected static ?string $model = SiteSetting::class;
+    protected static string $permissionArea = 'settings';
+    protected static ?string $navigationLabel = '站点设置';
+    protected static ?string $modelLabel = '站点设置';
+    protected static ?string $pluralModelLabel = '站点设置';
+    protected static string|\UnitEnum|null $navigationGroup = '系统';
+    protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedCog6Tooth;
+    protected static ?int $navigationSort = 10;
+
+    public static function canCreate(): bool
+    {
+        return false;
+    }
+
+    public static function canDelete(Model $record): bool
+    {
+        return false;
+    }
+
+    public static function form(Schema $schema): Schema
+    {
+        return $schema->components([
+            Section::make('商店信息')->schema([
+                TextInput::make('site_name')
+                    ->label('站点名称')
+                    ->maxLength(255)
+                    ->dehydrateStateUsing(fn (?string $state): string => filled($state) ? trim((string) $state) : config('app.name', 'ShopWeb')),
+                TextInput::make('store_email')->label('商店邮箱')->email()->maxLength(255),
+                TextInput::make('store_phone')->label('商店电话')->maxLength(255),
+                TextInput::make('store_address')->label('商店地址')->maxLength(255)->columnSpanFull(),
+                TextInput::make('store_country')->label('国家/地区')->maxLength(255),
+                TextInput::make('store_timezone')->label('时区')->maxLength(255)->dehydrateStateUsing(fn (?string $state): string => $state ?: 'Asia/Shanghai'),
+                TextInput::make('store_currency')->label('货币')->maxLength(10)->dehydrateStateUsing(fn (?string $state): string => $state ?: 'CNY'),
+                Textarea::make('welcome_message')->label('首页欢迎提示')->rows(2)->columnSpanFull(),
+                TextInput::make('copyright_text')->label('页脚版权信息')->maxLength(500)->columnSpanFull(),
+            ])->columns(2)->columnSpanFull(),
+
+            Section::make('外观')->schema([
+                self::imagePathSelect('logo_path', 'Logo', '从媒体库选择图片；也可以点击加号直接上传新 Logo。'),
+                self::imagePathSelect('favicon_path', '站点图标', '建议使用方形 PNG/SVG/ICO。'),
+                Select::make('theme_template')->label('前台模板')->options([
+                    'default' => '默认模板',
+                ])->default('default')->dehydrateStateUsing(fn (?string $state): string => $state ?: 'default'),
+                ColorPicker::make('primary_color')
+                    ->label('主色')
+                    ->default('#7CBFE2')
+                    ->dehydrateStateUsing(fn (?string $state): string => preg_match('/^#[0-9a-fA-F]{6}$/', (string) $state) ? (string) $state : '#7CBFE2'),
+                ColorPicker::make('accent_color')
+                    ->label('强调色')
+                    ->default('#F2A8BE')
+                    ->dehydrateStateUsing(fn (?string $state): string => preg_match('/^#[0-9a-fA-F]{6}$/', (string) $state) ? (string) $state : '#F2A8BE'),
+                ColorPicker::make('background_color')
+                    ->label('背景色')
+                    ->default('#FFF9FC')
+                    ->dehydrateStateUsing(fn (?string $state): string => preg_match('/^#[0-9a-fA-F]{6}$/', (string) $state) ? (string) $state : '#FFF9FC'),
+                self::imagePathSelect('home_background_path', '首页背景图', '可选。设置后首页会使用该图作为页面背景。'),
+                self::imagePathSelect('auth_background_path', '登录/注册背景图', '可选。设置后登录和注册页使用该图作为背景。'),
+                Select::make('button_radius')->label('按钮圆角')->options([
+                    'none' => '直角',
+                    'sm' => '小圆角',
+                    'md' => '中圆角',
+                ])->default('sm')->dehydrateStateUsing(fn (?string $state): string => $state ?: 'sm'),
+                Select::make('product_card_density')->label('商品卡密度')->options([
+                    'comfortable' => '舒适',
+                    'compact' => '紧凑',
+                ])->default('comfortable')->dehydrateStateUsing(fn (?string $state): string => $state ?: 'comfortable'),
+            ])->columns(2)->columnSpanFull(),
+
+            Section::make('订单隐私')->schema([
+                Toggle::make('show_order_numbers_to_users')->label('默认向用户显示订单号')->default(false),
+                Toggle::make('show_tracking_numbers_to_users')->label('默认向用户显示国内物流号')->default(true),
+            ])->visible(fn (): bool => auth()->user()?->isSuperAdmin() ?? false)->columns(2)->columnSpanFull(),
+
+            Section::make('语言')->schema([
+                Select::make('default_locale_mode')->label('默认语言模式')->options([
+                    'system' => '跟随系统语言',
+                    'zh_CN' => '中文',
+                    'en' => 'English',
+                    'ja' => '日本語',
+                    'ko' => '한국어',
+                    'fr' => 'Français',
+                ])->default('system'),
+                Select::make('enabled_locales')->label('启用语言')->multiple()->options([
+                    'zh_CN' => '中文',
+                    'en' => 'English',
+                    'ja' => '日本語',
+                    'ko' => '한국어',
+                    'fr' => 'Français',
+                ])->default(['zh_CN', 'en', 'ja', 'ko', 'fr']),
+            ])->columns(2)->columnSpanFull(),
+
+            Section::make('扩展接口')->schema([
+                Toggle::make('page_music_enabled')->label('启用页面音乐')->default(false),
+                self::assetPathSelect('page_music_asset_path', '页面音乐文件', '可从资源管理上传音频文件后在这里引用。'),
+                Select::make('page_music_mode')->label('播放模式')->options([
+                    'manual' => '手动播放',
+                    'page' => '按页面配置',
+                ])->default('manual'),
+                Toggle::make('guide_pet_enabled')->label('启用导购网页宠物')->default(false),
+                self::assetPathSelect('guide_pet_asset_path', '导购宠物资源', '可上传宠物图片或动效资源，后续对接 AI 导购。'),
+                TextInput::make('guide_pet_api_endpoint')->label('AI 接口地址')->maxLength(500),
+                TextInput::make('guide_pet_api_key')->label('AI API Key')->password()->revealable()->maxLength(255),
+                TextInput::make('guide_pet_model')->label('AI 模型标识')->maxLength(255),
+                Textarea::make('guide_pet_system_prompt')->label('导购 AI 预设内容')->rows(5)->columnSpanFull(),
+                Select::make('guide_pet_context_mode')->label('导购上下文')->options([
+                    'storefront' => '前台页面',
+                    'product' => '商品页',
+                    'cart' => '购物车',
+                ])->default('storefront'),
+            ])->columns(2)->columnSpanFull(),
+        ]);
+    }
+
+    private static function imagePathSelect(string $name, string $label, string $helperText): Select
+    {
+        return Select::make($name)
+            ->label($label)
+            ->helperText($helperText)
+            ->searchable()
+            ->preload()
+            ->options(fn (): array => self::imageOptions())
+            ->getSearchResultsUsing(fn (string $search): array => self::imageOptions($search))
+            ->getOptionLabelUsing(fn ($value): ?string => MediaAsset::query()->where('path', $value)->value('name') ?? $value)
+            ->createOptionForm([
+                FileUpload::make('path')
+                    ->label('上传图片')
+                    ->disk('public_uploads')
+                    ->directory('site')
+                    ->image()
+                    ->maxSize(5120)
+                    ->required(),
+                TextInput::make('name')->label('名称')->maxLength(255),
+                TextInput::make('alt')->label('Alt 文案')->maxLength(255),
+            ])
+            ->createOptionUsing(function (array $data) use ($name): string {
+                $path = is_array($data['path']) ? reset($data['path']) : $data['path'];
+
+                $asset = MediaAsset::query()->create([
+                    'name' => $data['name'] ?: pathinfo($path, PATHINFO_FILENAME),
+                    'path' => $path,
+                    'disk' => 'public_uploads',
+                    'alt' => $data['alt'] ?? null,
+                    'usage' => str_contains($name, 'background') ? MediaAsset::USAGE_BACKGROUND : MediaAsset::USAGE_LOGO,
+                ]);
+
+                return $asset->path;
+            });
+    }
+
+    private static function assetPathSelect(string $name, string $label, string $helperText): Select
+    {
+        return Select::make($name)
+            ->label($label)
+            ->helperText($helperText)
+            ->searchable()
+            ->preload()
+            ->options(fn (): array => self::assetOptions())
+            ->getSearchResultsUsing(fn (string $search): array => self::assetOptions($search))
+            ->getOptionLabelUsing(fn ($value): ?string => MediaAsset::query()->where('path', $value)->value('name') ?? $value)
+            ->createOptionForm([
+                FileUpload::make('path')
+                    ->label('上传文件')
+                    ->disk('public_uploads')
+                    ->directory('site')
+                    ->maxSize(20480)
+                    ->required(),
+                TextInput::make('name')->label('名称')->maxLength(255),
+                TextInput::make('alt')->label('说明')->maxLength(255),
+            ])
+            ->createOptionUsing(function (array $data): string {
+                $path = is_array($data['path']) ? reset($data['path']) : $data['path'];
+
+                $asset = MediaAsset::query()->create([
+                    'name' => $data['name'] ?: pathinfo($path, PATHINFO_FILENAME),
+                    'path' => $path,
+                    'disk' => 'public_uploads',
+                    'alt' => $data['alt'] ?? null,
+                    'usage' => MediaAsset::USAGE_GENERAL,
+                ]);
+
+                return $asset->path;
+            });
+    }
+
+    private static function imageOptions(?string $search = null): array
+    {
+        return MediaAsset::query()
+            ->where(function ($query): void {
+                $query->where('mime_type', 'like', 'image/%')->orWhereNull('mime_type');
+            })
+            ->when($search, fn ($query) => $query->where(function ($query) use ($search): void {
+                $query
+                    ->where('name', 'like', "%{$search}%")
+                    ->orWhere('path', 'like', "%{$search}%")
+                    ->orWhere('alt', 'like', "%{$search}%");
+            }))
+            ->latest()
+            ->limit(50)
+            ->get()
+            ->mapWithKeys(fn (MediaAsset $asset): array => [$asset->path => $asset->name ?: basename($asset->path)])
+            ->all();
+    }
+
+    private static function assetOptions(?string $search = null): array
+    {
+        return MediaAsset::query()
+            ->when($search, fn ($query) => $query->where(function ($query) use ($search): void {
+                $query
+                    ->where('name', 'like', "%{$search}%")
+                    ->orWhere('path', 'like', "%{$search}%")
+                    ->orWhere('alt', 'like', "%{$search}%");
+            }))
+            ->latest()
+            ->limit(50)
+            ->get()
+            ->mapWithKeys(fn (MediaAsset $asset): array => [$asset->path => $asset->name ?: basename($asset->path)])
+            ->all();
+    }
+
+    public static function table(Table $table): Table
+    {
+        return $table
+            ->columns([
+                TextColumn::make('site_name')->label('站点名称'),
+                TextColumn::make('updated_at')->label('更新')->dateTime(),
+            ])
+            ->recordActions([EditAction::make()]);
+    }
+
+    public static function getPages(): array
+    {
+        return [
+            'index' => ListSiteSettings::route('/'),
+            'edit' => EditSiteSetting::route('/{record}/edit'),
+        ];
+    }
+}

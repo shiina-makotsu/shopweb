@@ -1,0 +1,88 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
+class ProductVariant extends Model
+{
+    use HasFactory;
+
+    protected $fillable = [
+        'product_id',
+        'sku',
+        'specs',
+        'price_cents',
+        'compare_at_price_cents',
+        'discount_price_cents',
+        'discount_starts_at',
+        'discount_ends_at',
+        'stock',
+        'low_stock_threshold',
+        'is_active',
+    ];
+
+    protected function casts(): array
+    {
+        return [
+            'specs' => 'array',
+            'is_active' => 'boolean',
+            'discount_starts_at' => 'datetime',
+            'discount_ends_at' => 'datetime',
+        ];
+    }
+
+    public function product(): BelongsTo
+    {
+        return $this->belongsTo(Product::class);
+    }
+
+    public function inventoryMovements(): HasMany
+    {
+        return $this->hasMany(InventoryMovement::class);
+    }
+
+    public function flashSales(): HasMany
+    {
+        return $this->hasMany(FlashSale::class);
+    }
+
+    public function scopeActive(Builder $query): Builder
+    {
+        return $query->where('is_active', true);
+    }
+
+    public function specLabel(): string
+    {
+        $specs = $this->specs ?? [];
+
+        if ($specs === []) {
+            return '默认规格';
+        }
+
+        return collect($specs)->map(fn ($value, $key) => "{$key}: {$value}")->implode(' / ');
+    }
+
+    public function effectivePriceCents(): int
+    {
+        if (
+            $this->discount_price_cents !== null
+            && $this->discount_price_cents > 0
+            && (! $this->discount_starts_at || $this->discount_starts_at->isPast())
+            && (! $this->discount_ends_at || $this->discount_ends_at->isFuture())
+        ) {
+            return min((int) $this->price_cents, (int) $this->discount_price_cents);
+        }
+
+        return (int) $this->price_cents;
+    }
+
+    public function hasActiveDiscount(): bool
+    {
+        return $this->effectivePriceCents() < (int) $this->price_cents;
+    }
+}

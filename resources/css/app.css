@@ -1,0 +1,224 @@
+@import "tailwindcss";
+
+:root {
+    color-scheme: light;
+}
+
+body {
+    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.theme-default .bg-blue-700,
+.theme-default .bg-blue-800,
+.theme-litecart .bg-blue-700,
+.theme-litecart .bg-blue-800 {
+    background-color: var(--shop-primary) !important;
+}
+
+.theme-default .border-blue-700,
+.theme-default .border-blue-800,
+.theme-litecart .border-blue-700,
+.theme-litecart .border-blue-800 {
+    border-color: var(--shop-primary) !important;
+}
+
+.theme-default .text-blue-700,
+.theme-default .text-blue-800,
+.theme-litecart .text-blue-700,
+.theme-litecart .text-blue-800 {
+    color: var(--shop-primary) !important;
+}
+
+.theme-default .hover\:bg-blue-800:hover,
+.theme-default .hover\:bg-blue-900:hover,
+.theme-litecart .hover\:bg-blue-800:hover,
+.theme-litecart .hover\:bg-blue-900:hover {
+    background-color: color-mix(in srgb, var(--shop-primary) 86%, black) !important;
+}
+
+.theme-default .bg-emerald-700,
+.theme-litecart .bg-emerald-700 {
+    background-color: color-mix(in srgb, var(--shop-accent) 64%, #c2185b) !important;
+}
+
+.theme-default .border-emerald-700,
+.theme-litecart .border-emerald-700 {
+    border-color: color-mix(in srgb, var(--shop-accent) 64%, #c2185b) !important;
+}
+
+.theme-default .hover\:bg-emerald-800:hover,
+.theme-litecart .hover\:bg-emerald-800:hover {
+    background-color: color-mix(in srgb, var(--shop-accent) 48%, #8a1241) !important;
+}
+
+.theme-default button,
+.theme-default .rounded-sm,
+.theme-default .rounded-md,
+.theme-litecart button,
+.theme-litecart .rounded-sm,
+.theme-litecart .rounded-md {
+    border-radius: var(--shop-button-radius);
+}
+
+.theme-default .shop-product-card-body,
+.theme-litecart .shop-product-card-body {
+    padding: var(--shop-product-card-padding);
+}
+
+input,
+select,
+textarea,
+button {
+    font: inherit;
+}
+
+button,
+a {
+    text-underline-offset: 2px;
+}
+
+table {
+    border-collapse: collapse;
+}
+
+.content-body {
+    line-height: 1.75;
+}
+
+.content-body > * + * {
+    margin-top: 1rem;
+}
+
+.content-body h1,
+.content-body h2,
+.content-body h3 {
+    color: #111827;
+    font-weight: 700;
+    line-height: 1.3;
+}
+
+.content-body h1 {
+    font-size: 1.5rem;
+}
+
+.content-body h2 {
+    font-size: 1.25rem;
+}
+
+.content-body h3 {
+    font-size: 1.125rem;
+}
+
+.content-body a {
+    color: var(--shop-primary);
+    text-decoration: underline;
+}
+
+.content-body ul,
+.content-body ol {
+    padding-left: 1.25rem;
+}
+
+.content-body ul {
+    list-style: disc;
+}
+
+.content-body ol {
+    list-style: decimal;
+}
+
+.content-body blockquote {
+    border-left: 4px solid #cbd5e1;
+    color: #475569;
+    padding-left: 1rem;
+}
+
+.content-body code {
+    border-radius: 3px;
+    background: #f1f5f9;
+    padding: 0.1rem 0.25rem;
+    font-size: 0.875em;
+}
+
+.content-body pre {
+    overflow-x: auto;
+    border: 1px solid #cbd5e1;
+    background: #0f172a;
+    color: #e2e8f0;
+    padding: 1rem;
+}
+
+.content-body pre code {
+    background: transparent;
+    color: inherit;
+    padding: 0;
+}
+
+.content-body img {
+    max-width: 100%;
+    height: auto;
+}
+
+.content-body table {
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+}
+
+.content-body th,
+.content-body td {
+    border: 1px solid #cbd5e1;
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+}
+
+.content-body th {
+    background: #f8fafc;
+    font-weight: 600;
+}
+
+.shop-cart-toast {
+    position: fixed;
+    right: 1rem;
+    top: 1rem;
+    z-index: 60;
+    border: 1px solid color-mix(in srgb, var(--shop-primary), #fff 40%);
+    border-radius: var(--shop-button-radius);
+    background: #fff;
+    color: #0f172a;
+    box-shadow: 0 12px 28px rgb(15 23 42 / 18%);
+    font-size: 0.875rem;
+    padding: 0.625rem 0.875rem;
+}
+
+.shop-cart-fly-dot {
+    position: fixed;
+    z-index: 70;
+    width: 0.75rem;
+    height: 0.75rem;
+    margin-left: -0.375rem;
+    margin-top: -0.375rem;
+    border-radius: 999px;
+    background: var(--shop-accent);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--shop-accent), transparent 75%);
+    pointer-events: none;
+    animation: shop-cart-fly 680ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+@keyframes shop-cart-fly {
+    0% {
+        opacity: 1;
+        transform: translate3d(0, 0, 0) scale(1);
+    }
+
+    100% {
+        opacity: 0.2;
+        transform: translate3d(var(--cart-fly-x), var(--cart-fly-y), 0) scale(0.45);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .shop-cart-fly-dot {
+        display: none;
+    }
+}
