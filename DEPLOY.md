@@ -10,7 +10,9 @@
 
 ## 解压安装
 
-1. 上传 `dist/shopweb-v{version}.zip` 到 Windows 或 Linux 服务器并解压。
+1. 上传对应平台包到服务器并解压：
+   - Windows: `dist/shopweb-v{version}-windows.zip`
+   - Linux: `dist/shopweb-v{version}-linux.zip`
 2. 将站点根目录设置为 `{解压目录}/public`。
 3. 访问站点地址，未安装时会自动进入 `/install`。
 4. 在安装向导中填写 MySQL/MariaDB、站点信息和管理员账号。
@@ -50,6 +52,37 @@ php artisan shop:install \
   --admin-password=change-this-password
 ```
 
+## 一键启动脚本
+
+发布包根目录内置临时启动脚本，适合本地验证和小规模测试：
+
+Windows:
+
+```bat
+start-windows.bat
+```
+
+Linux:
+
+```bash
+chmod +x start-linux.sh
+./start-linux.sh
+```
+
+脚本会：
+
+- 检查 `php` 是否可用。
+- 缺少 `.env` 时从 `.env.example` 复制。
+- 创建 `storage`、`bootstrap/cache`、`public/uploads` 等必要运行目录。
+- 启动 `php artisan serve --host=127.0.0.1 --port=8000`。
+
+启动后访问：
+
+- 首页：`http://127.0.0.1:8000`
+- 首次安装：`http://127.0.0.1:8000/install`
+
+这些脚本不是生产 Web Server 替代品。生产环境仍应使用 Nginx、Apache 或 IIS，并把 Web 根目录指向 `public`。
+
 ## 本地构建发布包
 
 发布包包含 `vendor/` 和 `public/build/`，服务器无需 Composer/npm 构建。
@@ -67,4 +100,4 @@ php scripts/build-release.php 1.0.0
 .\.tools\php\php.exe scripts\build-release.php 1.0.0
 ```
 
-发布 ZIP 不包含 `.env`、`.git`、`node_modules`、本地日志、会话、测试缓存和开发截图。
+发布 ZIP 不包含 `.env`、`.git`、`node_modules`、本地 SQLite 数据库、本地日志、会话、测试缓存和开发截图。

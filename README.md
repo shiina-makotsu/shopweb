@@ -33,4 +33,30 @@ npm run build
 
 生产环境 Web 根目录必须指向 `public`。首次访问未安装项目时会进入 `/install` 网页安装向导。
 
+## Releases 包一键启动
+
+Releases 会提供两个预构建包：
+
+- `shopweb-v{version}-windows.zip`
+- `shopweb-v{version}-linux.zip`
+
+两个包都内置 `vendor/` 和 `public/build/`，服务器无需 Composer/npm 构建。解压后仍需要 PHP 8.3+、MySQL/MariaDB 和对应 PHP 扩展。
+
+Windows 本地验证：
+
+```bat
+start-windows.bat
+```
+
+Linux 本地验证：
+
+```bash
+chmod +x start-linux.sh
+./start-linux.sh
+```
+
+脚本会创建必要运行目录，在缺少 `.env` 时从 `.env.example` 复制一份，然后启动 `http://127.0.0.1:8000`。首次安装请打开 `http://127.0.0.1:8000/install`。
+
+这些脚本适合本地验证或临时启动。生产部署仍建议使用 Nginx/Apache/IIS，并把 Web 根目录指向 `public`。
+
 更多细节见 [DEPLOY.md](DEPLOY.md) 和 [docs/requirements.md](docs/requirements.md)。

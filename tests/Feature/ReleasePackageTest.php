@@ -5,6 +5,10 @@ it('keeps release package rules aligned with deployment requirements', function 
 
     expect($script)->toContain('vendor/autoload.php')
         ->and($script)->toContain('public/build/manifest.json')
+        ->and($script)->toContain('shopweb-v{$version}-windows.zip')
+        ->and($script)->toContain('shopweb-v{$version}-linux.zip')
+        ->and($script)->toContain('start-windows.bat')
+        ->and($script)->toContain('start-linux.sh')
         ->and($script)->toContain("'public/web.config'")
         ->and($script)->toContain("'public/.htaccess'")
         ->and($script)->toContain("'DEPLOY.md'")
