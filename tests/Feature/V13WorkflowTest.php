@@ -99,6 +99,115 @@ it('auto checks payment proof for user display while keeping backend payment sub
         ->and($order->fresh()->userPaymentLabel())->toBe('待支付');
 });
 
+it('shows payment proof images to admins and a payment success state to customers', function (): void {
+    Storage::fake('payment_proofs');
+
+    SiteSetting::query()->create([
+        'site_name' => 'ShopWeb',
+        'payment_auto_check_enabled' => true,
+    ]);
+    $admin = User::factory()->create(['role' => 'admin']);
+    $user = User::factory()->create(['role' => 'customer']);
+    $order = Order::query()->create([
+        'user_id' => $user->id,
+        'order_number' => 'PAY-IMG-1',
+        'status' => Order::STATUS_PENDING_PAYMENT,
+        'payment_status' => Order::PAYMENT_PENDING,
+        'subtotal_cents' => 100,
+        'total_cents' => 100,
+        'contact_name' => 'A',
+        'contact_phone' => '1',
+    ]);
+
+    $this->actingAs($user)
+        ->post(route('orders.payment-proof', $order), [
+            'payment_proof' => UploadedFile::fake()->image('proof.png'),
+        ])
+        ->assertRedirect()
+        ->assertSessionHas('payment_success', true);
+
+    expect($order->fresh()->payment_proof_path)->not->toBeNull()
+        ->and($order->fresh()->payment_status)->toBe(Order::PAYMENT_SUBMITTED)
+        ->and($order->fresh()->payment_auto_check_status)->toBe(Order::AUTO_CHECK_PASSED)
+        ->and($order->fresh()->userPaymentLabel())->toBe('已付款');
+
+    $this->actingAs($user)
+        ->get(route('orders.show', $order))
+        ->assertOk()
+        ->assertSee('付款成功')
+        ->assertDontSee('待后台人工复核')
+        ->assertDontSee('后台会继续人工复核');
+
+    $this->actingAs($admin)
+        ->get(route('admin.payment-proofs.show', $order))
+        ->assertOk();
+
+    $this->actingAs($admin)
+        ->get("/admin/orders/{$order->id}/edit")
+        ->assertOk()
+        ->assertSee('付款凭证图片')
+        ->assertSee(route('admin.payment-proofs.show', $order), false);
+});
+
+it('keeps awaiting receipt orders open until the customer confirms receipt', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+    $otherUser = User::factory()->create(['role' => 'customer']);
+    $order = Order::query()->create([
+        'user_id' => $user->id,
+        'order_number' => 'RECEIPT-1',
+        'status' => Order::STATUS_AWAITING_RECEIPT,
+        'payment_status' => Order::PAYMENT_CONFIRMED,
+        'subtotal_cents' => 100,
+        'total_cents' => 100,
+        'contact_name' => 'A',
+        'contact_phone' => '1',
+    ]);
+
+    $this->actingAs($otherUser)
+        ->post(route('orders.confirm-receipt', $order))
+        ->assertForbidden();
+
+    expect($order->fresh()->status)->toBe(Order::STATUS_AWAITING_RECEIPT);
+
+    $this->actingAs($user)
+        ->get(route('orders.show', $order))
+        ->assertOk()
+        ->assertSee('确认签收');
+
+    $this->actingAs($user)
+        ->post(route('orders.confirm-receipt', $order))
+        ->assertRedirect();
+
+    expect($order->fresh()->status)->toBe(Order::STATUS_FULFILLED)
+        ->and($order->fresh()->fulfilled_at)->not->toBeNull();
+});
+
+it('shows forced fulfillment reasons to customers', function (): void {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $user = User::factory()->create(['role' => 'customer']);
+    $order = Order::query()->create([
+        'user_id' => $user->id,
+        'order_number' => 'FORCED-FULFILL-1',
+        'status' => Order::STATUS_AWAITING_RECEIPT,
+        'payment_status' => Order::PAYMENT_CONFIRMED,
+        'subtotal_cents' => 100,
+        'total_cents' => 100,
+        'contact_name' => 'A',
+        'contact_phone' => '1',
+    ]);
+
+    app(OrderService::class)->fulfill($order, $admin, '线下已完成交付，按特殊原因直接完成。');
+
+    expect($order->fresh()->status)->toBe(Order::STATUS_FULFILLED)
+        ->and($order->fresh()->admin_note)->toBe('线下已完成交付，按特殊原因直接完成。');
+
+    $this->actingAs($user)
+        ->get(route('orders.show', $order))
+        ->assertOk()
+        ->assertSee('后台处理备注')
+        ->assertSee('线下已完成交付，按特殊原因直接完成。');
+});
+
 it('moves linked presale orders to shipped when an incoming product becomes in stock with tracking', function (): void {
     Mail::fake();
 
@@ -192,5 +301,5 @@ it('lets customers create support tickets and admins view them in backoffice', f
         ->get('/admin/support-tickets')
         ->assertOk()
         ->assertSee('物流问题')
-        ->assertSee('客服会话');
+        ->assertSee('客服/售后需求');
 });

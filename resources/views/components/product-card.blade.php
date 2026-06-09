@@ -3,12 +3,13 @@
 @php
     $variant = $product->variants->where('is_active', true)->sortBy(fn ($variant) => $variant->effectivePriceCents())->first();
     $stock = $product->variants->where('is_active', true)->sum('stock');
+    $isSoldOut = $product->isSoldOut() || ($product->status === \App\Models\Product::STATUS_PUBLISHED && $stock <= 0);
     $statusNote = match ($product->status) {
         \App\Models\Product::STATUS_CONCEPT => '概念投票',
         \App\Models\Product::STATUS_PRESALE => '预售',
         \App\Models\Product::STATUS_INCOMING => '进货 '.$product->incoming_quantity,
         \App\Models\Product::STATUS_SOLD_OUT => '售罄',
-        default => '库存 '.$stock,
+        default => $isSoldOut ? '售罄' : '库存 '.$stock,
     };
     $actionLabel = match ($product->status) {
         \App\Models\Product::STATUS_CONCEPT => '参与投票',
@@ -21,12 +22,15 @@
 @endphp
 
 <article class="bg-white">
-    <a href="{{ route('products.show', $product) }}" class="block border-b border-slate-100 bg-white p-3">
+    <a href="{{ route('products.show', $product) }}" class="relative block border-b border-slate-100 bg-white p-3">
+        @if($isSoldOut)
+            <span class="absolute left-4 top-4 z-10 rounded-sm bg-slate-950/85 px-2 py-1 text-xs font-semibold text-white shadow">售罄</span>
+        @endif
         @if($product->coverMedia)
             @if($product->coverMedia->isVideo())
-                <video src="{{ $product->coverMedia->url() }}" class="aspect-square w-full rounded-sm bg-black object-contain" muted preload="metadata"></video>
+                <video src="{{ $product->coverMedia->url() }}" class="aspect-square w-full rounded-sm bg-black object-contain {{ $isSoldOut ? 'grayscale' : '' }}" muted preload="metadata"></video>
             @else
-                <img src="{{ $product->coverMedia->url() }}" alt="{{ $product->coverMedia->alt ?? $product->title }}" class="aspect-square w-full rounded-sm object-cover">
+                <img src="{{ $product->coverMedia->url() }}" alt="{{ $product->coverMedia->alt ?? $product->title }}" class="aspect-square w-full rounded-sm object-cover {{ $isSoldOut ? 'grayscale' : '' }}">
             @endif
         @else
             <div class="flex aspect-square items-center justify-center rounded-sm bg-slate-100 text-sm text-slate-500">暂无图片</div>

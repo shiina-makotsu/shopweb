@@ -8,7 +8,7 @@ use App\Models\OrderItem;
 use App\Models\Procurement;
 use App\Models\Product;
 use App\Models\ProductVariant;
-use App\Models\SupportTicket;
+use App\Models\SupportChatSession;
 use App\Models\User;
 use App\Services\ProcurementService;
 use App\Support\ProfitMetrics;
@@ -170,13 +170,18 @@ it('lets users submit after sales requests and contact support with their order 
 
     $this->actingAs($user)
         ->post(route('orders.contact-support', $order))
-        ->assertRedirect(route('support.index'));
+        ->assertRedirect(route('support.index', ['order_id' => $order->id]));
 
-    $this->assertDatabaseHas('support_tickets', [
+    $this->actingAs($user)
+        ->get(route('support.index', ['order_id' => $order->id]))
+        ->assertOk()
+        ->assertSee('客服会话')
+        ->assertSee('订单号：'.$order->order_number);
+
+    $this->assertDatabaseHas('support_chat_sessions', [
         'user_id' => $user->id,
         'order_id' => $order->id,
-        'category' => 'after_sale',
-        'status' => SupportTicket::STATUS_OPEN,
+        'status' => SupportChatSession::STATUS_OPEN,
     ]);
 
     $this->actingAs($user)

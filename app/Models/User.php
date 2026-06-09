@@ -133,6 +133,11 @@ class User extends Authenticatable implements FilamentUser
         return $this->hasMany(ProductFavorite::class);
     }
 
+    public function addresses(): HasMany
+    {
+        return $this->hasMany(UserAddress::class);
+    }
+
     public function productComments(): HasMany
     {
         return $this->hasMany(ProductComment::class);
@@ -166,6 +171,21 @@ class User extends Authenticatable implements FilamentUser
     public function receivedMessages(): HasMany
     {
         return $this->hasMany(PrivateMessage::class, 'recipient_id');
+    }
+
+    public function supportChatSessions(): HasMany
+    {
+        return $this->hasMany(SupportChatSession::class);
+    }
+
+    public function assignedSupportChatSessions(): HasMany
+    {
+        return $this->hasMany(SupportChatSession::class, 'assigned_admin_id');
+    }
+
+    public function supportChatMessages(): HasMany
+    {
+        return $this->hasMany(SupportChatMessage::class, 'sender_user_id');
     }
 
     public function getRouteKeyName(): string

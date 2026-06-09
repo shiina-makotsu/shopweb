@@ -183,7 +183,10 @@ class CustomerResource extends Resource
                 TextColumn::make('created_at')->label('注册时间')->dateTime('Y-m-d H:i')->sortable(),
             ])
             ->defaultSort('created_at', 'desc')
-            ->recordActions([EditAction::make()])
+            ->recordActions([
+                EditAction::make()
+                    ->url(fn (User $record): string => static::getUrl('edit', ['record' => $record->getKey()])),
+            ])
             ->toolbarActions([
                 BulkAction::make('showOrderNumbers')
                     ->label('批量显示订单号')

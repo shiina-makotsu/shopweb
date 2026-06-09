@@ -54,6 +54,17 @@ class OrderController extends Controller
         $path = $data['payment_proof']->store($order->order_number, 'payment_proofs');
         $orders->markPaymentSubmitted($order, $path);
 
-        return back()->with('status', '付款凭证已提交，等待人工确认。');
+        return back()->with('payment_success', true);
+    }
+
+    public function confirmReceipt(Request $request, Order $order, OrderService $orders): RedirectResponse
+    {
+        abort_unless($order->user_id === $request->user()->id, 403);
+
+        abort_unless($order->status === Order::STATUS_AWAITING_RECEIPT, 404);
+
+        $orders->confirmReceipt($order, $request->user());
+
+        return back()->with('status', '已确认签收，订单已完成。');
     }
 }

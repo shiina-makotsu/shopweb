@@ -8,4 +8,11 @@ use Filament\Resources\Pages\EditRecord;
 class EditCustomer extends EditRecord
 {
     protected static string $resource = CustomerResource::class;
+
+    protected function getRedirectUrlParameters(): array
+    {
+        return [
+            'record' => $this->getRecord()->getKey(),
+        ];
+    }
 }

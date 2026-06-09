@@ -29,6 +29,7 @@ use App\Filament\Resources\ShippingCarrierResource;
 use App\Filament\Resources\SiteSettingResource;
 use App\Filament\Resources\SoldOutStatusResource;
 use App\Filament\Resources\SupplierResource;
+use App\Filament\Resources\SupportChatSessionResource;
 use App\Filament\Resources\SupportTicketResource;
 use App\Support\AdminAccess;
 use App\Support\RegexSearch;
@@ -109,7 +110,8 @@ class AdminSearchPage extends Page
             ['group' => '交易', 'label' => '物流承运商', 'keywords' => '物流 查询 国际物流 国内物流 tracking', 'url' => ShippingCarrierResource::getUrl()],
             ['group' => '用户', 'label' => '前台用户', 'keywords' => '客户 普通用户 会员用户 订单号可见 物流号可见', 'url' => CustomerResource::getUrl()],
             ['group' => '用户', 'label' => '后台用户', 'keywords' => '管理员 运营 财务 仓库 权限', 'url' => AdminUserResource::getUrl()],
-            ['group' => '用户', 'label' => '客服会话', 'keywords' => '投诉 反馈 工单 支持', 'url' => SupportTicketResource::getUrl()],
+            ['group' => '客服', 'label' => '客服会话', 'keywords' => '即时聊天 图片 文件 接待 结束', 'url' => SupportChatSessionResource::getUrl()],
+            ['group' => '客服', 'label' => '客服/售后需求', 'keywords' => '投诉 反馈 工单 支持 提需求', 'url' => SupportTicketResource::getUrl()],
             ['group' => '内容', 'label' => '首页', 'keywords' => '首页 Markdown 首页标题', 'url' => HomeContentPage::getUrl()],
             ['group' => '内容', 'label' => '公告', 'keywords' => '铃铛 未读 弹窗 置顶 发布 删除 评论', 'url' => AnnouncementResource::getUrl()],
             ['group' => '内容', 'label' => '自定义页面', 'keywords' => '页面 markdown 关于我们 说明', 'url' => PageResource::getUrl()],

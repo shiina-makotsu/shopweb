@@ -26,11 +26,11 @@ class SupportTicketResource extends Resource
 
     protected static ?string $model = SupportTicket::class;
     protected static string $permissionArea = 'support';
-    protected static ?string $navigationLabel = '客服会话';
-    protected static ?string $modelLabel = '客服会话';
-    protected static ?string $pluralModelLabel = '客服会话';
+    protected static ?string $navigationLabel = '客服/售后需求';
+    protected static ?string $modelLabel = '客服/售后需求';
+    protected static ?string $pluralModelLabel = '客服/售后需求';
     protected static string|\UnitEnum|null $navigationGroup = '客服';
-    protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedChatBubbleLeftRight;
+    protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedInboxStack;
     protected static ?int $navigationSort = 20;
 
     public static function canCreate(): bool

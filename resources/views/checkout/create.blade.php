@@ -13,11 +13,11 @@
                     <div class="grid gap-4 p-4 md:grid-cols-2">
                         <label class="block">
                             <span class="text-sm font-medium">联系人</span>
-                            <input class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" name="contact_name" value="{{ old('contact_name', auth()->user()->name) }}" required>
+                            <input class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" name="contact_name" value="{{ old('contact_name', $defaultAddress?->recipient_name ?? auth()->user()->name) }}" required>
                         </label>
                         <label class="block">
                             <span class="text-sm font-medium">联系电话</span>
-                            <input class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" name="contact_phone" value="{{ old('contact_phone') }}" required>
+                            <input class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" name="contact_phone" value="{{ old('contact_phone', $defaultAddress?->phone) }}" required>
                         </label>
                         <label class="block md:col-span-2">
                             <span class="text-sm font-medium">邮箱</span>
@@ -26,7 +26,7 @@
                         @if($requiresShipping)
                             <label class="block md:col-span-2">
                                 <span class="text-sm font-medium">收货地址</span>
-                                <textarea class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" name="shipping_address" rows="3" required>{{ old('shipping_address') }}</textarea>
+                                <textarea class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" name="shipping_address" rows="3" required>{{ old('shipping_address', $defaultAddress?->formatted()) }}</textarea>
                             </label>
                         @endif
                     </div>

@@ -4,6 +4,7 @@ use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\Admin\BackupController;
 use App\Http\Controllers\Admin\CsvExportController;
+use App\Http\Controllers\Admin\PaymentProofController;
 use App\Http\Controllers\Admin\ReportExportController;
 use App\Http\Controllers\AfterSalesController;
 use App\Http\Controllers\CartController;
@@ -55,7 +56,11 @@ Route::get('/forum/{section:slug}/{thread:slug}', [ForumController::class, 'show
 Route::get('/p/{page:slug}', [PageController::class, 'show'])->name('pages.show');
 Route::get('/shipments', [ShipmentController::class, 'show'])->middleware('auth')->name('shipments.show');
 Route::get('/support', [SupportTicketController::class, 'index'])->name('support.index');
+Route::get('/support/demands', [SupportTicketController::class, 'demand'])->name('support.demands');
 Route::post('/support', [SupportTicketController::class, 'store'])->name('support.store');
+Route::post('/support/messages', [SupportTicketController::class, 'sendMessage'])->name('support.messages.store');
+Route::delete('/support/sessions/{session}', [SupportTicketController::class, 'destroySession'])->name('support.sessions.destroy');
+Route::get('/support/messages/{message}/attachment', [SupportTicketController::class, 'attachment'])->name('support.messages.attachment');
 
 Route::get('/cart', [CartController::class, 'show'])->name('cart.show');
 Route::post('/cart/items', [CartController::class, 'store'])->name('cart.items.store');
@@ -71,6 +76,10 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/flash-sales/checkout/{order}', [FlashSaleCheckoutController::class, 'store'])->name('flash-sales.store');
     Route::get('/user', [UserCenterController::class, 'show'])->name('user.center');
     Route::patch('/user/profile', [UserCenterController::class, 'updateProfile'])->name('user.profile.update');
+    Route::post('/user/addresses', [UserCenterController::class, 'storeAddress'])->name('user.addresses.store');
+    Route::patch('/user/addresses/{address}', [UserCenterController::class, 'updateAddress'])->name('user.addresses.update');
+    Route::post('/user/addresses/{address}/default', [UserCenterController::class, 'setDefaultAddress'])->name('user.addresses.default');
+    Route::delete('/user/addresses/{address}', [UserCenterController::class, 'destroyAddress'])->name('user.addresses.destroy');
     Route::get('/user/{section}', [UserCenterController::class, 'section'])->name('user.section');
     Route::get('/orders', [OrderController::class, 'index'])->name('orders.index');
     Route::get('/orders/{order}', [OrderController::class, 'show'])->name('orders.show');
@@ -78,6 +87,7 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/orders/{order}/after-sales', [AfterSalesController::class, 'store'])->name('orders.after-sales.store');
     Route::post('/orders/{order}/contact-support', [AfterSalesController::class, 'contactSupport'])->name('orders.contact-support');
     Route::post('/orders/{order}/payment-proof', [OrderController::class, 'uploadProof'])->name('orders.payment-proof');
+    Route::post('/orders/{order}/confirm-receipt', [OrderController::class, 'confirmReceipt'])->name('orders.confirm-receipt');
     Route::post('/products/{product:slug}/comments', [ProductCommentController::class, 'store'])->name('product-comments.store');
     Route::post('/products/{product:slug}/intent-vote', [VoteController::class, 'intent'])->name('votes.intent');
     Route::post('/products/{product:slug}/price-vote', [VoteController::class, 'price'])->name('votes.price');
@@ -98,6 +108,10 @@ Route::middleware('auth')->group(function (): void {
 Route::middleware(['auth', 'admin'])->prefix('admin/exports')->name('admin.exports.')->group(function (): void {
     Route::get('/products', [CsvExportController::class, 'products'])->name('products');
     Route::get('/customers', [CsvExportController::class, 'customers'])->name('customers');
+});
+
+Route::middleware(['auth', 'admin'])->prefix('admin/payment-proofs')->name('admin.payment-proofs.')->group(function (): void {
+    Route::get('/orders/{order}', [PaymentProofController::class, 'show'])->name('show');
 });
 
 Route::middleware(['auth', 'admin'])->prefix('admin/report-exports')->name('admin.report-exports.')->group(function (): void {

@@ -2,6 +2,7 @@
 
 use App\Models\Product;
 use App\Models\ProductMedia;
+use App\Models\Coupon;
 use App\Models\FlashSale;
 use App\Models\ProductTag;
 use App\Models\ProductVariant;
@@ -644,6 +645,225 @@ it('lets users buy now from product cards and crowdfund concept products through
         ->firstOrFail());
 
     expect($conceptVariant->fresh()->stock)->toBe(0);
+});
+
+it('shows storefront purchase actions on product details and sold out badges', function (): void {
+    $this->seed();
+
+    $category = \App\Models\Category::query()->firstOrFail();
+    $product = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => '详情购买商品',
+        'slug' => 'detail-buy-product',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_ONLINE,
+    ]);
+    ProductVariant::query()->create([
+        'product_id' => $product->id,
+        'sku' => 'DETAIL-BUY-1',
+        'price_cents' => 1200,
+        'stock' => 5,
+        'is_active' => true,
+    ]);
+
+    $this->get(route('products.show', $product))
+        ->assertOk()
+        ->assertSee('加入购物车')
+        ->assertSee('立即购买')
+        ->assertSee('data-cart-add-form', false)
+        ->assertSee(route('cart.buy-now'), false);
+
+    $soldOut = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => '首页售罄商品',
+        'slug' => 'home-sold-out-product',
+        'status' => Product::STATUS_SOLD_OUT,
+        'is_featured' => true,
+        'fulfillment_type' => Product::FULFILLMENT_ONLINE,
+    ]);
+    ProductVariant::query()->create([
+        'product_id' => $soldOut->id,
+        'sku' => 'SOLD-OUT-1',
+        'price_cents' => 9900,
+        'stock' => 0,
+        'is_active' => true,
+    ]);
+
+    $this->get(route('home'))
+        ->assertOk()
+        ->assertSee('首页售罄商品')
+        ->assertSee('售罄');
+
+    $this->get(route('products.show', $soldOut))
+        ->assertOk()
+        ->assertSee('该商品已售罄')
+        ->assertSee('售罄')
+        ->assertDontSee('立即购买');
+});
+
+it('applies global coupons and restricts product coupons to a single matching cart item', function (): void {
+    $this->seed();
+
+    $user = User::factory()->create(['role' => 'customer']);
+    $category = \App\Models\Category::query()->firstOrFail();
+    $productA = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => '优惠商品 A',
+        'slug' => 'coupon-product-a',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_ONLINE,
+    ]);
+    $variantA = ProductVariant::query()->create([
+        'product_id' => $productA->id,
+        'sku' => 'COUPON-A',
+        'price_cents' => 10000,
+        'stock' => 5,
+        'is_active' => true,
+    ]);
+    $productB = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => '优惠商品 B',
+        'slug' => 'coupon-product-b',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_ONLINE,
+    ]);
+    $variantB = ProductVariant::query()->create([
+        'product_id' => $productB->id,
+        'sku' => 'COUPON-B',
+        'price_cents' => 5000,
+        'stock' => 5,
+        'is_active' => true,
+    ]);
+
+    Coupon::query()->create([
+        'code' => 'GLOBAL20',
+        'name' => '全场八折',
+        'type' => Coupon::TYPE_PERCENT,
+        'value' => 20,
+        'scope' => Coupon::SCOPE_GLOBAL,
+        'usage_limit' => 2,
+        'is_active' => true,
+    ]);
+    Coupon::query()->create([
+        'code' => 'ONLYA',
+        'name' => 'A 商品券',
+        'type' => Coupon::TYPE_FIXED,
+        'value' => 1000,
+        'scope' => Coupon::SCOPE_PRODUCT,
+        'product_id' => $productA->id,
+        'is_active' => true,
+    ]);
+
+    $this->post(route('cart.items.store'), ['variant_id' => $variantA->id, 'quantity' => 1]);
+    $this->actingAs($user)->post(route('checkout.store'), [
+        'contact_name' => '优惠用户',
+        'contact_phone' => '13800000000',
+        'coupon_code' => 'GLOBAL20',
+    ])->assertRedirect();
+
+    $this->assertDatabaseHas('orders', [
+        'user_id' => $user->id,
+        'coupon_code' => 'GLOBAL20',
+        'discount_cents' => 2000,
+        'total_cents' => 8000,
+    ]);
+
+    $this->post(route('cart.items.store'), ['variant_id' => $variantA->id, 'quantity' => 1]);
+    $this->actingAs($user)->post(route('checkout.store'), [
+        'contact_name' => '优惠用户',
+        'contact_phone' => '13800000000',
+        'coupon_code' => 'GLOBAL20',
+    ])->assertRedirect();
+
+    $this->post(route('cart.items.store'), ['variant_id' => $variantA->id, 'quantity' => 1]);
+    $this->actingAs($user)->post(route('checkout.store'), [
+        'contact_name' => '优惠用户',
+        'contact_phone' => '13800000000',
+        'coupon_code' => 'GLOBAL20',
+    ])->assertInvalid(['coupon_code']);
+
+    $this->flushSession();
+    $this->post(route('cart.items.store'), ['variant_id' => $variantA->id, 'quantity' => 1]);
+    $this->post(route('cart.items.store'), ['variant_id' => $variantB->id, 'quantity' => 1]);
+    $this->actingAs($user)->post(route('checkout.store'), [
+        'contact_name' => '优惠用户',
+        'contact_phone' => '13800000000',
+        'coupon_code' => 'ONLYA',
+    ])->assertInvalid(['coupon_code']);
+
+    $this->flushSession();
+    $this->post(route('cart.items.store'), ['variant_id' => $variantA->id, 'quantity' => 1]);
+    $this->actingAs($user)->post(route('checkout.store'), [
+        'contact_name' => '优惠用户',
+        'contact_phone' => '13800000000',
+        'coupon_code' => 'ONLYA',
+    ])->assertRedirect();
+
+    $this->assertDatabaseHas('orders', [
+        'user_id' => $user->id,
+        'coupon_code' => 'ONLYA',
+        'discount_cents' => 1000,
+        'total_cents' => 9000,
+    ]);
+});
+
+it('lets users manage addresses and preloads the default address during checkout', function (): void {
+    $this->seed();
+
+    $user = User::factory()->create(['role' => 'customer']);
+    $category = \App\Models\Category::query()->firstOrFail();
+    $product = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => '地址物流商品',
+        'slug' => 'address-shipping-product',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_LOGISTICS,
+    ]);
+    $variant = ProductVariant::query()->create([
+        'product_id' => $product->id,
+        'sku' => 'ADDRESS-SHIPPING-1',
+        'price_cents' => 8800,
+        'stock' => 5,
+        'is_active' => true,
+    ]);
+
+    $this->actingAs($user)
+        ->post(route('user.addresses.store'), [
+            'raw_text' => '中国北京市朝阳区望京街道 88 号',
+            'recipient_name' => '枫桦',
+            'phone' => '13800000000',
+            'is_default' => '1',
+            'is_visible' => '1',
+        ])
+        ->assertRedirect();
+
+    $this->assertDatabaseHas('user_addresses', [
+        'user_id' => $user->id,
+        'recipient_name' => '枫桦',
+        'country' => '中国',
+        'province' => '北京市',
+        'city' => '北京市',
+        'district' => '朝阳区',
+        'is_default' => true,
+        'is_visible' => true,
+    ]);
+
+    $this->post(route('cart.items.store'), [
+        'variant_id' => $variant->id,
+        'quantity' => 1,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('checkout.create'))
+        ->assertOk()
+        ->assertSee('value="枫桦"', false)
+        ->assertSee('value="13800000000"', false)
+        ->assertSee('中国 北京市 北京市 朝阳区 望京街道88号');
+
+    $this->get(route('users.show', $user))
+        ->assertOk()
+        ->assertSee('公开地址')
+        ->assertSee('望京街道88号');
 });
 
 it('renders product videos and optional product introduction', function (): void {

@@ -3,6 +3,7 @@
         $mainMedia = $product->media->first();
         $firstVariant = $product->variants->first();
         $totalStock = $product->variants->sum('stock');
+        $isSoldOut = $product->isSoldOut() || ($product->status === \App\Models\Product::STATUS_PUBLISHED && $totalStock <= 0);
         $isPurchasable = $product->isDirectlyPurchasable();
         $allowsVoting = $product->allowsVoting();
         $allowsCrowdfunding = $product->allowsCrowdfunding() && $firstVariant;
@@ -21,12 +22,15 @@
 
         <div class="grid gap-6 p-4 lg:grid-cols-[minmax(280px,430px)_1fr]">
             <section>
-                <div class="border border-slate-200 bg-white p-2">
+                <div class="relative border border-slate-200 bg-white p-2">
+                    @if($isSoldOut)
+                        <span class="absolute left-4 top-4 z-10 rounded-sm bg-slate-950/85 px-3 py-1 text-sm font-semibold text-white shadow">售罄</span>
+                    @endif
                     @if($mainMedia)
                         @if($mainMedia->isVideo())
-                            <video src="{{ $mainMedia->url() }}" class="aspect-square w-full bg-black object-contain" controls preload="metadata"></video>
+                            <video src="{{ $mainMedia->url() }}" class="aspect-square w-full bg-black object-contain {{ $isSoldOut ? 'grayscale' : '' }}" controls preload="metadata"></video>
                         @else
-                            <img src="{{ $mainMedia->url() }}" alt="{{ $mainMedia->alt ?? $product->title }}" class="aspect-square w-full object-cover">
+                            <img src="{{ $mainMedia->url() }}" alt="{{ $mainMedia->alt ?? $product->title }}" class="aspect-square w-full object-cover {{ $isSoldOut ? 'grayscale' : '' }}">
                         @endif
                     @else
                         <div class="flex aspect-square items-center justify-center bg-slate-100 text-sm text-slate-500">暂无图片</div>
@@ -53,7 +57,7 @@
                 <p class="mb-1 text-sm text-slate-500">{{ $product->category?->name ?? '未分类' }}</p>
                 <div class="flex flex-wrap items-start gap-3">
                     <h1 class="text-2xl font-semibold leading-8">{{ $product->title }}</h1>
-                    <span class="rounded-sm border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700">{{ $product->statusLabel() }}</span>
+                    <span class="rounded-sm border {{ $isSoldOut ? 'border-slate-500 bg-slate-900 text-white' : 'border-blue-200 bg-blue-50 text-blue-700' }} px-2 py-1 text-xs font-medium">{{ $isSoldOut ? '售罄' : $product->statusLabel() }}</span>
                 </div>
 
                 @if($product->summary)
@@ -123,19 +127,18 @@
                             <p class="mt-2 text-slate-600">后台尚未配置公开物流链接。</p>
                         @endif
                     </div>
-                @elseif($product->isSoldOut())
+                @elseif($isSoldOut)
                     <div class="mt-5 rounded-sm border border-slate-300 bg-slate-50 p-4 text-sm leading-6 text-slate-700">
                         该商品已售罄，暂时不可购买。
                     </div>
                 @elseif($isPurchasable)
-                    <form method="post" action="{{ route('cart.items.store') }}" class="mt-5 rounded-sm border border-slate-300 bg-slate-50 p-4">
-                        @csrf
+                    <div class="mt-5 rounded-sm border border-slate-300 bg-slate-50 p-4">
                         @if($product->isPresale())
                             <p class="mb-3 rounded-sm border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-slate-700">该商品为预售品，付款确认后会进入待发货；实际进货后后台会更新为进货中。</p>
                         @endif
                         <label class="block">
                             <span class="text-sm font-medium">规格</span>
-                            <select class="mt-1 w-full rounded-sm border border-slate-300 bg-white px-3 py-2 text-sm" name="variant_id" required>
+                            <select id="product-detail-variant" class="mt-1 w-full rounded-sm border border-slate-300 bg-white px-3 py-2 text-sm" required>
                                 @foreach($product->variants as $variant)
                                     <option value="{{ $variant->id }}">{{ $variant->specLabel() }} / @money($variant->effectivePriceCents()) / {{ $product->isPresale() ? '预售' : '库存 '.$variant->stock }}</option>
                                 @endforeach
@@ -144,11 +147,22 @@
                         <div class="mt-3 flex flex-wrap items-end gap-3">
                             <label class="block">
                                 <span class="text-sm font-medium">数量</span>
-                                <input class="mt-1 w-28 rounded-sm border border-slate-300 bg-white px-3 py-2 text-sm" type="number" min="1" max="999" name="quantity" value="1" required>
+                                <input id="product-detail-quantity" class="mt-1 w-28 rounded-sm border border-slate-300 bg-white px-3 py-2 text-sm" type="number" min="1" max="999" value="1" required>
                             </label>
-                            <button class="rounded-sm border border-emerald-700 bg-emerald-700 px-5 py-2 text-sm font-medium text-white hover:bg-emerald-800" type="submit">{{ $product->isPresale() ? '预售下单' : '加入购物车' }}</button>
+                            <form method="post" action="{{ route('cart.items.store') }}" data-cart-add-form data-product-title="{{ $product->title }}" onsubmit="this.variant_id.value = document.getElementById('product-detail-variant').value; this.quantity.value = document.getElementById('product-detail-quantity').value;">
+                                @csrf
+                                <input type="hidden" name="variant_id" value="{{ $product->variants->first()?->id }}">
+                                <input type="hidden" name="quantity" value="1">
+                                <button class="rounded-sm border border-blue-700 bg-blue-700 px-5 py-2 text-sm font-medium text-white hover:bg-blue-800" type="submit">{{ $product->isPresale() ? '加入预售购物车' : '加入购物车' }}</button>
+                            </form>
+                            <form method="post" action="{{ route('cart.buy-now') }}" onsubmit="this.variant_id.value = document.getElementById('product-detail-variant').value; this.quantity.value = document.getElementById('product-detail-quantity').value;">
+                                @csrf
+                                <input type="hidden" name="variant_id" value="{{ $product->variants->first()?->id }}">
+                                <input type="hidden" name="quantity" value="1">
+                                <button class="rounded-sm border border-emerald-700 bg-emerald-700 px-5 py-2 text-sm font-medium text-white hover:bg-emerald-800" type="submit">{{ $product->isPresale() ? '预售下单' : '立即购买' }}</button>
+                            </form>
                         </div>
-                    </form>
+                    </div>
                 @endif
             </section>
         </div>

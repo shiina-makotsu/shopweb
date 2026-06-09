@@ -5,11 +5,12 @@ namespace App\Services;
 use App\Models\Coupon;
 use App\Models\CouponRedemption;
 use App\Models\User;
+use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
 
 class CouponService
 {
-    public function resolve(?string $code, User $user, int $subtotalCents): ?Coupon
+    public function resolve(?string $code, User $user, int $subtotalCents, Collection $cartItems): ?Coupon
     {
         $code = trim((string) $code);
 
@@ -25,12 +26,12 @@ class CouponService
             throw ValidationException::withMessages(['coupon_code' => '优惠码不存在。']);
         }
 
-        $this->assertUsable($coupon, $user, $subtotalCents);
+        $this->assertUsable($coupon, $user, $subtotalCents, $cartItems);
 
         return $coupon;
     }
 
-    public function assertUsable(Coupon $coupon, User $user, int $subtotalCents): void
+    public function assertUsable(Coupon $coupon, User $user, int $subtotalCents, Collection $cartItems): void
     {
         $now = now();
 
@@ -50,6 +51,22 @@ class CouponService
             throw ValidationException::withMessages(['coupon_code' => '订单金额未达到优惠码使用门槛。']);
         }
 
+        if (($coupon->scope ?? Coupon::SCOPE_GLOBAL) === Coupon::SCOPE_PRODUCT) {
+            if (! $coupon->product_id) {
+                throw ValidationException::withMessages(['coupon_code' => '该单商品优惠码尚未绑定商品。']);
+            }
+
+            if ($cartItems->count() !== 1) {
+                throw ValidationException::withMessages(['coupon_code' => '单商品优惠码只能在购物车只有一个商品时使用。']);
+            }
+
+            $productId = $cartItems->first()['product']->id ?? null;
+
+            if ((int) $productId !== (int) $coupon->product_id) {
+                throw ValidationException::withMessages(['coupon_code' => '该优惠码不适用于当前商品。']);
+            }
+        }
+
         $confirmedStatuses = [CouponRedemption::STATUS_RESERVED, CouponRedemption::STATUS_CONFIRMED];
 
         if ($coupon->usage_limit !== null) {
@@ -60,13 +77,5 @@ class CouponService
             }
         }
 
-        $userUsed = $coupon->redemptions()
-            ->where('user_id', $user->id)
-            ->whereIn('status', $confirmedStatuses)
-            ->count();
-
-        if ($userUsed >= $coupon->per_user_limit) {
-            throw ValidationException::withMessages(['coupon_code' => '你已达到该优惠码使用次数上限。']);
-        }
     }
 }

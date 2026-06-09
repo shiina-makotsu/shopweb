@@ -15,14 +15,14 @@ class HomeController extends Controller
         return view('home', [
             'settings' => SiteSetting::query()->first(),
             'featuredProducts' => Product::query()
-                ->published()
+                ->whereIn('status', [Product::STATUS_PUBLISHED, Product::STATUS_SOLD_OUT])
                 ->where('is_featured', true)
                 ->with(['coverMedia', 'variants'])
                 ->orderBy('sort_order')
                 ->limit(8)
                 ->get(),
             'discountProducts' => Product::query()
-                ->published()
+                ->whereIn('status', [Product::STATUS_PUBLISHED, Product::STATUS_SOLD_OUT])
                 ->whereHas('variants', fn ($query) => $query
                     ->where('is_active', true)
                     ->whereNotNull('discount_price_cents')
@@ -33,7 +33,7 @@ class HomeController extends Controller
                 ->limit(8)
                 ->get(),
             'latestProducts' => Product::query()
-                ->published()
+                ->whereIn('status', [Product::STATUS_PUBLISHED, Product::STATUS_SOLD_OUT])
                 ->with(['coverMedia', 'variants'])
                 ->latest()
                 ->limit(8)

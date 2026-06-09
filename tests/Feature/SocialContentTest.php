@@ -8,6 +8,7 @@ use App\Models\Category;
 use App\Models\Product;
 use App\Models\ProductComment;
 use App\Models\ProductVariant;
+use App\Models\SupportChatSession;
 use App\Models\SupportTicket;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
@@ -228,6 +229,10 @@ it('lets thread owners and section moderators manage forum content with activity
 });
 
 it('lets guests create support tickets with a generated guest id', function (): void {
+    $this->get(route('support.demands'))
+        ->assertOk()
+        ->assertSee('售后/客服需求');
+
     $this->post(route('support.store'), [
         'category' => 'consultation',
         'subject' => '无法登录',
@@ -241,6 +246,79 @@ it('lets guests create support tickets with a generated guest id', function (): 
     expect($ticket->user_id)->toBeNull()
         ->and($ticket->guest_id)->toStartWith('guest_')
         ->and($ticket->guest_email)->toBe('guest@example.com');
+});
+
+it('supports chat style customer service sessions with attachments and admin reception', function (): void {
+    Storage::fake('support_attachments');
+
+    $admin = User::factory()->create(['role' => 'support', 'name' => '客服甲']);
+
+    $this->get(route('support.index'))
+        ->assertOk()
+        ->assertSee('客服会话')
+        ->assertSee('暂无消息');
+
+    $this->post(route('support.messages.store'), [
+        'message' => '我需要即时帮助。',
+        'guest_email' => 'guest-chat@example.com',
+        'attachment' => UploadedFile::fake()->image('chat.png', 160, 120),
+    ])->assertRedirect(route('support.index'));
+
+    $session = SupportChatSession::query()->firstOrFail();
+    $message = $session->messages()->firstOrFail();
+
+    expect($session->guest_id)->toStartWith('guest_')
+        ->and($session->guest_email)->toBe('guest-chat@example.com')
+        ->and($message->attachment_path)->not->toBeNull();
+
+    Storage::disk('support_attachments')->assertExists($message->attachment_path);
+
+    $this->get(route('support.messages.attachment', $message))
+        ->assertOk();
+
+    app(\App\Services\SupportChatService::class)->reply($session, $admin, '这里是客服回复。');
+
+    $this->get(route('support.index'))
+        ->assertOk()
+        ->assertSee('客服 客服甲 为您服务')
+        ->assertSee('这里是客服回复。');
+
+    $this->actingAs($admin)
+        ->get('/admin/support-chat-sessions')
+        ->assertOk()
+        ->assertSee('客服会话');
+});
+
+it('ends idle support chat sessions and lets customers continue from the same window', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+    $session = SupportChatSession::query()->create([
+        'user_id' => $user->id,
+        'status' => SupportChatSession::STATUS_ACTIVE,
+        'last_message_at' => now()->subMinutes(SupportChatSession::CUSTOMER_IDLE_MINUTES + 5),
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('support.index'))
+        ->assertOk()
+        ->assertSee('本次接待已结束');
+
+    expect($session->fresh()->status)->toBe(SupportChatSession::STATUS_ENDED)
+        ->and($session->fresh()->served_count)->toBe(1);
+
+    $this->actingAs($user)
+        ->post(route('support.messages.store'), [
+            'message' => '继续咨询。',
+        ])
+        ->assertRedirect(route('support.index'));
+
+    expect($session->fresh()->status)->toBe(SupportChatSession::STATUS_OPEN)
+        ->and($session->messages()->latest('id')->first()->body)->toBe('继续咨询。');
+
+    $this->actingAs($user)
+        ->delete(route('support.sessions.destroy', $session))
+        ->assertRedirect(route('support.index'));
+
+    expect($session->fresh()->deleted_by_customer_at)->not->toBeNull();
 });
 
 it('lets users update their avatar and profile intro', function (): void {

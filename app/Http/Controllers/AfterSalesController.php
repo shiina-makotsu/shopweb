@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\AfterSalesRequest;
 use App\Models\Order;
-use App\Models\SupportTicket;
 use App\Models\SiteSetting;
 use App\Support\Money;
 use App\Support\OrderPrivacy;
@@ -56,18 +55,9 @@ class AfterSalesController extends Controller
 
         $order->loadMissing(['items', 'shippingCarrier']);
 
-        SupportTicket::query()->create([
-            'user_id' => $request->user()->id,
-            'order_id' => $order->id,
-            'category' => 'after_sale',
-            'subject' => '订单 '.$order->order_number.' 售后咨询',
-            'message' => $this->supportMessage($order),
-            'status' => SupportTicket::STATUS_OPEN,
-        ]);
-
         return redirect()
-            ->route('support.index')
-            ->with('status', '已把订单信息发送给客服，你可以在这里继续补充说明。');
+            ->route('support.index', ['order_id' => $order->id])
+            ->with('status', '已打开客服会话，你可以直接发送订单相关问题。');
     }
 
     private function authorizeOrder(Request $request, Order $order): void

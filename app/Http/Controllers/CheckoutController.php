@@ -10,16 +10,19 @@ use Illuminate\View\View;
 
 class CheckoutController extends Controller
 {
-    public function create(CartService $cart): View|RedirectResponse
+    public function create(Request $request, CartService $cart): View|RedirectResponse
     {
         if ($cart->isEmpty()) {
             return redirect()->route('cart.show')->withErrors(['cart' => '购物车为空。']);
         }
 
+        $defaultAddress = $request->user()->addresses()->where('is_default', true)->first();
+
         return view('checkout.create', [
             'items' => $cart->items(),
             'subtotalCents' => $cart->subtotalCents(),
             'requiresShipping' => $cart->requiresShipping(),
+            'defaultAddress' => $defaultAddress,
         ]);
     }
 

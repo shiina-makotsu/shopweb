@@ -9,6 +9,7 @@ use App\Filament\Resources\ProductResource\Pages\ListProducts;
 use App\Models\Product;
 use App\Models\ProductMedia;
 use App\Models\ProductVariant;
+use App\Support\MoneyInput;
 use App\Support\RegexSearch;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
@@ -32,6 +33,7 @@ use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 
 class ProductResource extends Resource
@@ -47,6 +49,23 @@ class ProductResource extends Resource
     protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedShoppingBag;
     protected static ?int $navigationSort = 20;
 
+    public static function resolveRecordRouteBinding(int|string $key, ?\Closure $modifyQuery = null): ?Model
+    {
+        $record = parent::resolveRecordRouteBinding($key, $modifyQuery);
+
+        if ($record || ! ctype_digit((string) $key)) {
+            return $record;
+        }
+
+        $query = static::getRecordRouteBindingEloquentQuery();
+
+        if ($modifyQuery) {
+            $query = $modifyQuery($query) ?? $query;
+        }
+
+        return $query->whereKey((int) $key)->first();
+    }
+
     public static function form(Schema $schema): Schema
     {
         return $schema->components([
@@ -58,7 +77,7 @@ class ProductResource extends Resource
                 TextInput::make('title')->label('标题')->required()->maxLength(255)
                     ->live(onBlur: true)
                     ->afterStateUpdated(fn ($state, callable $set) => $set('slug', Str::slug($state))),
-                TextInput::make('slug')->label('Slug')->required()->unique(ignoreRecord: true),
+                TextInput::make('slug')->label('Slug')->unique(ignoreRecord: true)->helperText('可留空；保存时会自动生成可访问的商品路径。'),
                 Textarea::make('summary')->label('简介')->rows(3)->columnSpanFull(),
                 RichEditor::make('description')->label('详情')->columnSpanFull(),
                 Select::make('status')->label('状态')->required()->options(fn (?Product $record): array => $record?->status === Product::STATUS_SOLD_OUT
@@ -94,9 +113,9 @@ class ProductResource extends Resource
                     ->schema([
                         TextInput::make('sku')->label('SKU')->required()->maxLength(255),
                         KeyValue::make('specs')->label('规格值')->keyLabel('规格名')->valueLabel('规格值'),
-                        TextInput::make('price_cents')->label('价格（分）')->numeric()->required(),
-                        TextInput::make('compare_at_price_cents')->label('划线价（分）')->numeric(),
-                        TextInput::make('discount_price_cents')->label('折扣价（分）')->numeric()->minValue(0),
+                        MoneyInput::cents(TextInput::make('price_cents')->label('价格（元）')->required()),
+                        MoneyInput::cents(TextInput::make('compare_at_price_cents')->label('划线价（元）'), true),
+                        MoneyInput::cents(TextInput::make('discount_price_cents')->label('折扣价（元）')->minValue(0), true),
                         DateTimePicker::make('discount_starts_at')->label('折扣开始')->seconds(false),
                         DateTimePicker::make('discount_ends_at')->label('折扣结束')->seconds(false),
                         TextInput::make('stock')->label('库存')->numeric()->required()->default(0),
@@ -145,14 +164,14 @@ class ProductResource extends Resource
 
             Section::make('概念商品投票与筹款')->description('仅概念商品会在前台显示购买意愿、价格区间投票和筹款说明。')->schema([
                 Toggle::make('crowdfunding_enabled')->label('启用筹款')->default(false),
-                TextInput::make('crowdfunding_goal_cents')->label('筹款目标（分）')->numeric(),
+                MoneyInput::cents(TextInput::make('crowdfunding_goal_cents')->label('筹款目标（元）'), true),
                 Textarea::make('crowdfunding_reward')->label('正式发布奖励')->rows(3)->columnSpanFull(),
                 Repeater::make('priceVoteOptions')->label('价格区间')
                     ->relationship()
                     ->schema([
                         TextInput::make('label')->label('标签')->required(),
-                        TextInput::make('min_cents')->label('最低（分）')->numeric(),
-                        TextInput::make('max_cents')->label('最高（分）')->numeric(),
+                        MoneyInput::cents(TextInput::make('min_cents')->label('最低（元）'), true),
+                        MoneyInput::cents(TextInput::make('max_cents')->label('最高（元）'), true),
                         TextInput::make('sort_order')->label('排序')->numeric()->default(0),
                         Toggle::make('is_active')->label('启用')->default(true),
                     ])
@@ -181,7 +200,8 @@ class ProductResource extends Resource
             ])
             ->defaultSort('updated_at', 'desc')
             ->recordActions([
-                EditAction::make(),
+                EditAction::make()
+                    ->url(fn (Product $record): string => static::getUrl('edit', ['record' => $record->getKey()])),
                 Action::make('duplicateIncoming')
                     ->label('生成进货中')
                     ->icon(Heroicon::OutlinedArrowPath)

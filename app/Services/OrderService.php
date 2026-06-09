@@ -34,7 +34,7 @@ class OrderService
 
         return DB::transaction(function () use ($user, $data, $cartItems): Order {
             $subtotalCents = (int) $cartItems->sum('line_total_cents');
-            $coupon = $this->coupons->resolve($data['coupon_code'] ?? null, $user, $subtotalCents);
+            $coupon = $this->coupons->resolve($data['coupon_code'] ?? null, $user, $subtotalCents, $cartItems);
             $discountCents = $coupon?->discountFor($subtotalCents) ?? 0;
             $totalCents = max(0, $subtotalCents - $discountCents);
 
@@ -230,6 +230,23 @@ class OrderService
         ], $actor);
     }
 
+    public function confirmReceipt(Order $order, User $user): void
+    {
+        if ($order->user_id !== $user->id || $order->status !== Order::STATUS_AWAITING_RECEIPT) {
+            return;
+        }
+
+        $order->update([
+            'status' => Order::STATUS_FULFILLED,
+            'delivered_at' => now(),
+            'fulfilled_at' => now(),
+        ]);
+
+        $this->activity->log('order_receipt_confirmed_by_customer', $order, $order->order_number, [
+            'status' => Order::STATUS_FULFILLED,
+        ], $user);
+    }
+
     public function rejectPayment(Order $order, ?string $note = null, ?User $actor = null): void
     {
         $order->update([
@@ -246,16 +263,20 @@ class OrderService
         ], $actor);
     }
 
-    public function fulfill(Order $order, ?User $actor = null): void
+    public function fulfill(Order $order, ?User $actor = null, ?string $reason = null): void
     {
+        $adminNote = trim((string) $reason);
+
         $order->update([
             'status' => Order::STATUS_FULFILLED,
             'delivered_at' => $order->delivered_at ?? now(),
             'fulfilled_at' => now(),
+            'admin_note' => $adminNote !== '' ? $adminNote : $order->admin_note,
         ]);
 
         $this->activity->log('order_fulfilled', $order, $order->order_number, [
             'status' => Order::STATUS_FULFILLED,
+            'reason' => $adminNote !== '' ? $adminNote : null,
         ], $actor);
     }
 

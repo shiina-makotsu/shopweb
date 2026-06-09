@@ -44,6 +44,7 @@ it('applies basic backoffice role permissions', function (): void {
     $this->actingAs($purchasing)->get('/admin/orders')->assertForbidden();
 
     $this->actingAs($support)->get('/admin/forum-activity-logs')->assertOk();
+    $this->actingAs($support)->get('/admin/support-chat-sessions')->assertOk();
     $this->actingAs($support)->get('/admin/support-tickets')->assertOk();
     $this->actingAs($support)->get('/admin/orders')->assertForbidden();
 });
@@ -130,6 +131,34 @@ it('renders catalog reference management pages for admins', function (): void {
         ->assertSee('供应商')
         ->assertSee('标签')
         ->assertSee('数量单位');
+});
+
+it('opens product and customer edit pages by stable ids after route key changes', function (): void {
+    $this->seed();
+
+    $admin = User::factory()->create(['role' => 'admin']);
+    $customer = User::factory()->create([
+        'role' => 'customer',
+        'public_id' => 'route_customer',
+    ]);
+    $category = \App\Models\Category::query()->firstOrFail();
+    $product = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => '中文商品标题',
+        'slug' => '',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_ONLINE,
+    ]);
+
+    expect($product->slug)->not->toBe('');
+
+    $this->actingAs($admin)
+        ->get("/admin/products/{$product->id}/edit")
+        ->assertOk();
+
+    $this->actingAs($admin)
+        ->get("/admin/customers/{$customer->id}/edit")
+        ->assertOk();
 });
 
 it('renders admin search with regex support', function (): void {

@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Models\ProductVariant;
 use App\Support\AdminAccess;
+use App\Support\MoneyInput;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -65,7 +66,7 @@ class ProductDiscountPage extends Page implements HasSchemas
                                 $variant->id => ($variant->product?->title ?? '商品').' / '.$variant->sku.' / '.$variant->specLabel(),
                             ])
                             ->all()),
-                    TextInput::make('discount_price_cents')->label('折扣价（分）')->numeric()->required()->minValue(0),
+                    MoneyInput::cents(TextInput::make('discount_price_cents')->label('折扣价（元）')->required()->minValue(0)),
                     DateTimePicker::make('discount_starts_at')->label('折扣开始')->seconds(false),
                     DateTimePicker::make('discount_ends_at')->label('折扣结束')->seconds(false),
                 ])->columns(2)->columnSpanFull(),

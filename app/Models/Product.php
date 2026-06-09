@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Str;
 
 class Product extends Model
 {
@@ -307,6 +308,10 @@ class Product extends Model
 
     protected static function booted(): void
     {
+        static::saving(function (self $product): void {
+            $product->slug = static::uniqueSlug($product);
+        });
+
         static::updated(function (self $product): void {
             if (! $product->wasChanged('status')) {
                 return;
@@ -337,5 +342,38 @@ class Product extends Model
                     ->update(['status' => Order::STATUS_SHIPPED]);
             }
         });
+    }
+
+    private static function uniqueSlug(self $product): string
+    {
+        $current = trim((string) $product->slug);
+
+        if (
+            $product->exists
+            && $current !== ''
+            && $product->getOriginal('slug') === $current
+            && preg_match('/^[A-Za-z0-9][A-Za-z0-9_-]*$/', $current)
+        ) {
+            return $current;
+        }
+
+        $base = Str::slug($current !== '' ? $current : (string) $product->title);
+
+        if ($base === '') {
+            $base = 'product-'.Str::lower(Str::random(8));
+        }
+
+        $slug = $base;
+        $index = 2;
+
+        while (static::query()
+            ->where('slug', $slug)
+            ->when($product->getKey(), fn (Builder $query) => $query->whereKeyNot($product->getKey()))
+            ->exists()) {
+            $suffix = '-'.$index++;
+            $slug = substr($base, 0, 255 - strlen($suffix)).$suffix;
+        }
+
+        return $slug;
     }
 }

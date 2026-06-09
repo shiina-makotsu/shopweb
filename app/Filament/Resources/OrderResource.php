@@ -13,9 +13,11 @@ use App\Support\OrderStatusPresenter;
 use App\Support\RegexSearch;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Illuminate\Support\HtmlString;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
@@ -50,11 +52,19 @@ class OrderResource extends Resource
                 TextInput::make('order_number')->label('订单号')->disabled(),
                 TextInput::make('status')->label('订单状态')->disabled(),
                 TextInput::make('payment_status')->label('付款状态')->disabled(),
-                TextInput::make('subtotal_cents')->label('小计（分）')->disabled(),
-                TextInput::make('discount_cents')->label('优惠（分）')->disabled(),
-                TextInput::make('total_cents')->label('应付（分）')->disabled(),
+                TextInput::make('subtotal_cents')->label('小计')->disabled()->formatStateUsing(fn ($state): string => Money::format((int) $state)),
+                TextInput::make('discount_cents')->label('优惠')->disabled()->formatStateUsing(fn ($state): string => Money::format((int) $state)),
+                TextInput::make('total_cents')->label('应付')->disabled()->formatStateUsing(fn ($state): string => Money::format((int) $state)),
                 TextInput::make('coupon_code')->label('优惠码')->disabled(),
                 TextInput::make('payment_proof_path')->label('付款凭证路径')->disabled()->columnSpanFull(),
+                Placeholder::make('payment_proof_preview')
+                    ->label('付款凭证图片')
+                    ->content(fn (?Order $record): HtmlString => new HtmlString(
+                        $record?->payment_proof_path
+                            ? '<a href="'.e(route('admin.payment-proofs.show', $record)).'" target="_blank" rel="noopener"><img src="'.e(route('admin.payment-proofs.show', $record)).'" alt="付款凭证" style="max-width: 360px; max-height: 420px; border: 1px solid #cbd5e1; border-radius: 2px; object-fit: contain; background: #fff;" /></a>'
+                            : '<span style="color:#64748b;">暂未上传付款凭证</span>'
+                    ))
+                    ->columnSpanFull(),
             ])->columns(2)->columnSpanFull(),
             Section::make('客户信息')->schema([
                 TextInput::make('contact_name')->label('联系人')->disabled(),
@@ -148,9 +158,11 @@ class OrderResource extends Resource
                     ->action(fn (Order $record, array $data) => app(OrderService::class)->rejectPayment($record, $data['admin_note'] ?? null, auth()->user())),
                 Action::make('fulfill')
                     ->label('标记完成')
-                    ->requiresConfirmation()
+                    ->form([
+                        Textarea::make('admin_note')->label('特殊原因备注')->required()->rows(4)->helperText('后台直接完成会跳过用户确认签收，请填写用户可见的特殊原因。'),
+                    ])
                     ->visible(fn (Order $record): bool => in_array($record->status, [Order::STATUS_PAID, Order::STATUS_AWAITING_RECEIPT], true))
-                    ->action(fn (Order $record) => app(OrderService::class)->fulfill($record, auth()->user())),
+                    ->action(fn (Order $record, array $data) => app(OrderService::class)->fulfill($record, auth()->user(), $data['admin_note'] ?? null)),
                 Action::make('cancel')
                     ->label('取消')
                     ->color('danger')

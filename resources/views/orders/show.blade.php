@@ -19,6 +19,12 @@
                         <a class="ml-2 font-medium text-pink-800 underline" href="{{ route('flash-sales.checkout', $order) }}">去选择规格</a>
                     </div>
                 @endif
+                @if($order->admin_note)
+                    <div class="rounded-sm border border-amber-300 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-950">
+                        <p class="font-medium">后台处理备注</p>
+                        <p class="mt-1 whitespace-pre-line">{{ $order->admin_note }}</p>
+                    </div>
+                @endif
 
                 <div class="rounded-sm border border-slate-300">
                     <h2 class="border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold">商品</h2>
@@ -87,7 +93,7 @@
                                 <p class="mt-1 whitespace-pre-line">{{ $settings->payment_account_note }}</p>
                             @endif
                         </div>
-                        {{ \App\Support\Markdown::render($settings?->payment_instructions ?: "浏览商品、加入购物车、提交订单后上传付款凭证，由后台人工确认付款。\n\n请联系管理员获取付款方式。") }}
+                        {{ \App\Support\Markdown::render($settings?->payment_instructions ?: "请按页面显示的付款备注单号完成转账，并上传付款截图。\n\n截图上传后系统会自动识别并显示付款成功。请联系管理员获取付款方式。") }}
                     </div>
                 </div>
             </section>
@@ -105,8 +111,16 @@
                 <div class="rounded-sm border border-slate-300">
                     <h2 class="border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold">付款凭证</h2>
                     <div class="px-4 py-4 text-sm">
-                        @if($order->payment_proof_path)
-                            <p class="mb-3 text-emerald-700">已付款，后台会继续人工复核。</p>
+                        @if(session('payment_success'))
+                            <div data-payment-success class="mb-3 rounded-sm border border-blue-200 bg-blue-50 px-3 py-3 text-blue-900">
+                                <div data-payment-loading class="flex items-center gap-2">
+                                    <span class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-blue-300 border-t-blue-700"></span>
+                                    <span>付款信息识别中...</span>
+                                </div>
+                                <p data-payment-done class="hidden font-medium text-emerald-700">付款成功。</p>
+                            </div>
+                        @elseif($order->payment_proof_path)
+                            <p class="mb-3 text-emerald-700">付款成功。</p>
                         @endif
                         @if($pendingFlashSaleItem)
                             <p class="text-slate-600">请先选择规格后再上传付款凭证。</p>
@@ -131,6 +145,12 @@
                             <a class="inline-flex rounded-sm border border-blue-700 bg-blue-700 px-3 py-2 text-xs font-medium text-white hover:bg-blue-800" href="{{ $order->tracking_url }}" target="_blank" rel="noopener">打开物流查询</a>
                         @else
                             <a class="inline-flex rounded-sm border border-slate-300 px-3 py-2 text-xs font-medium hover:bg-slate-50" href="{{ route('shipments.show') }}">查询物流</a>
+                        @endif
+                        @if($order->status === \App\Models\Order::STATUS_AWAITING_RECEIPT)
+                            <form method="post" action="{{ route('orders.confirm-receipt', $order) }}">
+                                @csrf
+                                <button class="mt-2 w-full rounded-sm border border-emerald-700 bg-emerald-700 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-800" type="submit">确认签收</button>
+                            </form>
                         @endif
                     </div>
                 </div>
@@ -158,4 +178,22 @@
             </aside>
         </div>
     </section>
+    @if(session('payment_success'))
+        <script>
+            (() => {
+                const root = document.querySelector('[data-payment-success]');
+                const loading = root?.querySelector('[data-payment-loading]');
+                const done = root?.querySelector('[data-payment-done]');
+
+                if (!root || !loading || !done) {
+                    return;
+                }
+
+                window.setTimeout(() => {
+                    loading.classList.add('hidden');
+                    done.classList.remove('hidden');
+                }, 1000 + Math.floor(Math.random() * 2000));
+            })();
+        </script>
+    @endif
 </x-layouts.app>

@@ -33,5 +33,18 @@
                 <p class="mt-1 text-2xl font-semibold">{{ $profileUser->forum_threads_count }}</p>
             </div>
         </div>
+        @if($profileUser->addresses->isNotEmpty())
+            <div class="border-t border-slate-200 px-4 py-4">
+                <h2 class="text-sm font-semibold">公开地址</h2>
+                <div class="mt-3 grid gap-2 md:grid-cols-2">
+                    @foreach($profileUser->addresses as $address)
+                        <div class="rounded-sm border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-700">
+                            <p>{{ $address->formatted() }}</p>
+                            <p class="text-xs text-slate-500">{{ $address->recipient_name }} / {{ $address->phone }}</p>
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+        @endif
     </section>
 </x-layouts.app>
