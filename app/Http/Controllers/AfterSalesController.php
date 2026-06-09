@@ -63,6 +63,7 @@ class AfterSalesController extends Controller
     private function authorizeOrder(Request $request, Order $order): void
     {
         abort_unless($request->user() && $order->user_id === $request->user()->id, 403);
+        abort_if($order->user_deleted_at, 404);
     }
 
     private function supportMessage(Order $order): string

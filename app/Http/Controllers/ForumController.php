@@ -14,8 +14,15 @@ use Illuminate\View\View;
 
 class ForumController extends Controller
 {
-    public function index(): View
+    public function index(Request $request): View
     {
+        $sort = $this->sortFrom($request);
+        $search = trim((string) $request->query('q', ''));
+        $threads = $this->threadQuery($sort, $search)
+            ->with(['section', 'user'])
+            ->paginate(12)
+            ->withQueryString();
+
         return view('forum.index', [
             'sections' => ForumSection::query()
                 ->active()
@@ -24,35 +31,46 @@ class ForumController extends Controller
                 ->orderBy('sort_order')
                 ->orderBy('name')
                 ->get(),
-            'latestThreads' => ForumThread::query()
-                ->visible()
-                ->with(['section', 'user'])
-                ->orderByDesc('is_pinned')
-                ->latest()
-                ->limit(12)
-                ->get(),
+            'threads' => $threads,
+            'sort' => $sort,
+            'search' => $search,
+            'sortOptions' => $this->sortOptions(),
         ]);
     }
 
-    public function section(ForumSection $section): View
+    public function section(Request $request, ForumSection $section): View
     {
         abort_unless($section->is_active, 404);
 
+        $sort = $this->sortFrom($request);
+        $search = trim((string) $request->query('q', ''));
+
         return view('forum.section', [
             'section' => $section->load('moderators'),
-            'threads' => $section->threads()
+            'pinnedThreads' => $section->threads()
                 ->visible()
+                ->where('is_pinned', true)
                 ->with('user')
                 ->withCount(['comments' => fn ($query) => $query->visible()])
-                ->orderByDesc('is_pinned')
                 ->latest()
-                ->paginate(12),
+                ->limit(6)
+                ->get(),
+            'threads' => $this->threadQuery($sort, $search, $section)
+                ->with('user')
+                ->paginate(12)
+                ->withQueryString(),
+            'sort' => $sort,
+            'search' => $search,
+            'sortOptions' => $this->sortOptions(),
         ]);
     }
 
     public function show(ForumSection $section, ForumThread $thread): View
     {
         abort_unless($section->is_active && $thread->forum_section_id === $section->id && $thread->deleted_at === null, 404);
+
+        $thread->increment('views_count');
+        $thread->refresh();
 
         return view('forum.show', [
             'section' => $section->load('moderators'),
@@ -64,9 +82,44 @@ class ForumController extends Controller
         ]);
     }
 
+    public function createThread(Request $request, ?ForumSection $section = null): View
+    {
+        if ($section) {
+            abort_unless($section->is_active, 404);
+        }
+
+        return view('forum.create', [
+            'section' => $section,
+            'sections' => ForumSection::query()
+                ->active()
+                ->orderBy('sort_order')
+                ->orderBy('name')
+                ->get()
+                ->filter(fn (ForumSection $candidate): bool => $candidate->canBePostedBy($request->user()))
+                ->values(),
+        ]);
+    }
+
+    public function storeThreadFromIndex(Request $request, ForumActivityLogger $logger): RedirectResponse
+    {
+        $data = $request->validate([
+            'forum_section_id' => ['required', 'integer', 'exists:forum_sections,id'],
+        ]);
+
+        $section = ForumSection::query()->active()->whereKey($data['forum_section_id'])->firstOrFail();
+
+        return $this->storeThreadForSection($request, $section, $logger);
+    }
+
     public function storeThread(Request $request, ForumSection $section, ForumActivityLogger $logger): RedirectResponse
     {
+        return $this->storeThreadForSection($request, $section, $logger);
+    }
+
+    private function storeThreadForSection(Request $request, ForumSection $section, ForumActivityLogger $logger): RedirectResponse
+    {
         abort_unless($section->is_active, 404);
+        abort_unless($section->canBePostedBy($request->user()), 403);
 
         $data = $this->validateThread($request);
         $attachmentPaths = $this->storeAttachments($request, 'attachments');
@@ -159,6 +212,8 @@ class ForumController extends Controller
     public function storeComment(Request $request, ForumSection $section, ForumThread $thread, ForumActivityLogger $logger): RedirectResponse
     {
         $this->ensureThread($section, $thread);
+        abort_unless($thread->canReceiveReplies(), 403);
+        abort_unless($section->canBePostedBy($request->user()), 403);
 
         $data = $request->validate([
             'parent_id' => ['nullable', 'integer', 'exists:forum_comments,id'],
@@ -179,6 +234,7 @@ class ForumController extends Controller
         ]);
 
         $logger->log('comment_created', $request->user(), $comment, "回复帖子：{$thread->title}");
+        $thread->update(['last_replied_at' => now()]);
 
         return redirect()->route('forum.threads.show', [$section, $thread])->with('status', '回复已发布。');
     }
@@ -296,5 +352,51 @@ class ForumController extends Controller
         $this->ensureThread($section, $thread);
 
         abort_unless($comment->forum_thread_id === $thread->id && $comment->deleted_at === null, 404);
+    }
+
+    private function sortFrom(Request $request): string
+    {
+        $sort = (string) $request->query('sort', 'hot');
+
+        return array_key_exists($sort, $this->sortOptions()) ? $sort : 'hot';
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function sortOptions(): array
+    {
+        return [
+            'hot' => '热门',
+            'latest' => '最新',
+            'replies' => '回复最多',
+            'likes' => '点赞最多',
+            'views' => '访问最多',
+        ];
+    }
+
+    private function threadQuery(string $sort, string $search = '', ?ForumSection $section = null)
+    {
+        $query = ForumThread::query()
+            ->visible()
+            ->when($section, fn ($query) => $query->where('forum_section_id', $section->id))
+            ->when($search !== '', fn ($query) => $query->where(function ($inner) use ($search): void {
+                $inner->where('title', 'like', '%'.$search.'%')
+                    ->orWhere('body', 'like', '%'.$search.'%');
+            }))
+            ->withCount(['comments' => fn ($query) => $query->visible()])
+            ->select('forum_threads.*')
+            ->selectRaw('(forum_threads.views_count * 0.1 + forum_threads.likes_count * 0.5 + (select count(*) from forum_comments where forum_comments.forum_thread_id = forum_threads.id and forum_comments.deleted_at is null) * 1) as hot_score')
+            ->orderByDesc('is_pinned');
+
+        match ($sort) {
+            'latest' => $query->latest(),
+            'replies' => $query->orderByDesc('comments_count')->latest(),
+            'likes' => $query->orderByDesc('likes_count')->latest(),
+            'views' => $query->orderByDesc('views_count')->latest(),
+            default => $query->orderByDesc('hot_score')->latest(),
+        };
+
+        return $query;
     }
 }

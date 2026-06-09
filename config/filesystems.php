@@ -35,6 +35,12 @@ return [
             'visibility' => 'private',
             'throw' => false,
         ],
+        'digital_deliveries' => [
+            'driver' => 'local',
+            'root' => storage_path('app/private/digital-deliveries'),
+            'visibility' => 'private',
+            'throw' => false,
+        ],
     ],
     'links' => [
         public_path('storage') => storage_path('app/public'),

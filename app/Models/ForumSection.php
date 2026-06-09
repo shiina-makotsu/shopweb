@@ -9,12 +9,19 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class ForumSection extends Model
 {
+    public const POSTING_ALL = 'all';
+    public const POSTING_BACKOFFICE = 'backoffice';
+    public const POSTING_MEMBER = 'member';
+    public const POSTING_MODERATOR = 'moderator';
+
     protected $fillable = [
         'name',
         'slug',
         'description',
         'sort_order',
         'is_active',
+        'posting_policy',
+        'admin_note',
     ];
 
     protected function casts(): array
@@ -42,5 +49,32 @@ class ForumSection extends Model
     public function getRouteKeyName(): string
     {
         return 'slug';
+    }
+
+    public function canBePostedBy(?User $user): bool
+    {
+        if (! $user || $user->isForumPostingBanned()) {
+            return false;
+        }
+
+        return match ($this->posting_policy ?: self::POSTING_ALL) {
+            self::POSTING_BACKOFFICE => $user->isBackofficeUser(),
+            self::POSTING_MEMBER => $user->account_type === 'member' || $user->isBackofficeUser(),
+            self::POSTING_MODERATOR => $user->isForumModeratorFor($this),
+            default => true,
+        };
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function postingPolicyOptions(): array
+    {
+        return [
+            self::POSTING_ALL => '所有登录用户',
+            self::POSTING_BACKOFFICE => '仅后台用户',
+            self::POSTING_MEMBER => '仅会员/后台用户',
+            self::POSTING_MODERATOR => '仅版主/后台用户',
+        ];
     }
 }

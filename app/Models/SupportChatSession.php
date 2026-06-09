@@ -11,6 +11,7 @@ class SupportChatSession extends Model
     public const STATUS_OPEN = 'open';
     public const STATUS_ACTIVE = 'active';
     public const STATUS_ENDED = 'ended';
+    public const STATUS_CLOSED = 'closed';
 
     public const CUSTOMER_IDLE_MINUTES = 60;
 
@@ -61,9 +62,14 @@ class SupportChatSession extends Model
         return $this->status === self::STATUS_ENDED;
     }
 
+    public function isClosed(): bool
+    {
+        return $this->status === self::STATUS_CLOSED;
+    }
+
     public function endIfIdle(): bool
     {
-        if ($this->isEnded() || ! $this->last_message_at) {
+        if ($this->isEnded() || $this->isClosed() || ! $this->last_message_at) {
             return false;
         }
 

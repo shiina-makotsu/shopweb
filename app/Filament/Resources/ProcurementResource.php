@@ -10,6 +10,7 @@ use App\Models\OrderItem;
 use App\Models\Procurement;
 use App\Models\Product;
 use App\Services\ProcurementService;
+use App\Services\WarehouseService;
 use App\Support\Money;
 use App\Support\RegexSearch;
 use Filament\Actions\Action;
@@ -31,10 +32,10 @@ class ProcurementResource extends Resource
 
     protected static ?string $model = Procurement::class;
     protected static string $permissionArea = 'procurement';
-    protected static ?string $navigationLabel = '采购商品';
+    protected static ?string $navigationLabel = '采购';
     protected static ?string $modelLabel = '采购';
     protected static ?string $pluralModelLabel = '采购商品';
-    protected static string|\UnitEnum|null $navigationGroup = '采购';
+    protected static string|\UnitEnum|null $navigationGroup = '仓库';
     protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedTruck;
     protected static ?int $navigationSort = 10;
 
@@ -97,6 +98,7 @@ class ProcurementResource extends Resource
                 TextColumn::make('customs_tax_cents')->label('海关税')->formatStateUsing(fn ($state): string => Money::format((int) $state))->sortable(),
                 TextColumn::make('international_tracking_number')->label('国际物流订单号')->searchable()->toggleable(),
                 TextColumn::make('status')->label('状态')->badge(),
+                TextColumn::make('received_at')->label('入库时间')->dateTime('Y-m-d H:i')->toggleable(),
                 TextColumn::make('updated_at')->label('更新')->dateTime('Y-m-d H:i')->sortable(),
             ])
             ->defaultSort('updated_at', 'desc')
@@ -128,6 +130,19 @@ class ProcurementResource extends Resource
                         'order_item_id' => $data['order_item_id'],
                         'allocated_quantity' => $data['allocated_quantity'],
                     ]])),
+                Action::make('receive')
+                    ->label('确认入库')
+                    ->icon(Heroicon::OutlinedArchiveBox)
+                    ->color('success')
+                    ->requiresConfirmation()
+                    ->form([
+                        Textarea::make('warehouse_note')
+                            ->label('入库备注')
+                            ->rows(3)
+                            ->helperText('货物到达仓库后确认入库，采购状态会变为已入库，并自动增加仓库数量。'),
+                    ])
+                    ->visible(fn (Procurement $record): bool => $record->status !== Procurement::STATUS_RECEIVED && $record->status !== Procurement::STATUS_CANCELLED)
+                    ->action(fn (Procurement $record, array $data) => app(WarehouseService::class)->receiveProcurement($record, auth()->user(), $data['warehouse_note'] ?? null)),
             ]);
     }
 

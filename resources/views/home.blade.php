@@ -42,6 +42,21 @@
         </section>
     @endif
 
+    <section class="mb-4 grid gap-3 md:grid-cols-3">
+        <a class="rounded-sm border border-blue-200 bg-white px-4 py-4 hover:bg-blue-50" href="{{ route('support.index') }}">
+            <span class="block text-base font-semibold text-blue-900">客服会话</span>
+            <span class="mt-1 block text-sm text-slate-600">像聊天一样和客服即时沟通，可附带订单、图片或文件。</span>
+        </a>
+        <a class="rounded-sm border border-pink-200 bg-white px-4 py-4 hover:bg-pink-50" href="{{ route('support.demands') }}">
+            <span class="block text-base font-semibold text-pink-900">售后需求</span>
+            <span class="mt-1 block text-sm text-slate-600">提交退款、售后、投诉反馈或其他需要后台处理的问题。</span>
+        </a>
+        <a class="rounded-sm border border-slate-200 bg-white px-4 py-4 hover:bg-blue-50" href="{{ route('friend-links.index') }}">
+            <span class="block text-base font-semibold text-slate-900">友情链接</span>
+            <span class="mt-1 block text-sm text-slate-600">查看伙伴社区、资源网站和推荐链接。</span>
+        </a>
+    </section>
+
     @if($featuredProducts->isNotEmpty())
         <section class="mb-4 rounded-sm border border-slate-300 bg-white">
             <div class="flex items-center justify-between border-b border-slate-200 bg-slate-100 px-4 py-2">

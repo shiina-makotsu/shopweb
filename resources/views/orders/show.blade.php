@@ -96,6 +96,49 @@
                         {{ \App\Support\Markdown::render($settings?->payment_instructions ?: "请按页面显示的付款备注单号完成转账，并上传付款截图。\n\n截图上传后系统会自动识别并显示付款成功。请联系管理员获取付款方式。") }}
                     </div>
                 </div>
+
+                @if($order->hasDigitalDelivery())
+                    <div class="rounded-sm border border-emerald-300 bg-emerald-50">
+                        <h2 class="border-b border-emerald-200 bg-emerald-100 px-4 py-2 text-sm font-semibold text-emerald-950">线上交付内容</h2>
+                        <div class="space-y-4 px-4 py-4 text-sm text-emerald-950">
+                            @if($order->digital_delivery_content)
+                                <div class="rounded-sm border border-emerald-200 bg-white px-3 py-3">
+                                    <p class="font-medium">交付说明</p>
+                                    <p class="mt-2 whitespace-pre-line leading-6">{{ $order->digital_delivery_content }}</p>
+                                </div>
+                            @endif
+                            @if($order->digital_delivery_code)
+                                <form method="post" action="{{ route('orders.digital-delivery.copied', $order) }}" class="rounded-sm border border-emerald-200 bg-white px-3 py-3" data-copy-delivery-form>
+                                    @csrf
+                                    <p class="font-medium">兑换码/序列号</p>
+                                    <div class="mt-2 flex flex-wrap items-center gap-2">
+                                        <code class="rounded-sm bg-slate-100 px-3 py-2 text-slate-900">{{ $order->digital_delivery_code }}</code>
+                                        <button
+                                            class="rounded-sm border border-emerald-700 bg-emerald-700 px-3 py-2 text-xs font-medium text-white hover:bg-emerald-800"
+                                            type="submit"
+                                            data-copy-delivery-code="{{ $order->digital_delivery_code }}"
+                                        >
+                                            复制并完成订单
+                                        </button>
+                                    </div>
+                                </form>
+                            @endif
+                            @if($order->digital_delivery_attachment_paths)
+                                <div class="rounded-sm border border-emerald-200 bg-white px-3 py-3">
+                                    <p class="font-medium">订单附件</p>
+                                    <div class="mt-2 flex flex-wrap gap-2">
+                                        @foreach($order->digital_delivery_attachment_paths as $index => $path)
+                                            <a class="rounded-sm border border-emerald-700 bg-emerald-700 px-3 py-2 text-xs font-medium text-white hover:bg-emerald-800" href="{{ route('orders.digital-delivery.download', [$order, $index]) }}">
+                                                下载附件 {{ $loop->iteration }}
+                                            </a>
+                                        @endforeach
+                                    </div>
+                                </div>
+                            @endif
+                            <p class="text-xs text-emerald-800">打开、复制或下载线上交付内容后，订单会自动标记为已完成。</p>
+                        </div>
+                    </div>
+                @endif
             </section>
 
             <aside class="space-y-4">
@@ -196,4 +239,24 @@
             })();
         </script>
     @endif
+    <script>
+        document.querySelectorAll('[data-copy-delivery-form]').forEach((form) => {
+            form.addEventListener('submit', async (event) => {
+                const button = form.querySelector('[data-copy-delivery-code]');
+                const code = button?.dataset.copyDeliveryCode;
+
+                if (! code || ! navigator.clipboard) {
+                    return;
+                }
+
+                event.preventDefault();
+
+                try {
+                    await navigator.clipboard.writeText(code);
+                } finally {
+                    form.submit();
+                }
+            });
+        });
+    </script>
 </x-layouts.app>

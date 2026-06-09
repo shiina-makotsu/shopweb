@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Models\Category;
 use App\Models\Announcement;
+use App\Models\NavigationMenuItem;
 use App\Models\Page;
 use App\Models\SiteSetting;
 use App\Services\AdminLoginLogger;
@@ -52,6 +53,13 @@ class AppServiceProvider extends ServiceProvider
             $view->with([
                 'storeCategories' => Category::query()->active()->orderBy('sort_order')->orderBy('name')->get(),
                 'storePages' => Page::query()->published()->orderBy('sort_order')->orderBy('title')->limit(8)->get(),
+                'storeMenuItems' => NavigationMenuItem::query()
+                    ->active()
+                    ->whereNull('parent_id')
+                    ->with(['children' => fn ($query) => $query->active()->orderBy('sort_order')->orderBy('label')])
+                    ->orderBy('sort_order')
+                    ->orderBy('label')
+                    ->get(),
                 'cartItemCount' => $cartItems->sum('quantity'),
                 'cartSubtotalCents' => $cartItems->sum('line_total_cents'),
                 'unreadAnnouncementCount' => auth()->check()

@@ -8,6 +8,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 
 class UserCenterController extends Controller
@@ -19,6 +20,7 @@ class UserCenterController extends Controller
 
         $orderCounts = Order::query()
             ->whereBelongsTo($user)
+            ->whereNull('user_deleted_at')
             ->selectRaw('status, count(*) as total')
             ->groupBy('status')
             ->pluck('total', 'status');
@@ -70,21 +72,43 @@ class UserCenterController extends Controller
             'nickname' => ['nullable', 'string', 'max:255'],
             'profile_intro' => ['nullable', 'string', 'max:1000'],
             'avatar' => ['nullable', 'image', 'max:5120'],
+            'avatar_cropped' => ['nullable', 'string'],
         ]);
 
-        if ($request->hasFile('avatar')) {
+        $croppedAvatarPath = $this->storeCroppedAvatar((string) ($data['avatar_cropped'] ?? ''));
+
+        if ($croppedAvatarPath || $request->hasFile('avatar')) {
             if ($user->avatar_path) {
                 Storage::disk('public_uploads')->delete($user->avatar_path);
             }
 
-            $data['avatar_path'] = $request->file('avatar')->store('avatars', 'public_uploads');
+            $data['avatar_path'] = $croppedAvatarPath ?: $request->file('avatar')->store('avatars', 'public_uploads');
         }
 
-        unset($data['avatar']);
+        unset($data['avatar'], $data['avatar_cropped']);
 
         $user->update($data);
 
         return back()->with('status', '个人资料已更新。');
+    }
+
+    private function storeCroppedAvatar(string $dataUrl): ?string
+    {
+        if (! preg_match('/^data:image\/(png|jpeg|webp);base64,(?<data>.+)$/', $dataUrl, $matches)) {
+            return null;
+        }
+
+        $binary = base64_decode($matches['data'], true);
+
+        if ($binary === false || strlen($binary) > 6 * 1024 * 1024) {
+            return null;
+        }
+
+        $extension = $matches[1] === 'jpeg' ? 'jpg' : $matches[1];
+        $path = 'avatars/'.Str::uuid().'.'.$extension;
+        Storage::disk('public_uploads')->put($path, $binary);
+
+        return $path;
     }
 
     public function storeAddress(Request $request): RedirectResponse

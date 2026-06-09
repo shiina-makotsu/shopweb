@@ -24,6 +24,7 @@ use App\Filament\Resources\PageResource;
 use App\Filament\Resources\ProductCommentResource;
 use App\Filament\Resources\ProductResource;
 use App\Filament\Resources\ProductTagResource;
+use App\Filament\Resources\ProcurementResource;
 use App\Filament\Resources\QuantityUnitResource;
 use App\Filament\Resources\ShippingCarrierResource;
 use App\Filament\Resources\SiteSettingResource;
@@ -31,6 +32,8 @@ use App\Filament\Resources\SoldOutStatusResource;
 use App\Filament\Resources\SupplierResource;
 use App\Filament\Resources\SupportChatSessionResource;
 use App\Filament\Resources\SupportTicketResource;
+use App\Filament\Resources\WarehouseMovementResource;
+use App\Filament\Resources\WarehouseStockResource;
 use App\Support\AdminAccess;
 use App\Support\RegexSearch;
 use Filament\Pages\Page;
@@ -91,7 +94,6 @@ class AdminSearchPage extends Page
         return [
             ['group' => '首页', 'label' => '仪表盘', 'keywords' => '月度销售 每日销售 数据统计 折线图', 'url' => Dashboard::getUrl()],
             ['group' => '商品', 'label' => '商品管理', 'keywords' => '商品 SKU 库存 预售 概念 进货中 现货 售罄', 'url' => ProductResource::getUrl()],
-            ['group' => '商品', 'label' => '库存流水', 'keywords' => '库存管理 扣减 恢复 低库存', 'url' => InventoryMovementResource::getUrl()],
             ['group' => '商品', 'label' => '商品评论', 'keywords' => '评论 图片 回复 评分 星级 删除', 'url' => ProductCommentResource::getUrl()],
             ['group' => '目录', 'label' => '商品分类', 'keywords' => '分类 目录 SEO', 'url' => CategoryResource::getUrl()],
             ['group' => '目录', 'label' => '商品标签', 'keywords' => 'tag 标签 SEO 搜索 列表分页', 'url' => ProductTagResource::getUrl()],
@@ -108,6 +110,10 @@ class AdminSearchPage extends Page
             ['group' => '交易', 'label' => '秒杀', 'keywords' => '秒杀 抢购 限时 名额 下次秒杀', 'url' => FlashSaleResource::getUrl()],
             ['group' => '交易', 'label' => '订单状态', 'keywords' => '待付款 待发货 运输 签收 完成', 'url' => OrderStatusSettingResource::getUrl()],
             ['group' => '交易', 'label' => '物流承运商', 'keywords' => '物流 查询 国际物流 国内物流 tracking', 'url' => ShippingCarrierResource::getUrl()],
+            ['group' => '仓库', 'label' => '采购', 'keywords' => '采购商品 预售 入库 国际物流 分配预售用户', 'url' => ProcurementResource::getUrl()],
+            ['group' => '仓库', 'label' => '仓管', 'keywords' => '仓库 入库 出库 退回 二次加工 手动调整', 'url' => WarehouseStockResource::getUrl()],
+            ['group' => '仓库', 'label' => '仓库流水', 'keywords' => '入库 出库 退回 加工 调整 仓库流水', 'url' => WarehouseMovementResource::getUrl()],
+            ['group' => '仓库', 'label' => '库存流水', 'keywords' => '商品 SKU 库存管理 扣减 恢复 低库存', 'url' => InventoryMovementResource::getUrl()],
             ['group' => '用户', 'label' => '前台用户', 'keywords' => '客户 普通用户 会员用户 订单号可见 物流号可见', 'url' => CustomerResource::getUrl()],
             ['group' => '用户', 'label' => '后台用户', 'keywords' => '管理员 运营 财务 仓库 权限', 'url' => AdminUserResource::getUrl()],
             ['group' => '客服', 'label' => '客服会话', 'keywords' => '即时聊天 图片 文件 接待 结束', 'url' => SupportChatSessionResource::getUrl()],

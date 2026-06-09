@@ -182,6 +182,41 @@ it('keeps awaiting receipt orders open until the customer confirms receipt', fun
         ->and($order->fresh()->fulfilled_at)->not->toBeNull();
 });
 
+it('lets customers hide orders while backoffice can still see the deletion flag', function (): void {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $user = User::factory()->create(['role' => 'customer']);
+    $order = Order::query()->create([
+        'user_id' => $user->id,
+        'order_number' => 'USER-DELETE-1',
+        'status' => Order::STATUS_PENDING_PAYMENT,
+        'payment_status' => Order::PAYMENT_PENDING,
+        'subtotal_cents' => 100,
+        'total_cents' => 100,
+        'contact_name' => 'A',
+        'contact_phone' => '1',
+    ]);
+
+    $this->actingAs($user)
+        ->delete(route('orders.destroy', $order))
+        ->assertRedirect(route('orders.index'));
+
+    expect($order->fresh()->user_deleted_at)->not->toBeNull();
+
+    $this->actingAs($user)
+        ->get(route('orders.index'))
+        ->assertOk()
+        ->assertDontSee('USER-DELETE-1');
+
+    $this->actingAs($user)
+        ->get(route('orders.show', $order))
+        ->assertNotFound();
+
+    $this->actingAs($admin)
+        ->get("/admin/orders/{$order->id}/edit")
+        ->assertOk()
+        ->assertSee('用户已删除');
+});
+
 it('shows forced fulfillment reasons to customers', function (): void {
     $admin = User::factory()->create(['role' => 'admin']);
     $user = User::factory()->create(['role' => 'customer']);

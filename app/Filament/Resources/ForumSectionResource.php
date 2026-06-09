@@ -48,6 +48,15 @@ class ForumSectionResource extends Resource
                     ->afterStateUpdated(fn ($state, callable $set) => $set('slug', Str::slug($state))),
                 TextInput::make('slug')->label('Slug')->required()->unique(ignoreRecord: true)->maxLength(255),
                 Textarea::make('description')->label('说明')->rows(3)->columnSpanFull(),
+                Select::make('posting_policy')
+                    ->label('发帖权限')
+                    ->options(ForumSection::postingPolicyOptions())
+                    ->default(ForumSection::POSTING_ALL)
+                    ->required(),
+                Textarea::make('admin_note')
+                    ->label('后台备注')
+                    ->rows(3)
+                    ->columnSpanFull(),
                 Select::make('moderators')
                     ->label('版主')
                     ->relationship(
@@ -82,6 +91,10 @@ class ForumSectionResource extends Resource
                     ->limitList(3)
                     ->toggleable(),
                 TextColumn::make('threads_count')->label('帖子数')->sortable(),
+                TextColumn::make('posting_policy')
+                    ->label('发帖权限')
+                    ->formatStateUsing(fn (?string $state): string => ForumSection::postingPolicyOptions()[$state] ?? '-')
+                    ->badge(),
                 TextColumn::make('sort_order')->label('排序')->sortable(),
                 IconColumn::make('is_active')->label('启用')->boolean(),
                 TextColumn::make('updated_at')->label('更新')->dateTime('Y-m-d H:i')->sortable(),

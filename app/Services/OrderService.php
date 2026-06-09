@@ -192,6 +192,12 @@ class OrderService
 
     public function ship(Order $order, array $data, ?User $actor = null): void
     {
+        if (! $order->requires_shipping && $this->hasDigitalDeliveryData($data)) {
+            $this->shipDigital($order, $data, $actor);
+
+            return;
+        }
+
         $carrier = isset($data['shipping_carrier_id'])
             ? ShippingCarrier::query()->find($data['shipping_carrier_id'])
             : null;
@@ -216,7 +222,77 @@ class OrderService
             'tracking_number' => $trackingNumber,
         ], $actor);
 
+        app(WarehouseService::class)->shipOrder($order, $actor, '订单发货自动出库');
+
         $this->sendShippingMail($order->fresh(['shippingCarrier', 'user']) ?? $order);
+    }
+
+    public function shipDigital(Order $order, array $data, ?User $actor = null): void
+    {
+        $attachmentPaths = $order->digital_delivery_attachment_paths ?: [];
+
+        foreach ($data['digital_delivery_attachments'] ?? [] as $file) {
+            if (is_string($file) && $file !== '') {
+                $attachmentPaths[] = $file;
+
+                continue;
+            }
+
+            if (! $file || ! method_exists($file, 'isValid') || ! $file->isValid()) {
+                continue;
+            }
+
+            $attachmentPaths[] = $file->store($order->order_number, 'digital_deliveries');
+        }
+
+        $order->update([
+            'status' => Order::STATUS_AWAITING_RECEIPT,
+            'digital_delivery_content' => trim((string) ($data['digital_delivery_content'] ?? $order->digital_delivery_content)),
+            'digital_delivery_code' => trim((string) ($data['digital_delivery_code'] ?? $order->digital_delivery_code)),
+            'digital_delivery_attachment_paths' => $attachmentPaths,
+            'digital_delivery_sent_at' => now(),
+            'shipped_at' => now(),
+        ]);
+
+        $order->items()->update(['status' => Order::STATUS_AWAITING_RECEIPT]);
+
+        $this->activity->log('order_digital_delivery_sent', $order, $order->order_number, [
+            'status' => Order::STATUS_AWAITING_RECEIPT,
+            'attachment_count' => count($attachmentPaths),
+        ], $actor);
+    }
+
+    public function markDigitalDeliveryAccessed(Order $order, User $user): void
+    {
+        if ($order->user_id !== $user->id || ! $order->hasDigitalDelivery()) {
+            return;
+        }
+
+        $order->update([
+            'status' => Order::STATUS_FULFILLED,
+            'digital_delivery_viewed_at' => $order->digital_delivery_viewed_at ?? now(),
+            'digital_delivery_completed_at' => $order->digital_delivery_completed_at ?? now(),
+            'delivered_at' => $order->delivered_at ?? now(),
+            'fulfilled_at' => $order->fulfilled_at ?? now(),
+        ]);
+
+        $this->activity->log('order_digital_delivery_completed', $order, $order->order_number, [
+            'status' => Order::STATUS_FULFILLED,
+        ], $user);
+    }
+
+    public function returnToWarehouse(Order $order, ?User $actor = null, ?string $note = null): void
+    {
+        app(WarehouseService::class)->returnOrder($order, $actor, $note);
+
+        $order->update([
+            'admin_note' => $note ?: $order->admin_note,
+        ]);
+
+        $this->activity->log('order_returned_to_warehouse', $order, $order->order_number, [
+            'status' => $order->status,
+            'note' => $note,
+        ], $actor);
     }
 
     public function markAwaitingReceipt(Order $order, ?User $actor = null): void
@@ -466,5 +542,12 @@ class OrderService
         }
 
         return $path !== '' && $order->order_number !== '' ? Order::AUTO_CHECK_PASSED : Order::AUTO_CHECK_FAILED;
+    }
+
+    private function hasDigitalDeliveryData(array $data): bool
+    {
+        return filled($data['digital_delivery_content'] ?? null)
+            || filled($data['digital_delivery_code'] ?? null)
+            || ! empty($data['digital_delivery_attachments'] ?? []);
     }
 }

@@ -4,6 +4,8 @@ use App\Models\Product;
 use App\Models\ProductMedia;
 use App\Models\Coupon;
 use App\Models\FlashSale;
+use App\Models\FriendLink;
+use App\Models\Order;
 use App\Models\ProductTag;
 use App\Models\ProductVariant;
 use App\Models\MediaAsset;
@@ -450,6 +452,8 @@ it('orders home product sections and places store pages in the welcome header', 
         ->assertSee('最新商品')
         ->assertSee('折扣商品')
         ->assertSee('概念商品')
+        ->assertSee('客服会话')
+        ->assertSee('售后需求')
         ->assertSee('折扣测试商品')
         ->assertSee('概念测试商品')
         ->assertSee('购买')
@@ -980,6 +984,71 @@ it('reserves flash sale quota before selecting a variant and never returns cance
     app(OrderService::class)->cancel($order);
 
     expect($flashSale->fresh()->sold_quantity)->toBe(1);
+});
+
+it('renders friend links from the homepage and friend link listing', function (): void {
+    FriendLink::query()->create([
+        'site_name' => '伙伴站点',
+        'url' => 'https://example.test',
+        'description' => '一个友情链接。',
+        'is_active' => true,
+    ]);
+
+    $this->get(route('home'))
+        ->assertOk()
+        ->assertSee('友情链接')
+        ->assertSee(route('friend-links.index'), false);
+
+    $this->get(route('friend-links.index'))
+        ->assertOk()
+        ->assertSee('伙伴站点')
+        ->assertSee('一个友情链接。');
+});
+
+it('lets customers complete online delivery orders by copying codes or downloading attachments', function (): void {
+    \Illuminate\Support\Facades\Storage::fake('digital_deliveries');
+
+    $user = User::factory()->create(['role' => 'customer']);
+    $order = Order::query()->create([
+        'user_id' => $user->id,
+        'order_number' => 'DIGI-1',
+        'status' => Order::STATUS_AWAITING_RECEIPT,
+        'payment_status' => Order::PAYMENT_CONFIRMED,
+        'subtotal_cents' => 1000,
+        'total_cents' => 1000,
+        'contact_name' => 'Digital',
+        'contact_phone' => '1',
+        'requires_shipping' => false,
+        'digital_delivery_content' => '请使用下方兑换码。',
+        'digital_delivery_code' => 'CODE-123',
+        'digital_delivery_attachment_paths' => ['DIGI-1/file.txt'],
+        'digital_delivery_sent_at' => now(),
+    ]);
+    \Illuminate\Support\Facades\Storage::disk('digital_deliveries')->put('DIGI-1/file.txt', 'secret-file');
+
+    $this->actingAs($user)
+        ->get(route('orders.show', $order))
+        ->assertOk()
+        ->assertSee('线上交付内容')
+        ->assertSee('CODE-123');
+
+    $this->actingAs($user)
+        ->post(route('orders.digital-delivery.copied', $order))
+        ->assertRedirect();
+
+    expect($order->fresh()->status)->toBe(Order::STATUS_FULFILLED);
+
+    $order->update([
+        'status' => Order::STATUS_AWAITING_RECEIPT,
+        'digital_delivery_completed_at' => null,
+        'fulfilled_at' => null,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('orders.digital-delivery.download', [$order, 0]))
+        ->assertOk();
+
+    expect($order->fresh()->status)->toBe(Order::STATUS_FULFILLED);
 });
 
 it('shows the next flash sale time when a flash sale has not started yet', function (): void {

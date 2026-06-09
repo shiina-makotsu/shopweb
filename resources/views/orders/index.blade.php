@@ -40,6 +40,11 @@
                                             @csrf
                                             <button class="rounded-sm border border-slate-300 px-3 py-2 text-xs font-medium hover:bg-slate-50" type="submit">联系客服</button>
                                         </form>
+                                        <form method="post" action="{{ route('orders.destroy', $order) }}" onsubmit="return confirm('删除后该订单会从你的订单列表中隐藏，后台仍可保留记录。确定删除吗？')">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button class="rounded-sm border border-red-200 px-3 py-2 text-xs font-medium text-red-700 hover:bg-red-50" type="submit">删除订单</button>
+                                        </form>
                                     </div>
                                 </td>
                             </tr>

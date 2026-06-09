@@ -37,7 +37,9 @@
                     </div>
                     <label class="block">
                         <span class="text-sm font-medium text-slate-700">头像</span>
-                        <input class="mt-2 block w-full max-w-sm text-sm text-slate-700 file:mr-3 file:rounded-sm file:border-0 file:bg-blue-700 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-blue-800" type="file" name="avatar" accept="image/jpeg,image/png,image/gif,image/webp">
+                        <input id="avatar-input" class="mt-2 block w-full max-w-sm text-sm text-slate-700 file:mr-3 file:rounded-sm file:border-0 file:bg-blue-700 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-blue-800" type="file" name="avatar" accept="image/jpeg,image/png,image/gif,image/webp">
+                        <input id="avatar-cropped" type="hidden" name="avatar_cropped">
+                        <span class="mt-1 block text-xs text-slate-500">选择图片后会先打开裁剪窗口，保存裁剪后的圆形头像。</span>
                         @error('avatar')
                             <span class="mt-1 block text-sm text-red-600">{{ $message }}</span>
                         @enderror
@@ -82,6 +84,78 @@
                     <a class="rounded-sm border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50" href="{{ route('users.show', $user) }}">查看公开主页</a>
                 </div>
             </form>
+
+            <dialog id="avatar-crop-dialog" class="rounded-sm border border-slate-300 p-0 shadow-xl backdrop:bg-slate-900/40">
+                <div class="w-[min(92vw,520px)] space-y-4 bg-white p-5">
+                    <div>
+                        <h2 class="text-lg font-semibold">裁剪头像</h2>
+                        <p class="mt-1 text-sm text-slate-600">拖动滑块调整缩放，系统会保存中间方形区域作为头像。</p>
+                    </div>
+                    <div class="grid place-items-center rounded-sm border border-slate-200 bg-slate-50 p-3">
+                        <canvas id="avatar-crop-canvas" width="320" height="320" class="h-80 w-80 rounded-full border border-slate-300 bg-white"></canvas>
+                    </div>
+                    <label class="block text-sm">
+                        <span class="font-medium text-slate-700">缩放</span>
+                        <input id="avatar-crop-zoom" class="mt-2 w-full" type="range" min="1" max="3" step="0.05" value="1">
+                    </label>
+                    <div class="flex justify-end gap-2">
+                        <button id="avatar-crop-cancel" class="rounded-sm border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50" type="button">取消</button>
+                        <button id="avatar-crop-apply" class="rounded-sm border border-blue-700 bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800" type="button">使用裁剪头像</button>
+                    </div>
+                </div>
+            </dialog>
+
+            <script>
+                (() => {
+                    const input = document.getElementById('avatar-input');
+                    const hidden = document.getElementById('avatar-cropped');
+                    const dialog = document.getElementById('avatar-crop-dialog');
+                    const canvas = document.getElementById('avatar-crop-canvas');
+                    const zoom = document.getElementById('avatar-crop-zoom');
+                    const cancel = document.getElementById('avatar-crop-cancel');
+                    const apply = document.getElementById('avatar-crop-apply');
+                    const ctx = canvas?.getContext('2d');
+                    let image = null;
+
+                    const draw = () => {
+                        if (!ctx || !image) return;
+                        const scale = Number(zoom.value || 1);
+                        const size = Math.min(image.width, image.height) / scale;
+                        const sx = (image.width - size) / 2;
+                        const sy = (image.height - size) / 2;
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+                        ctx.drawImage(image, sx, sy, size, size, 0, 0, canvas.width, canvas.height);
+                    };
+
+                    input?.addEventListener('change', () => {
+                        const file = input.files?.[0];
+                        if (!file || !file.type.startsWith('image/')) return;
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                            image = new Image();
+                            image.onload = () => {
+                                zoom.value = '1';
+                                draw();
+                                dialog?.showModal();
+                            };
+                            image.src = String(reader.result);
+                        };
+                        reader.readAsDataURL(file);
+                    });
+
+                    zoom?.addEventListener('input', draw);
+                    cancel?.addEventListener('click', () => {
+                        hidden.value = '';
+                        input.value = '';
+                        dialog?.close();
+                    });
+                    apply?.addEventListener('click', () => {
+                        draw();
+                        hidden.value = canvas.toDataURL('image/png');
+                        dialog?.close();
+                    });
+                })();
+            </script>
         @elseif($section === 'wishlists')
             <div class="grid gap-px bg-slate-200 sm:grid-cols-2 xl:grid-cols-4">
                 @forelse($wishlists as $item)

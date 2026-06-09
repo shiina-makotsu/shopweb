@@ -119,7 +119,7 @@ class SiteSettingResource extends Resource
 
             Section::make('扩展接口')->schema([
                 Toggle::make('page_music_enabled')->label('启用页面音乐')->default(false),
-                self::assetPathSelect('page_music_asset_path', '页面音乐文件', '可从资源管理上传音频文件后在这里引用。'),
+                self::audioAssetPathSelect('page_music_asset_path', '页面音乐文件', '只允许引用或上传音频文件。'),
                 Select::make('page_music_mode')->label('播放模式')->options([
                     'manual' => '手动播放',
                     'page' => '按页面配置',
@@ -135,6 +135,12 @@ class SiteSettingResource extends Resource
                     'product' => '商品页',
                     'cart' => '购物车',
                 ])->default('storefront'),
+                Toggle::make('support_ai_enabled')->label('启用客服 AI 安抚')->default(false),
+                TextInput::make('support_ai_endpoint')->label('客服 AI 接口地址')->maxLength(500),
+                TextInput::make('support_ai_api_key')->label('客服 AI API Key')->password()->revealable()->maxLength(255),
+                TextInput::make('support_ai_model')->label('客服 AI 模型标识')->maxLength(255),
+                TextInput::make('support_ai_idle_minutes')->label('无人接待自动接入分钟数')->numeric()->minValue(1)->default(10),
+                Textarea::make('support_ai_system_prompt')->label('客服 AI 预设内容')->rows(5)->columnSpanFull()->helperText('用于较长时间没有客服接待时，对客户进行安抚或心理咨询。'),
             ])->columns(2)->columnSpanFull(),
         ]);
     }
@@ -210,6 +216,42 @@ class SiteSettingResource extends Resource
             });
     }
 
+    private static function audioAssetPathSelect(string $name, string $label, string $helperText): Select
+    {
+        return Select::make($name)
+            ->label($label)
+            ->helperText($helperText)
+            ->searchable()
+            ->preload()
+            ->options(fn (): array => self::audioOptions())
+            ->getSearchResultsUsing(fn (string $search): array => self::audioOptions($search))
+            ->getOptionLabelUsing(fn ($value): ?string => MediaAsset::query()->where('path', $value)->value('name') ?? $value)
+            ->createOptionForm([
+                FileUpload::make('path')
+                    ->label('上传音频')
+                    ->disk('public_uploads')
+                    ->directory('site/audio')
+                    ->acceptedFileTypes(['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/ogg', 'audio/webm', 'audio/aac', 'audio/flac', 'audio/mp4'])
+                    ->maxSize(20480)
+                    ->required(),
+                TextInput::make('name')->label('名称')->maxLength(255),
+                TextInput::make('alt')->label('说明')->maxLength(255),
+            ])
+            ->createOptionUsing(function (array $data): string {
+                $path = is_array($data['path']) ? reset($data['path']) : $data['path'];
+
+                $asset = MediaAsset::query()->create([
+                    'name' => $data['name'] ?: pathinfo($path, PATHINFO_FILENAME),
+                    'path' => $path,
+                    'disk' => 'public_uploads',
+                    'alt' => $data['alt'] ?? null,
+                    'usage' => MediaAsset::USAGE_GENERAL,
+                ]);
+
+                return $asset->path;
+            });
+    }
+
     private static function imageOptions(?string $search = null): array
     {
         return MediaAsset::query()
@@ -232,6 +274,23 @@ class SiteSettingResource extends Resource
     private static function assetOptions(?string $search = null): array
     {
         return MediaAsset::query()
+            ->when($search, fn ($query) => $query->where(function ($query) use ($search): void {
+                $query
+                    ->where('name', 'like', "%{$search}%")
+                    ->orWhere('path', 'like', "%{$search}%")
+                    ->orWhere('alt', 'like', "%{$search}%");
+            }))
+            ->latest()
+            ->limit(50)
+            ->get()
+            ->mapWithKeys(fn (MediaAsset $asset): array => [$asset->path => $asset->name ?: basename($asset->path)])
+            ->all();
+    }
+
+    private static function audioOptions(?string $search = null): array
+    {
+        return MediaAsset::query()
+            ->where('mime_type', 'like', 'audio/%')
             ->when($search, fn ($query) => $query->where(function ($query) use ($search): void {
                 $query
                     ->where('name', 'like', "%{$search}%")

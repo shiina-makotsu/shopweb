@@ -6,9 +6,14 @@ use App\Models\Order;
 use App\Models\SupportChatMessage;
 use App\Models\SupportChatSession;
 use App\Models\SupportTicket;
+use App\Services\SupportChatService;
+use App\Support\Money;
+use App\Support\OrderStatusPresenter;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -17,26 +22,25 @@ class SupportTicketController extends Controller
 {
     public function index(Request $request): View
     {
-        $guestId = $this->guestId($request);
-        $selectedOrder = $this->selectedOrder($request);
-        $session = $this->currentSession($request, $selectedOrder);
-        $session->endIfIdle();
-        $session->load(['messages.sender', 'assignedAdmin', 'order']);
+        return $this->chatView($request, null, $this->selectedOrder($request));
+    }
 
-        return view('support.index', [
-            'session' => $session,
-            'tickets' => SupportTicket::query()
-                ->with('order')
-                ->when($request->user(), fn ($query) => $query->whereBelongsTo($request->user()))
-                ->when(! $request->user(), fn ($query) => $query->where('guest_id', $guestId))
-                ->latest()
-                ->paginate(10),
-            'guestId' => $request->user() ? null : $guestId,
-            'selectedOrder' => $selectedOrder,
-            'orders' => $request->user()
-                ? $request->user()->orders()->latest()->limit(50)->get(['id', 'order_number', 'status', 'total_cents', 'created_at'])
-                : collect(),
-        ]);
+    public function showSession(Request $request, SupportChatSession $session): View
+    {
+        $this->authorizeSession($request, $session);
+        abort_if($session->isClosed(), 404);
+
+        return $this->chatView($request, $session, $this->selectedOrder($request));
+    }
+
+    public function storeSession(Request $request): RedirectResponse
+    {
+        $order = $this->selectedOrder($request, $request->input('order_id'));
+        $session = $this->createSession($request, $order);
+
+        return redirect()
+            ->route('support.sessions.show', $session)
+            ->with('status', '已打开新的客服会话窗口。');
     }
 
     public function store(Request $request): RedirectResponse
@@ -62,7 +66,7 @@ class SupportTicketController extends Controller
             'status' => SupportTicket::STATUS_OPEN,
         ]);
 
-        return back()->with('status', '客服会话已提交，后台处理后会在这里显示回复。');
+        return back()->with('status', '售后/客服需求已提交，后台客服会在处理后显示回复。');
     }
 
     public function sendMessage(Request $request): RedirectResponse
@@ -72,13 +76,19 @@ class SupportTicketController extends Controller
             'attachment' => ['nullable', 'file', 'max:10240'],
             'guest_email' => ['nullable', 'email', 'max:255'],
             'order_id' => ['nullable', 'integer'],
+            'support_chat_session_id' => ['nullable', 'integer'],
+            'include_order' => ['nullable', 'boolean'],
         ]);
 
-        abort_if(blank($data['message'] ?? null) && ! $request->hasFile('attachment'), 422);
-
         $order = $this->selectedOrder($request, $data['order_id'] ?? null);
-        $session = $this->currentSession($request, $order);
+        $body = $this->messageBody($data['message'] ?? null, $order, (bool) ($data['include_order'] ?? false));
+
+        abort_if(blank($body) && ! $request->hasFile('attachment'), 422);
+
+        $session = $this->sessionForMessage($request, $data['support_chat_session_id'] ?? null, $order);
         $wasEnded = $session->endIfIdle() || $session->isEnded();
+
+        abort_if($session->isClosed(), 403);
 
         if ($wasEnded) {
             $session->forceFill([
@@ -101,7 +111,7 @@ class SupportTicketController extends Controller
         $session->messages()->create([
             'sender_user_id' => $request->user()?->id,
             'sender_type' => $request->user() ? SupportChatMessage::SENDER_CUSTOMER : SupportChatMessage::SENDER_GUEST,
-            'body' => $data['message'] ?? null,
+            'body' => $body,
             ...$attachment,
         ]);
 
@@ -111,18 +121,19 @@ class SupportTicketController extends Controller
             'deleted_by_customer_at' => null,
         ]);
 
-        return redirect()->route('support.index')->with('status', '消息已发送。');
+        return redirect()
+            ->route('support.sessions.show', $session)
+            ->with('status', '消息已发送。');
     }
 
-    public function destroySession(Request $request, SupportChatSession $session): RedirectResponse
+    public function destroySession(Request $request, SupportChatSession $session, SupportChatService $chat): RedirectResponse
     {
         $this->authorizeSession($request, $session);
+        $chat->closeByCustomer($session);
 
-        $session->update([
-            'deleted_by_customer_at' => now(),
-        ]);
-
-        return redirect()->route('support.index')->with('status', '当前会话窗口已删除。');
+        return redirect()
+            ->route('support.index')
+            ->with('status', '当前会话窗口已关闭并从你的列表中删除。');
     }
 
     public function attachment(Request $request, SupportChatMessage $message): StreamedResponse|Response
@@ -159,9 +170,7 @@ class SupportTicketController extends Controller
                 ->paginate(10),
             'guestId' => $request->user() ? null : $guestId,
             'selectedOrder' => $selectedOrder,
-            'orders' => $request->user()
-                ? $request->user()->orders()->latest()->limit(50)->get(['id', 'order_number', 'status', 'total_cents', 'created_at'])
-                : collect(),
+            'orders' => $this->userOrders($request),
         ]);
     }
 
@@ -179,6 +188,7 @@ class SupportTicketController extends Controller
 
         return Order::query()
             ->whereBelongsTo($request->user())
+            ->whereNull('user_deleted_at')
             ->whereKey($id)
             ->first();
     }
@@ -192,12 +202,92 @@ class SupportTicketController extends Controller
         return (string) $request->session()->get('support_guest_id');
     }
 
+    private function chatView(Request $request, ?SupportChatSession $session = null, ?Order $selectedOrder = null): View
+    {
+        $session ??= $this->currentSession($request, $selectedOrder);
+        $session->endIfIdle();
+        app(SupportChatService::class)->comfortIfIdle($session);
+        $session->load(['messages.sender', 'assignedAdmin', 'order']);
+
+        $sessions = $this->visibleSessions($request)
+            ->with(['assignedAdmin', 'order'])
+            ->orderByDesc('last_message_at')
+            ->orderByDesc('id')
+            ->get();
+
+        if (! $sessions->contains($session)) {
+            $sessions->prepend($session);
+        }
+
+        return view('support.index', [
+            'session' => $session,
+            'sessions' => $sessions,
+            'tickets' => SupportTicket::query()
+                ->with('order')
+                ->when($request->user(), fn ($query) => $query->whereBelongsTo($request->user()))
+                ->when(! $request->user(), fn ($query) => $query->where('guest_id', $this->guestId($request)))
+                ->latest()
+                ->paginate(10),
+            'guestId' => $request->user() ? null : $this->guestId($request),
+            'selectedOrder' => $selectedOrder,
+            'orders' => $this->userOrders($request),
+        ]);
+    }
+
     private function currentSession(Request $request, ?Order $order = null): SupportChatSession
+    {
+        if ($order) {
+            $session = $this->visibleSessions($request)
+                ->where('order_id', $order->id)
+                ->latest('id')
+                ->first();
+
+            if ($session) {
+                return $session;
+            }
+        }
+
+        $session = $this->visibleSessions($request)
+            ->orderByDesc('last_message_at')
+            ->orderByDesc('id')
+            ->first();
+
+        if ($session) {
+            return $session;
+        }
+
+        return $this->createSession($request, $order);
+    }
+
+    private function sessionForMessage(Request $request, mixed $sessionId, ?Order $order = null): SupportChatSession
+    {
+        if ($sessionId) {
+            return $this->visibleSessions($request)->whereKey($sessionId)->firstOrFail();
+        }
+
+        return $this->currentSession($request, $order);
+    }
+
+    private function createSession(Request $request, ?Order $order = null): SupportChatSession
+    {
+        return SupportChatSession::query()->create([
+            'user_id' => $request->user()?->id,
+            'order_id' => $order?->id,
+            'guest_id' => $request->user() ? null : $this->guestId($request),
+            'status' => SupportChatSession::STATUS_OPEN,
+            'last_message_at' => now(),
+        ]);
+    }
+
+    private function visibleSessions(Request $request): Builder
     {
         $query = SupportChatSession::query()
             ->whereNull('deleted_by_customer_at')
-            ->whereIn('status', [SupportChatSession::STATUS_OPEN, SupportChatSession::STATUS_ACTIVE, SupportChatSession::STATUS_ENDED])
-            ->latest('id');
+            ->whereIn('status', [
+                SupportChatSession::STATUS_OPEN,
+                SupportChatSession::STATUS_ACTIVE,
+                SupportChatSession::STATUS_ENDED,
+            ]);
 
         if ($request->user()) {
             $query->whereBelongsTo($request->user());
@@ -205,18 +295,54 @@ class SupportTicketController extends Controller
             $query->where('guest_id', $this->guestId($request));
         }
 
-        $session = $query->first();
+        return $query;
+    }
 
-        if ($session) {
-            return $session;
+    private function userOrders(Request $request): Collection
+    {
+        if (! $request->user()) {
+            return collect();
         }
 
-        return SupportChatSession::query()->create([
-            'user_id' => $request->user()?->id,
-            'order_id' => $order?->id,
-            'guest_id' => $request->user() ? null : $this->guestId($request),
-            'status' => SupportChatSession::STATUS_OPEN,
-        ]);
+        return $request->user()
+            ->orders()
+            ->whereNull('user_deleted_at')
+            ->latest()
+            ->limit(50)
+            ->get(['id', 'order_number', 'status', 'total_cents', 'created_at']);
+    }
+
+    private function messageBody(?string $message, ?Order $order, bool $includeOrder): ?string
+    {
+        $body = trim((string) $message);
+
+        if (! $includeOrder || ! $order) {
+            return $body === '' ? null : $body;
+        }
+
+        $orderText = $this->orderMessage($order);
+
+        return trim($body === '' ? $orderText : $body."\n\n".$orderText);
+    }
+
+    private function orderMessage(Order $order): string
+    {
+        $order->loadMissing('items');
+
+        $status = app(OrderStatusPresenter::class)->label($order->status);
+        $total = Money::format($order->total_cents);
+        $items = $order->items
+            ->map(fn ($item): string => "- {$item->product_title} x {$item->quantity}")
+            ->implode("\n");
+
+        return trim(<<<TEXT
+订单信息：
+订单号：{$order->order_number}
+订单状态：{$status}
+订单金额：{$total}
+商品：
+{$items}
+TEXT);
     }
 
     /**

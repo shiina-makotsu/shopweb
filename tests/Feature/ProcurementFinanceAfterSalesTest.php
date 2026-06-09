@@ -10,7 +10,11 @@ use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\SupportChatSession;
 use App\Models\User;
+use App\Models\WarehouseMovement;
+use App\Models\WarehouseStock;
 use App\Services\ProcurementService;
+use App\Services\OrderService;
+use App\Services\WarehouseService;
 use App\Support\ProfitMetrics;
 
 it('syncs procurement into an incoming product, auto costs, and allocated presale users', function (): void {
@@ -223,4 +227,76 @@ it('renders procurement finance and after sales backoffice pages by role', funct
 
     $this->actingAs($support)->get('/admin/after-sales-requests')->assertOk();
     $this->actingAs($support)->get('/admin/procurements')->assertForbidden();
+});
+
+it('receives procurement into warehouse stock and ships allocated orders out of warehouse', function (): void {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $user = User::factory()->create(['role' => 'customer']);
+    $category = Category::query()->create(['name' => '仓库预售', 'slug' => 'warehouse-presale', 'is_active' => true]);
+    $product = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => '仓库预售商品',
+        'slug' => 'warehouse-presale-product',
+        'status' => Product::STATUS_PRESALE,
+        'fulfillment_type' => Product::FULFILLMENT_LOGISTICS,
+    ]);
+    $variant = ProductVariant::query()->create([
+        'product_id' => $product->id,
+        'sku' => 'W-PRE-1',
+        'price_cents' => 1000,
+        'stock' => 0,
+        'is_active' => true,
+    ]);
+    $order = Order::query()->create([
+        'user_id' => $user->id,
+        'order_number' => 'WARE-1',
+        'status' => Order::STATUS_PENDING_SHIPMENT,
+        'payment_status' => Order::PAYMENT_CONFIRMED,
+        'subtotal_cents' => 1000,
+        'total_cents' => 1000,
+        'contact_name' => 'Buyer',
+        'contact_phone' => '1',
+        'requires_shipping' => true,
+    ]);
+    $item = OrderItem::query()->create([
+        'order_id' => $order->id,
+        'product_id' => $product->id,
+        'product_variant_id' => $variant->id,
+        'product_title' => $product->title,
+        'product_status' => Product::STATUS_PRESALE,
+        'variant_sku' => $variant->sku,
+        'unit_price_cents' => 1000,
+        'quantity' => 2,
+        'line_total_cents' => 2000,
+        'status' => Order::STATUS_PENDING_SHIPMENT,
+    ]);
+    $procurement = Procurement::query()->create([
+        'product_id' => $product->id,
+        'created_by_id' => $admin->id,
+        'name' => '仓库批次',
+        'quantity' => 5,
+        'purchase_amount_cents' => 5000,
+        'shipping_country' => 'JP',
+        'status' => Procurement::STATUS_INCOMING,
+    ]);
+
+    app(ProcurementService::class)->syncAllocations($procurement, [[
+        'order_item_id' => $item->id,
+        'allocated_quantity' => 2,
+    ]]);
+    app(WarehouseService::class)->receiveProcurement($procurement, $admin, '到货正常');
+
+    expect($procurement->fresh()->status)->toBe(Procurement::STATUS_RECEIVED)
+        ->and(WarehouseStock::query()->sum('quantity'))->toBe(5)
+        ->and(WarehouseMovement::query()->where('type', WarehouseMovement::TYPE_RECEIVED)->exists())->toBeTrue();
+
+    app(OrderService::class)->ship($order->fresh(), ['tracking_number' => 'CN-1'], $admin);
+
+    expect(WarehouseStock::query()->sum('quantity'))->toBe(3)
+        ->and(WarehouseMovement::query()->where('type', WarehouseMovement::TYPE_SHIPPED)->where('delta', -2)->exists())->toBeTrue();
+
+    app(OrderService::class)->returnToWarehouse($order->fresh(), $admin, '拒收退回');
+
+    expect(WarehouseStock::query()->sum('quantity'))->toBe(5)
+        ->and(WarehouseMovement::query()->where('type', WarehouseMovement::TYPE_RETURNED)->where('delta', 2)->exists())->toBeTrue();
 });

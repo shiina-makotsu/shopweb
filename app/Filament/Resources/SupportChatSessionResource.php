@@ -88,19 +88,20 @@ class SupportChatSessionResource extends Resource
                 Action::make('assign')
                     ->label('接待')
                     ->color('info')
-                    ->visible(fn (SupportChatSession $record): bool => $record->assigned_admin_id !== auth()->id() || $record->status !== SupportChatSession::STATUS_ACTIVE)
+                    ->visible(fn (SupportChatSession $record): bool => ! $record->isClosed() && ($record->assigned_admin_id !== auth()->id() || $record->status !== SupportChatSession::STATUS_ACTIVE))
                     ->action(fn (SupportChatSession $record) => app(SupportChatService::class)->assign($record, auth()->user())),
                 Action::make('reply')
                     ->label('回复')
                     ->form([
                         Textarea::make('message')->label('回复内容')->required()->rows(4),
                     ])
+                    ->visible(fn (SupportChatSession $record): bool => ! $record->isClosed())
                     ->action(fn (SupportChatSession $record, array $data) => app(SupportChatService::class)->reply($record, auth()->user(), $data['message'])),
                 Action::make('end')
                     ->label('结束接待')
                     ->color('warning')
                     ->requiresConfirmation()
-                    ->visible(fn (SupportChatSession $record): bool => $record->status !== SupportChatSession::STATUS_ENDED)
+                    ->visible(fn (SupportChatSession $record): bool => ! $record->isClosed() && $record->status !== SupportChatSession::STATUS_ENDED)
                     ->action(fn (SupportChatSession $record) => app(SupportChatService::class)->end($record, auth()->user())),
             ]);
     }
@@ -118,6 +119,7 @@ class SupportChatSessionResource extends Resource
         return match ($status) {
             SupportChatSession::STATUS_ACTIVE => '接待中',
             SupportChatSession::STATUS_ENDED => '已结束',
+            SupportChatSession::STATUS_CLOSED => '用户已关闭',
             default => '等待接入',
         };
     }

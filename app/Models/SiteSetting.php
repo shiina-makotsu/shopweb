@@ -68,6 +68,12 @@ class SiteSetting extends Model
         'guide_pet_model',
         'guide_pet_system_prompt',
         'guide_pet_context_mode',
+        'support_ai_enabled',
+        'support_ai_endpoint',
+        'support_ai_api_key',
+        'support_ai_model',
+        'support_ai_system_prompt',
+        'support_ai_idle_minutes',
     ];
 
     protected function casts(): array
@@ -82,6 +88,7 @@ class SiteSetting extends Model
             'home_welcome_enabled' => 'boolean',
             'page_music_enabled' => 'boolean',
             'guide_pet_enabled' => 'boolean',
+            'support_ai_enabled' => 'boolean',
         ];
     }
 

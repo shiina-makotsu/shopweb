@@ -63,7 +63,7 @@ class AdminPanelProvider extends PanelProvider
                 NavigationGroup::make('商品')->icon(Heroicon::OutlinedShoppingBag)->collapsible(true)->collapsed(),
                 NavigationGroup::make('目录')->icon(Heroicon::OutlinedSquares2x2)->collapsible(true)->collapsed(),
                 NavigationGroup::make('交易')->icon(Heroicon::OutlinedShoppingCart)->collapsible(true)->collapsed(),
-                NavigationGroup::make('采购')->icon(Heroicon::OutlinedTruck)->collapsible(true)->collapsed(),
+                NavigationGroup::make('仓库')->icon(Heroicon::OutlinedArchiveBox)->collapsible(true)->collapsed(),
                 NavigationGroup::make('财务')->icon(Heroicon::OutlinedBanknotes)->collapsible(true)->collapsed(),
                 NavigationGroup::make('用户')->icon(Heroicon::OutlinedUsers)->collapsible(true)->collapsed(),
                 NavigationGroup::make('客服')->icon(Heroicon::OutlinedLifebuoy)->collapsible(true)->collapsed(),
@@ -104,9 +104,9 @@ class AdminPanelProvider extends PanelProvider
                 fn (): HtmlString => new HtmlString($this->adminThemeStyle().<<<'HTML'
                     <script>
                         (() => {
-                            const resetVersion = '2026-06-08-admin-sidebar-v6';
+                            const resetVersion = '2026-06-10-admin-sidebar-warehouse-v1';
                             const resetKey = 'shopweb:admin-sidebar-reset-version';
-                            const defaultCollapsedGroups = ['商品', '目录', '交易', '用户', '内容', '论坛', '报告', '系统'];
+                            const defaultCollapsedGroups = ['商品', '目录', '交易', '仓库', '用户', '内容', '论坛', '报告', '系统'];
 
                             try {
                                 if (window.innerWidth >= 1024 && localStorage.getItem(resetKey) !== resetVersion) {

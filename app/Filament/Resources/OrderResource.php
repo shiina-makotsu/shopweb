@@ -13,6 +13,7 @@ use App\Support\OrderStatusPresenter;
 use App\Support\RegexSearch;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -57,6 +58,11 @@ class OrderResource extends Resource
                 TextInput::make('total_cents')->label('应付')->disabled()->formatStateUsing(fn ($state): string => Money::format((int) $state)),
                 TextInput::make('coupon_code')->label('优惠码')->disabled(),
                 TextInput::make('payment_proof_path')->label('付款凭证路径')->disabled()->columnSpanFull(),
+                Placeholder::make('user_deleted_flag')
+                    ->label('用户删除状态')
+                    ->content(fn (?Order $record): string => $record?->user_deleted_at
+                        ? '用户已删除：'.$record->user_deleted_at->format('Y-m-d H:i')
+                        : '用户可见'),
                 Placeholder::make('payment_proof_preview')
                     ->label('付款凭证图片')
                     ->content(fn (?Order $record): HtmlString => new HtmlString(
@@ -74,6 +80,12 @@ class OrderResource extends Resource
                 Select::make('shipping_carrier_id')->label('物流承运商')->relationship('shippingCarrier', 'name')->searchable()->preload(),
                 TextInput::make('tracking_number')->label('物流单号')->maxLength(255),
                 TextInput::make('tracking_url')->label('物流查询链接')->maxLength(500)->columnSpanFull(),
+                Textarea::make('digital_delivery_content')->label('线上交付内容')->rows(4)->columnSpanFull(),
+                TextInput::make('digital_delivery_code')->label('兑换码/序列号')->maxLength(255),
+                Placeholder::make('digital_delivery_files')
+                    ->label('线上交付附件')
+                    ->content(fn (?Order $record): string => implode("\n", $record?->digital_delivery_attachment_paths ?: []) ?: '暂无附件')
+                    ->columnSpanFull(),
                 Textarea::make('customer_note')->label('客户备注')->disabled()->rows(3)->columnSpanFull(),
                 Textarea::make('admin_note')->label('后台备注')->rows(4)->columnSpanFull(),
             ])->columns(2)->columnSpanFull(),
@@ -101,6 +113,11 @@ class OrderResource extends Resource
                     ->color(fn (?string $state): string => app(OrderStatusPresenter::class)->color($state))
                     ->badge(),
                 TextColumn::make('payment_status')->label('付款状态')->badge(),
+                TextColumn::make('user_deleted_at')
+                    ->label('用户可见')
+                    ->formatStateUsing(fn ($state): string => $state ? '用户已删除' : '用户可见')
+                    ->badge()
+                    ->toggleable(),
                 TextColumn::make('shippingCarrier.name')->label('物流')->toggleable(),
                 TextColumn::make('tracking_number')->label('物流单号')->searchable()->toggleable(),
                 TextColumn::make('created_at')->label('创建')->dateTime()->sortable(),
@@ -120,6 +137,19 @@ class OrderResource extends Resource
                         Select::make('shipping_carrier_id')->label('物流承运商')->relationship('shippingCarrier', 'name')->searchable()->preload(),
                         TextInput::make('tracking_number')->label('物流单号')->maxLength(255),
                         TextInput::make('tracking_url')->label('物流查询链接')->maxLength(500),
+                        Textarea::make('digital_delivery_content')
+                            ->label('线上交付内容')
+                            ->rows(4)
+                            ->helperText('线上交付商品可填写图片说明、兑换码使用说明等。'),
+                        TextInput::make('digital_delivery_code')->label('兑换码/序列号')->maxLength(255),
+                        FileUpload::make('digital_delivery_attachments')
+                            ->label('线上交付附件')
+                            ->disk('digital_deliveries')
+                            ->directory(fn (Order $record): string => $record->order_number)
+                            ->multiple()
+                            ->maxSize(20480)
+                            ->preserveFilenames()
+                            ->helperText('可上传图片或文件。用户下载附件后订单会自动完成。'),
                     ])
                     ->visible(fn (Order $record): bool => in_array($record->status, [Order::STATUS_PAID, Order::STATUS_PENDING_SHIPMENT, Order::STATUS_INCOMING], true))
                     ->action(fn (Order $record, array $data) => app(OrderService::class)->ship($record, $data, auth()->user())),
@@ -148,6 +178,17 @@ class OrderResource extends Resource
                     ->requiresConfirmation()
                     ->visible(fn (Order $record): bool => $record->status === Order::STATUS_SHIPPED)
                     ->action(fn (Order $record) => app(OrderService::class)->markAwaitingReceipt($record, auth()->user())),
+                Action::make('returnToWarehouse')
+                    ->label('退回入库')
+                    ->color('warning')
+                    ->form([
+                        Textarea::make('admin_note')
+                            ->label('退回/拒收说明')
+                            ->required()
+                            ->rows(3),
+                    ])
+                    ->visible(fn (Order $record): bool => in_array($record->status, [Order::STATUS_SHIPPED, Order::STATUS_AWAITING_RECEIPT], true))
+                    ->action(fn (Order $record, array $data) => app(OrderService::class)->returnToWarehouse($record, auth()->user(), $data['admin_note'] ?? null)),
                 Action::make('rejectPayment')
                     ->label('驳回凭证')
                     ->color('warning')

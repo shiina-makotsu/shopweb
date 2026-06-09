@@ -15,17 +15,29 @@
                 @if($thread->is_pinned)
                     <span class="rounded-sm bg-pink-100 px-2 py-0.5 text-xs text-pink-700">置顶</span>
                 @endif
+                @if($thread->is_featured)
+                    <span class="rounded-sm bg-blue-100 px-2 py-0.5 text-xs text-blue-700">星标</span>
+                @endif
+                @if($thread->is_locked)
+                    <span class="rounded-sm bg-slate-200 px-2 py-0.5 text-xs text-slate-700">锁定</span>
+                @endif
                 <h1 class="text-xl font-semibold">{{ $thread->title }}</h1>
             </div>
             <p class="mt-2 text-xs text-slate-500">
                 贴主
                 <a class="hover:text-blue-800" href="{{ route('users.show', $thread->user) }}">{{ $thread->user->displayName() }}</a>
                 / {{ $thread->created_at->format('Y-m-d H:i') }}
+                / {{ $thread->views_count }} 访问
+                / {{ $thread->comments->count() }} 回复
+                / {{ $thread->likes_count }} 点赞
                 @if($thread->edited_at)
                     / 已编辑 {{ $thread->edited_at->format('Y-m-d H:i') }}
                 @endif
             </p>
             <div class="mt-4 whitespace-pre-line text-sm leading-7 text-slate-700">{{ $thread->body }}</div>
+            @if($thread->is_locked)
+                <div class="mt-4 rounded-sm border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">该帖子已锁定，不能继续回复。</div>
+            @endif
 
             @if($thread->attachment_paths)
                 <div class="mt-4 grid gap-2 sm:grid-cols-2">
@@ -141,12 +153,14 @@
                             </form>
                         @endif
 
-                        <form method="post" action="{{ route('forum.comments.store', [$section, $thread]) }}" enctype="multipart/form-data" class="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
-                            @csrf
-                            <input type="hidden" name="parent_id" value="{{ $comment->id }}">
-                            <input class="rounded-sm border border-slate-300 px-3 py-2 text-xs" name="body" maxlength="6000" placeholder="回复该评论" required>
-                            <button class="rounded-sm border border-slate-300 px-3 py-2 text-xs hover:bg-slate-50" type="submit">回复</button>
-                        </form>
+                        @if($thread->canReceiveReplies() && $section->canBePostedBy(auth()->user()))
+                            <form method="post" action="{{ route('forum.comments.store', [$section, $thread]) }}" enctype="multipart/form-data" class="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
+                                @csrf
+                                <input type="hidden" name="parent_id" value="{{ $comment->id }}">
+                                <input class="rounded-sm border border-slate-300 px-3 py-2 text-xs" name="body" maxlength="6000" placeholder="回复该评论" required>
+                                <button class="rounded-sm border border-slate-300 px-3 py-2 text-xs hover:bg-slate-50" type="submit">回复</button>
+                            </form>
+                        @endif
                     @endauth
 
                     @foreach($comment->replies as $reply)
@@ -164,6 +178,7 @@
             @endforelse
         </div>
         @auth
+            @if($thread->canReceiveReplies() && $section->canBePostedBy(auth()->user()))
             <form method="post" action="{{ route('forum.comments.store', [$section, $thread]) }}" enctype="multipart/form-data" class="space-y-3 border-t border-slate-200 px-4 py-4 text-sm">
                 @csrf
                 <textarea class="min-h-28 w-full rounded-sm border border-slate-300 px-3 py-2" name="body" maxlength="6000" placeholder="写下回复" required></textarea>
@@ -173,6 +188,9 @@
                 </label>
                 <button class="rounded-sm border border-blue-700 bg-blue-700 px-4 py-2 font-medium text-white hover:bg-blue-800" type="submit">发布回复</button>
             </form>
+            @else
+                <div class="border-t border-slate-200 px-4 py-4 text-sm text-slate-600">当前帖子或版块不允许继续回复。</div>
+            @endif
         @else
             <div class="border-t border-slate-200 px-4 py-4 text-sm text-slate-600">
                 <a class="text-blue-700 hover:text-blue-900" href="{{ route('login') }}">登录</a> 后可回复。

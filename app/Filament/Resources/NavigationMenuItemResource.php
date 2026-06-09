@@ -1,0 +1,91 @@
+<?php
+
+namespace App\Filament\Resources;
+
+use App\Filament\Concerns\ChecksAdminAccess;
+use App\Filament\Resources\NavigationMenuItemResource\Pages\CreateNavigationMenuItem;
+use App\Filament\Resources\NavigationMenuItemResource\Pages\EditNavigationMenuItem;
+use App\Filament\Resources\NavigationMenuItemResource\Pages\ListNavigationMenuItems;
+use App\Models\NavigationMenuItem;
+use App\Support\RegexSearch;
+use Filament\Actions\DeleteAction;
+use Filament\Actions\DeleteBulkAction;
+use Filament\Actions\EditAction;
+use Filament\Forms\Components\KeyValue;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
+use Filament\Resources\Resource;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Schema;
+use Filament\Support\Icons\Heroicon;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
+
+class NavigationMenuItemResource extends Resource
+{
+    use ChecksAdminAccess;
+
+    protected static ?string $model = NavigationMenuItem::class;
+    protected static string $permissionArea = 'content';
+    protected static ?string $navigationLabel = '前台菜单';
+    protected static ?string $modelLabel = '前台菜单';
+    protected static ?string $pluralModelLabel = '前台菜单';
+    protected static string|\UnitEnum|null $navigationGroup = '内容';
+    protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedBars3;
+    protected static ?int $navigationSort = 50;
+
+    public static function form(Schema $schema): Schema
+    {
+        return $schema->components([
+            Section::make('菜单项')->schema([
+                Select::make('parent_id')
+                    ->label('上级菜单')
+                    ->options(fn (): array => NavigationMenuItem::query()->whereNull('parent_id')->orderBy('sort_order')->pluck('label', 'id')->all())
+                    ->searchable()
+                    ->preload(),
+                TextInput::make('label')->label('显示文字')->required()->maxLength(255),
+                TextInput::make('url')->label('自定义 URL')->maxLength(500)->helperText('可填写外部链接或站内路径，如 /products。'),
+                TextInput::make('route_name')->label('Laravel 路由名')->maxLength(255)->helperText('例如 home、products.index、friend-links.index、pages.show。'),
+                KeyValue::make('route_parameters')
+                    ->label('路由参数')
+                    ->keyLabel('参数名')
+                    ->valueLabel('参数值')
+                    ->columnSpanFull(),
+                TextInput::make('sort_order')->label('排序')->numeric()->default(0),
+                Toggle::make('is_active')->label('启用')->default(true),
+                Toggle::make('opens_new_tab')->label('新窗口打开')->default(false),
+            ])->columns(2)->columnSpanFull(),
+        ]);
+    }
+
+    public static function table(Table $table): Table
+    {
+        return $table
+            ->columns([
+                TextColumn::make('label')
+                    ->label('菜单')
+                    ->searchable(query: fn (Builder $query, string $search): Builder => RegexSearch::where($query, ['label', 'url', 'route_name'], $search))
+                    ->sortable(),
+                TextColumn::make('parent.label')->label('上级')->toggleable(),
+                TextColumn::make('route_name')->label('路由')->toggleable(),
+                TextColumn::make('url')->label('URL')->limit(36)->toggleable(),
+                TextColumn::make('sort_order')->label('排序')->sortable(),
+                TextColumn::make('is_active')->label('状态')->formatStateUsing(fn (bool $state): string => $state ? '启用' : '停用')->badge(),
+                TextColumn::make('updated_at')->label('更新')->dateTime('Y-m-d H:i')->sortable(),
+            ])
+            ->defaultSort('sort_order')
+            ->recordActions([EditAction::make(), DeleteAction::make()])
+            ->toolbarActions([DeleteBulkAction::make()]);
+    }
+
+    public static function getPages(): array
+    {
+        return [
+            'index' => ListNavigationMenuItems::route('/'),
+            'create' => CreateNavigationMenuItem::route('/create'),
+            'edit' => EditNavigationMenuItem::route('/{record}/edit'),
+        ];
+    }
+}

@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Support\AdminAccess;
 use Filament\Models\Contracts\FilamentUser;
+use Filament\Models\Contracts\HasAvatar;
 use Filament\Panel;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -11,9 +12,10 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
-class User extends Authenticatable implements FilamentUser
+class User extends Authenticatable implements FilamentUser, HasAvatar
 {
     use HasFactory;
     use Notifiable;
@@ -28,6 +30,8 @@ class User extends Authenticatable implements FilamentUser
         'role',
         'account_type',
         'forum_role',
+        'forum_posting_banned_at',
+        'forum_posting_ban_reason',
         'nickname',
         'avatar_path',
         'profile_intro',
@@ -48,6 +52,7 @@ class User extends Authenticatable implements FilamentUser
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'forum_posting_banned_at' => 'datetime',
             'interface_settings' => 'array',
             'privacy_settings' => 'array',
             'can_view_order_numbers' => 'boolean',
@@ -86,6 +91,13 @@ class User extends Authenticatable implements FilamentUser
     public function canAccessPanel(Panel $panel): bool
     {
         return AdminAccess::canAccessPanel($this);
+    }
+
+    public function getFilamentAvatarUrl(): ?string
+    {
+        return $this->avatar_path
+            ? Storage::disk('public_uploads')->url($this->avatar_path)
+            : null;
     }
 
     public function isAdmin(): bool
@@ -211,6 +223,11 @@ class User extends Authenticatable implements FilamentUser
     {
         return $this->role === 'admin'
             || $this->moderatedForumSections()->whereKey($section->id)->exists();
+    }
+
+    public function isForumPostingBanned(): bool
+    {
+        return $this->forum_posting_banned_at !== null;
     }
 
     private static function uniquePublicId(User $user): string

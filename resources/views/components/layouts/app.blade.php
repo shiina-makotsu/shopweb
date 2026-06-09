@@ -5,6 +5,22 @@
     $storeName = $siteSettings?->site_name ?? config('app.name');
     $categories = $storeCategories ?? collect();
     $pages = $storePages ?? collect();
+    $menuItems = $storeMenuItems ?? collect();
+    $topNavItems = $menuItems->isNotEmpty()
+        ? $menuItems
+        : collect([
+            ['label' => '首页', 'url' => route('home'), 'opens_new_tab' => false, 'children' => collect()],
+            ['label' => '全部商品', 'url' => route('products.index'), 'opens_new_tab' => false, 'children' => collect()],
+            ['label' => '友情链接', 'url' => route('friend-links.index'), 'opens_new_tab' => false, 'children' => collect()],
+            ['label' => '论坛', 'url' => route('forum.index'), 'opens_new_tab' => false, 'children' => collect()],
+            ['label' => '物流查询', 'url' => route('shipments.show'), 'opens_new_tab' => false, 'children' => collect()],
+            ['label' => '客服会话', 'url' => route('support.index'), 'opens_new_tab' => false, 'children' => collect()],
+            ['label' => '售后需求', 'url' => route('support.demands'), 'opens_new_tab' => false, 'children' => collect()],
+        ]);
+    $menuLabel = fn ($item): string => is_array($item) ? $item['label'] : $item->label;
+    $menuUrl = fn ($item): string => is_array($item) ? $item['url'] : $item->resolvedUrl();
+    $menuTarget = fn ($item): ?string => (is_array($item) ? ($item['opens_new_tab'] ?? false) : $item->opens_new_tab) ? '_blank' : null;
+    $menuChildren = fn ($item) => is_array($item) ? collect($item['children'] ?? []) : ($item->children ?? collect());
     $cartCount = $cartItemCount ?? 0;
     $cartSubtotal = $cartSubtotalCents ?? 0;
     $appearance = $siteSettings?->appearance() ?? [
@@ -114,12 +130,31 @@
 
         <nav class="border-t border-slate-200 bg-blue-800 text-sm font-medium text-white">
             <div class="mx-auto flex max-w-7xl flex-wrap px-4">
-                <a class="px-4 py-3 hover:bg-blue-900" href="{{ route('home') }}">首页</a>
-                <a class="px-4 py-3 hover:bg-blue-900" href="{{ route('products.index') }}">全部商品</a>
-                <a class="px-4 py-3 hover:bg-blue-900" href="{{ route('cart.show') }}">购物车</a>
-                <a class="px-4 py-3 hover:bg-blue-900" href="{{ route('shipments.show') }}">物流查询</a>
-                <a class="px-4 py-3 hover:bg-blue-900" href="{{ route('support.index') }}">客服会话</a>
-                <a class="px-4 py-3 hover:bg-blue-900" href="{{ route('forum.index') }}">论坛</a>
+                @foreach($topNavItems as $menuItem)
+                    @php($children = $menuChildren($menuItem))
+                    <div class="group relative">
+                        <a
+                            class="block px-4 py-3 hover:bg-blue-900"
+                            href="{{ $menuUrl($menuItem) }}"
+                            @if($menuTarget($menuItem)) target="{{ $menuTarget($menuItem) }}" rel="noopener noreferrer" @endif
+                        >
+                            {{ $menuLabel($menuItem) }}
+                        </a>
+                        @if($children->isNotEmpty())
+                            <div class="absolute left-0 top-full z-30 hidden min-w-44 border border-slate-300 bg-white text-slate-900 shadow-lg group-hover:block group-focus-within:block">
+                                @foreach($children as $child)
+                                    <a
+                                        class="block whitespace-nowrap px-4 py-2 text-sm hover:bg-blue-50 hover:text-blue-800"
+                                        href="{{ $menuUrl($child) }}"
+                                        @if($menuTarget($child)) target="{{ $menuTarget($child) }}" rel="noopener noreferrer" @endif
+                                    >
+                                        {{ $menuLabel($child) }}
+                                    </a>
+                                @endforeach
+                            </div>
+                        @endif
+                    </div>
+                @endforeach
                 @auth
                     <a class="px-4 py-3 hover:bg-blue-900" href="{{ route('orders.index') }}">订单查询</a>
                 @else
@@ -187,10 +222,12 @@
                                 <a class="block px-3 py-2 hover:bg-blue-50 hover:text-blue-800" href="{{ route('user.center') }}">个人信息</a>
                                 <a class="block px-3 py-2 hover:bg-blue-50 hover:text-blue-800" href="{{ route('orders.index') }}">我的订单</a>
                                 <a class="block px-3 py-2 hover:bg-blue-50 hover:text-blue-800" href="{{ route('support.index') }}">客服会话</a>
+                                <a class="block px-3 py-2 hover:bg-blue-50 hover:text-blue-800" href="{{ route('support.demands') }}">售后需求</a>
                             @else
                                 <a class="block px-3 py-2 hover:bg-blue-50 hover:text-blue-800" href="{{ route('login') }}">登录</a>
                                 <a class="block px-3 py-2 hover:bg-blue-50 hover:text-blue-800" href="{{ route('register') }}">注册新账号</a>
                                 <a class="block px-3 py-2 hover:bg-blue-50 hover:text-blue-800" href="{{ route('support.index') }}">游客客服</a>
+                                <a class="block px-3 py-2 hover:bg-blue-50 hover:text-blue-800" href="{{ route('support.demands') }}">售后需求</a>
                             @endauth
                         </nav>
                     </section>

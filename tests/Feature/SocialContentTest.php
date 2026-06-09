@@ -10,6 +10,7 @@ use App\Models\ProductComment;
 use App\Models\ProductVariant;
 use App\Models\SupportChatSession;
 use App\Models\SupportTicket;
+use App\Models\SiteSetting;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -262,7 +263,7 @@ it('supports chat style customer service sessions with attachments and admin rec
         'message' => '我需要即时帮助。',
         'guest_email' => 'guest-chat@example.com',
         'attachment' => UploadedFile::fake()->image('chat.png', 160, 120),
-    ])->assertRedirect(route('support.index'));
+    ])->assertRedirect();
 
     $session = SupportChatSession::query()->firstOrFail();
     $message = $session->messages()->firstOrFail();
@@ -287,9 +288,15 @@ it('supports chat style customer service sessions with attachments and admin rec
         ->get('/admin/support-chat-sessions')
         ->assertOk()
         ->assertSee('客服会话');
+
+    $this->actingAs($admin)
+        ->get("/admin/support-chat-sessions/{$session->id}/edit")
+        ->assertOk()
+        ->assertSee('会话 #'.$session->id)
+        ->assertSee('发送回复');
 });
 
-it('ends idle support chat sessions and lets customers continue from the same window', function (): void {
+it('supports multiple chat windows and closes deleted windows against later replies', function (): void {
     $user = User::factory()->create(['role' => 'customer']);
     $session = SupportChatSession::query()->create([
         'user_id' => $user->id,
@@ -307,18 +314,31 @@ it('ends idle support chat sessions and lets customers continue from the same wi
 
     $this->actingAs($user)
         ->post(route('support.messages.store'), [
+            'support_chat_session_id' => $session->id,
             'message' => '继续咨询。',
         ])
-        ->assertRedirect(route('support.index'));
+        ->assertRedirect(route('support.sessions.show', $session));
 
     expect($session->fresh()->status)->toBe(SupportChatSession::STATUS_OPEN)
         ->and($session->messages()->latest('id')->first()->body)->toBe('继续咨询。');
 
     $this->actingAs($user)
+        ->post(route('support.sessions.store'))
+        ->assertRedirect();
+
+    expect(SupportChatSession::query()->where('user_id', $user->id)->count())->toBe(2);
+
+    $this->actingAs($user)
         ->delete(route('support.sessions.destroy', $session))
         ->assertRedirect(route('support.index'));
 
-    expect($session->fresh()->deleted_by_customer_at)->not->toBeNull();
+    expect($session->fresh()->deleted_by_customer_at)->not->toBeNull()
+        ->and($session->fresh()->status)->toBe(SupportChatSession::STATUS_CLOSED);
+
+    $admin = User::factory()->create(['role' => 'support']);
+
+    expect(fn () => app(\App\Services\SupportChatService::class)->reply($session->fresh(), $admin, '不能回复。'))
+        ->toThrow(\Illuminate\Validation\ValidationException::class);
 });
 
 it('lets users update their avatar and profile intro', function (): void {
@@ -342,6 +362,7 @@ it('lets users update their avatar and profile intro', function (): void {
             'nickname' => 'Maple',
             'profile_intro' => '喜欢分享商品体验和论坛讨论。',
             'avatar' => UploadedFile::fake()->image('avatar.png', 160, 160),
+            'avatar_cropped' => 'data:image/png;base64,'.base64_encode('cropped-avatar'),
         ])
         ->assertRedirect();
 
@@ -353,6 +374,7 @@ it('lets users update their avatar and profile intro', function (): void {
         ->and($fresh->avatar_path)->not->toBeNull();
 
     Storage::disk('public_uploads')->assertExists($fresh->avatar_path);
+    expect($fresh->avatar_path)->toEndWith('.png');
 
     $this->actingAs($fresh)
         ->get(route('users.show', $fresh))
@@ -387,5 +409,75 @@ it('searches products and users and links to private messages', function (): voi
         'sender_id' => $viewer->id,
         'recipient_id' => $target->id,
         'body' => '你好。',
+    ]);
+});
+
+it('browses forum sections before posting and supports search sorting and locked threads', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+    $section = ForumSection::query()->create([
+        'name' => '版块浏览',
+        'slug' => 'section-browse',
+        'is_active' => true,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('forum.sections.show', $section))
+        ->assertOk()
+        ->assertSee('帖子')
+        ->assertSee('发布新帖')
+        ->assertDontSee('发布</button>', false);
+
+    $this->actingAs($user)
+        ->get(route('forum.sections.threads.create', $section))
+        ->assertOk()
+        ->assertSee('发布新帖')
+        ->assertSee('版块浏览');
+
+    $this->actingAs($user)
+        ->post(route('forum.threads.store', $section), [
+            'title' => '搜索关键词帖子',
+            'body' => '这里有一个独特关键词。',
+        ])
+        ->assertRedirect();
+
+    $thread = $section->threads()->firstOrFail();
+    $thread->update(['likes_count' => 2, 'views_count' => 10, 'is_locked' => true]);
+
+    $this->actingAs($user)
+        ->get(route('forum.index', ['q' => '独特关键词', 'sort' => 'hot']))
+        ->assertOk()
+        ->assertSee('搜索关键词帖子')
+        ->assertSee('10 访问');
+
+    $this->actingAs($user)
+        ->post(route('forum.comments.store', [$section, $thread]), [
+            'body' => '锁帖后不能回复。',
+        ])
+        ->assertForbidden();
+});
+
+it('adds support ai comfort messages when an open chat waits too long', function (): void {
+    SiteSetting::query()->updateOrCreate(['id' => 1], [
+        'site_name' => 'ShopWeb',
+        'support_ai_enabled' => true,
+        'support_ai_idle_minutes' => 1,
+        'support_ai_system_prompt' => '我先陪你等客服接入。',
+    ]);
+
+    $session = SupportChatSession::query()->create([
+        'guest_id' => 'guest_idle_ai',
+        'status' => SupportChatSession::STATUS_OPEN,
+        'last_message_at' => now()->subMinutes(5),
+    ]);
+
+    $this->withSession(['support_guest_id' => 'guest_idle_ai'])
+        ->get(route('support.sessions.show', $session))
+        ->assertOk()
+        ->assertSee('我先陪你等客服接入。');
+
+    $this->assertDatabaseHas('support_chat_messages', [
+        'support_chat_session_id' => $session->id,
+        'sender_type' => \App\Models\SupportChatMessage::SENDER_SYSTEM,
+        'body' => '我先陪你等客服接入。',
     ]);
 });

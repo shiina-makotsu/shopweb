@@ -47,6 +47,12 @@ class Order extends Model
         'shipping_carrier_id',
         'tracking_number',
         'tracking_url',
+        'digital_delivery_content',
+        'digital_delivery_code',
+        'digital_delivery_attachment_paths',
+        'digital_delivery_sent_at',
+        'digital_delivery_viewed_at',
+        'digital_delivery_completed_at',
         'customer_note',
         'payment_proof_path',
         'payment_submitted_at',
@@ -58,6 +64,7 @@ class Order extends Model
         'delivered_at',
         'fulfilled_at',
         'cancelled_at',
+        'user_deleted_at',
         'admin_note',
     ];
 
@@ -65,6 +72,10 @@ class Order extends Model
     {
         return [
             'requires_shipping' => 'boolean',
+            'digital_delivery_attachment_paths' => 'array',
+            'digital_delivery_sent_at' => 'datetime',
+            'digital_delivery_viewed_at' => 'datetime',
+            'digital_delivery_completed_at' => 'datetime',
             'payment_submitted_at' => 'datetime',
             'payment_auto_checked_at' => 'datetime',
             'paid_at' => 'datetime',
@@ -73,6 +84,7 @@ class Order extends Model
             'delivered_at' => 'datetime',
             'fulfilled_at' => 'datetime',
             'cancelled_at' => 'datetime',
+            'user_deleted_at' => 'datetime',
         ];
     }
 
@@ -126,5 +138,12 @@ class Order extends Model
             self::PAYMENT_REJECTED => '待支付',
             default => '待支付',
         };
+    }
+
+    public function hasDigitalDelivery(): bool
+    {
+        return filled($this->digital_delivery_content)
+            || filled($this->digital_delivery_code)
+            || ! empty($this->digital_delivery_attachment_paths);
     }
 }

@@ -20,9 +20,9 @@ class InventoryMovementResource extends Resource
     protected static ?string $navigationLabel = '库存流水';
     protected static ?string $modelLabel = '库存流水';
     protected static ?string $pluralModelLabel = '库存流水';
-    protected static string|\UnitEnum|null $navigationGroup = '商品';
+    protected static string|\UnitEnum|null $navigationGroup = '仓库';
     protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedCircleStack;
-    protected static ?int $navigationSort = 30;
+    protected static ?int $navigationSort = 40;
 
     public static function canCreate(): bool
     {

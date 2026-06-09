@@ -11,6 +11,7 @@ use App\Support\Money;
 use App\Support\RegexSearch;
 use Filament\Actions\BulkAction;
 use Filament\Actions\EditAction;
+use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Select;
@@ -101,7 +102,10 @@ class CustomerResource extends Resource
                     ->label('头像')
                     ->disk('public_uploads')
                     ->directory('avatars')
+                    ->avatar()
                     ->image()
+                    ->imageEditor()
+                    ->imageCropAspectRatio('1:1')
                     ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/gif', 'image/webp'])
                     ->maxSize(5120)
                     ->openable()
@@ -119,6 +123,10 @@ class CustomerResource extends Resource
                     'member' => '普通用户',
                     'moderator' => '版主',
                 ])->default('member')->required(),
+                DateTimePicker::make('forum_posting_banned_at')
+                    ->label('发帖封禁时间')
+                    ->helperText('留空表示可发帖；有值表示禁止发帖。'),
+                TextInput::make('forum_posting_ban_reason')->label('发帖封禁原因')->maxLength(255),
                 Select::make('preferred_locale')->label('语言偏好')->options([
                     'system' => '跟随系统',
                     'zh_CN' => '中文',
@@ -171,6 +179,11 @@ class CustomerResource extends Resource
                 TextColumn::make('forum_role')
                     ->label('论坛身份')
                     ->formatStateUsing(fn (?string $state): string => $state === 'moderator' ? '版主' : '普通用户')
+                    ->badge()
+                    ->toggleable(),
+                TextColumn::make('forum_posting_banned_at')
+                    ->label('发帖权限')
+                    ->formatStateUsing(fn ($state): string => $state ? '已封禁' : '可发帖')
                     ->badge()
                     ->toggleable(),
                 TextColumn::make('orders_count')->label('订单数')->sortable(),

@@ -28,12 +28,15 @@ class Procurement extends Model
         'tracking_url',
         'note',
         'status',
+        'received_at',
+        'warehouse_note',
     ];
 
     protected function casts(): array
     {
         return [
             'customs_tax_rate' => 'decimal:4',
+            'received_at' => 'datetime',
         ];
     }
 
