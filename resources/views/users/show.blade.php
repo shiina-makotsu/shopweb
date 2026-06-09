@@ -11,6 +11,9 @@
             <div class="min-w-0 flex-1">
                 <h1 class="text-xl font-semibold">{{ $profileUser->displayName() }}</h1>
                 <p class="mt-1 text-sm text-slate-600">用户 ID：{{ $profileUser->public_id }}</p>
+                @if($profileUser->profile_intro)
+                    <p class="mt-2 max-w-2xl whitespace-pre-line text-sm leading-6 text-slate-600">{{ $profileUser->profile_intro }}</p>
+                @endif
             </div>
             @auth
                 @if(auth()->id() !== $profileUser->id)

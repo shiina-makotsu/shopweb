@@ -11,12 +11,15 @@ use App\Support\RegexSearch;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
+use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
@@ -32,6 +35,7 @@ class AdminUserResource extends Resource
     protected static string|\UnitEnum|null $navigationGroup = '用户';
     protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedUserGroup;
     protected static ?int $navigationSort = 60;
+    protected static ?string $recordRouteKeyName = 'id';
 
     public static function canAccess(): bool
     {
@@ -59,6 +63,20 @@ class AdminUserResource extends Resource
                 ->unique(ignoreRecord: true)
                 ->maxLength(40),
             TextInput::make('email')->label('邮箱')->email()->required()->unique(ignoreRecord: true)->maxLength(255),
+            FileUpload::make('avatar_path')
+                ->label('头像')
+                ->disk('public_uploads')
+                ->directory('avatars')
+                ->image()
+                ->acceptedFileTypes(['image/jpeg', 'image/png', 'image/gif', 'image/webp'])
+                ->maxSize(5120)
+                ->openable()
+                ->downloadable(),
+            Textarea::make('profile_intro')
+                ->label('个人简介')
+                ->rows(4)
+                ->maxLength(1000)
+                ->columnSpanFull(),
             Hidden::make('account_type')->default('regular'),
             Select::make('role')
                 ->label('后台角色')
@@ -80,6 +98,10 @@ class AdminUserResource extends Resource
     {
         return $table
             ->columns([
+                ImageColumn::make('avatar_path')
+                    ->label('头像')
+                    ->disk('public_uploads')
+                    ->imageSize(40),
                 TextColumn::make('name')
                     ->label('用户名')
                     ->searchable(query: fn (Builder $query, string $search): Builder => RegexSearch::where($query, ['name'], $search))

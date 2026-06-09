@@ -243,6 +243,46 @@ it('lets guests create support tickets with a generated guest id', function (): 
         ->and($ticket->guest_email)->toBe('guest@example.com');
 });
 
+it('lets users update their avatar and profile intro', function (): void {
+    Storage::fake('public_uploads');
+
+    $user = User::factory()->create([
+        'role' => 'customer',
+        'public_id' => 'profile_user',
+        'name' => 'Old Name',
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('user.section', 'profile'))
+        ->assertOk()
+        ->assertSee('个人资料')
+        ->assertSee('头像');
+
+    $this->actingAs($user)
+        ->patch(route('user.profile.update'), [
+            'name' => 'New Name',
+            'nickname' => 'Maple',
+            'profile_intro' => '喜欢分享商品体验和论坛讨论。',
+            'avatar' => UploadedFile::fake()->image('avatar.png', 160, 160),
+        ])
+        ->assertRedirect();
+
+    $fresh = $user->fresh();
+
+    expect($fresh->name)->toBe('New Name')
+        ->and($fresh->nickname)->toBe('Maple')
+        ->and($fresh->profile_intro)->toBe('喜欢分享商品体验和论坛讨论。')
+        ->and($fresh->avatar_path)->not->toBeNull();
+
+    Storage::disk('public_uploads')->assertExists($fresh->avatar_path);
+
+    $this->actingAs($fresh)
+        ->get(route('users.show', $fresh))
+        ->assertOk()
+        ->assertSee('Maple')
+        ->assertSee('喜欢分享商品体验和论坛讨论。');
+});
+
 it('searches products and users and links to private messages', function (): void {
     $viewer = User::factory()->create(['role' => 'customer', 'public_id' => 'viewer_1']);
     $target = User::factory()->create(['role' => 'customer', 'public_id' => 'alice_1', 'name' => 'Alice']);

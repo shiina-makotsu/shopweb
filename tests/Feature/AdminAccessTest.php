@@ -309,3 +309,24 @@ it('renders resource library forum logs and admin role defaults for admins', fun
         ->assertSee('超级管理员')
         ->assertDontSee('会员用户');
 });
+
+it('renders backend and frontend user edit forms by database id for legacy public ids', function (): void {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $legacyAdmin = User::factory()->create(['role' => 'admin']);
+    $legacyCustomer = User::factory()->create(['role' => 'customer']);
+
+    $legacyAdmin->forceFill(['public_id' => null])->saveQuietly();
+    $legacyCustomer->forceFill(['public_id' => null])->saveQuietly();
+
+    $this->actingAs($admin)
+        ->get("/admin/admin-users/{$legacyAdmin->id}/edit")
+        ->assertOk()
+        ->assertSee('头像')
+        ->assertSee('个人简介');
+
+    $this->actingAs($admin)
+        ->get("/admin/customers/{$legacyCustomer->id}/edit")
+        ->assertOk()
+        ->assertSee('头像')
+        ->assertSee('个人简介');
+});

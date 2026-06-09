@@ -11,6 +11,10 @@
             <div>
                 <h1 class="text-xl font-semibold">{{ $user->nickname ?: $user->name }}</h1>
                 <p class="mt-1 text-sm text-slate-600">用户 ID：{{ $user->public_id }} / {{ $user->email }}</p>
+                @if($user->profile_intro)
+                    <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{{ \Illuminate\Support\Str::limit($user->profile_intro, 120) }}</p>
+                @endif
+                <a class="mt-2 inline-flex text-sm font-medium text-blue-700 hover:text-blue-900" href="{{ route('user.section', 'profile') }}">编辑个人资料</a>
             </div>
         </div>
 
@@ -80,6 +84,7 @@
                     <h2 class="text-base font-semibold">设置</h2>
                 </div>
                 <div class="grid gap-2 px-4 py-4 text-sm">
+                    <a class="rounded-sm border border-slate-200 px-3 py-2 text-slate-600 hover:bg-blue-50 hover:text-blue-800" href="{{ route('user.section', 'profile') }}">个人资料</a>
                     <a class="rounded-sm border border-slate-200 px-3 py-2 text-slate-600 hover:bg-blue-50 hover:text-blue-800" href="{{ route('user.section', 'addresses') }}">地址设置</a>
                     <a class="rounded-sm border border-slate-200 px-3 py-2 text-slate-600 hover:bg-blue-50 hover:text-blue-800" href="{{ route('user.section', 'privacy') }}">隐私设置</a>
                     <a class="rounded-sm border border-slate-200 px-3 py-2 text-slate-600 hover:bg-blue-50 hover:text-blue-800" href="{{ route('user.section', 'interface') }}">界面设置</a>

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Order;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
 
 class UserCenterController extends Controller
@@ -41,10 +42,6 @@ class UserCenterController extends Controller
         $allowed = ['profile', 'wishlists', 'favorites', 'addresses', 'privacy', 'interface', 'membership'];
         abort_unless(in_array($section, $allowed, true), 404);
 
-        if ($section === 'profile') {
-            return redirect()->route('users.show', $user);
-        }
-
         return view('user.section', [
             'user' => $user,
             'section' => $section,
@@ -55,5 +52,31 @@ class UserCenterController extends Controller
                 ? $user->favorites()->with(['product.coverMedia', 'product.variants'])->latest()->paginate(12)
                 : null,
         ]);
+    }
+
+    public function updateProfile(Request $request): RedirectResponse
+    {
+        $user = $request->user();
+
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'nickname' => ['nullable', 'string', 'max:255'],
+            'profile_intro' => ['nullable', 'string', 'max:1000'],
+            'avatar' => ['nullable', 'image', 'max:5120'],
+        ]);
+
+        if ($request->hasFile('avatar')) {
+            if ($user->avatar_path) {
+                Storage::disk('public_uploads')->delete($user->avatar_path);
+            }
+
+            $data['avatar_path'] = $request->file('avatar')->store('avatars', 'public_uploads');
+        }
+
+        unset($data['avatar']);
+
+        $user->update($data);
+
+        return back()->with('status', '个人资料已更新。');
     }
 }

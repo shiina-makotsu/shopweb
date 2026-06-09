@@ -70,6 +70,7 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/flash-sales/checkout/{order}', [FlashSaleCheckoutController::class, 'create'])->name('flash-sales.checkout');
     Route::post('/flash-sales/checkout/{order}', [FlashSaleCheckoutController::class, 'store'])->name('flash-sales.store');
     Route::get('/user', [UserCenterController::class, 'show'])->name('user.center');
+    Route::patch('/user/profile', [UserCenterController::class, 'updateProfile'])->name('user.profile.update');
     Route::get('/user/{section}', [UserCenterController::class, 'section'])->name('user.section');
     Route::get('/orders', [OrderController::class, 'index'])->name('orders.index');
     Route::get('/orders/{order}', [OrderController::class, 'show'])->name('orders.show');

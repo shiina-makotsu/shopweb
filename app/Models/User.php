@@ -28,6 +28,7 @@ class User extends Authenticatable implements FilamentUser
         'forum_role',
         'nickname',
         'avatar_path',
+        'profile_intro',
         'preferred_locale',
         'interface_settings',
         'privacy_settings',
