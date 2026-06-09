@@ -101,3 +101,50 @@ php scripts/build-release.php 1.0.0
 ```
 
 发布 ZIP 不包含 `.env`、`.git`、`node_modules`、本地 SQLite 数据库、本地日志、会话、测试缓存和开发截图。
+
+## Upload troubleshooting
+
+If Filament or Livewire shows an error like `failed to upload`, check the upload
+limits and writable directories first.
+
+```bash
+cd /var/www/shopweb
+sudo mkdir -p storage/app/private/livewire-tmp public/uploads
+sudo chown -R www-data:www-data storage bootstrap/cache public/uploads
+sudo chmod -R u+rwX,g+rwX storage bootstrap/cache public/uploads
+```
+
+For Nginx, make sure the site config contains:
+
+```nginx
+client_max_body_size 64M;
+```
+
+Then reload Nginx:
+
+```bash
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+For PHP-FPM, make sure `upload_max_filesize` and `post_max_size` are not smaller
+than the files you upload. Example for PHP 8.4:
+
+```bash
+sudo nano /etc/php/8.4/fpm/php.ini
+sudo systemctl restart php8.4-fpm
+```
+
+Recommended values:
+
+```ini
+upload_max_filesize = 64M
+post_max_size = 64M
+max_file_uploads = 20
+```
+
+After changing permissions or PHP/Nginx settings, clear Laravel caches:
+
+```bash
+php artisan optimize:clear
+```

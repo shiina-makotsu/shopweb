@@ -21,6 +21,7 @@ if not exist ".env" (
 if not exist "storage\app" mkdir "storage\app"
 if not exist "storage\app\private" mkdir "storage\app\private"
 if not exist "storage\app\private\payment-proofs" mkdir "storage\app\private\payment-proofs"
+if not exist "storage\app\private\livewire-tmp" mkdir "storage\app\private\livewire-tmp"
 if not exist "storage\framework\cache\data" mkdir "storage\framework\cache\data"
 if not exist "storage\framework\sessions" mkdir "storage\framework\sessions"
 if not exist "storage\framework\views" mkdir "storage\framework\views"

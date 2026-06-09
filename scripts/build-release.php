@@ -109,6 +109,7 @@ foreach ($platforms as $platform => $config) {
         'storage/app/.gitkeep',
         'storage/app/private/payment-proofs/.gitkeep',
         'storage/app/private/.gitkeep',
+        'storage/app/private/livewire-tmp/.gitkeep',
         'storage/framework/.gitkeep',
         'storage/framework/cache/.gitkeep',
         'storage/framework/cache/data/.gitkeep',

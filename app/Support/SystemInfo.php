@@ -64,6 +64,7 @@ class SystemInfo
             'public/uploads' => public_path('uploads'),
             'storage/app/private' => storage_path('app/private'),
             'storage/app/private/payment-proofs' => storage_path('app/private/payment-proofs'),
+            'storage/app/private/livewire-tmp' => storage_path('app/private/livewire-tmp'),
         ];
 
         return collect($paths)

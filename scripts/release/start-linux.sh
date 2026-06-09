@@ -16,6 +16,7 @@ fi
 
 mkdir -p \
     storage/app/private/payment-proofs \
+    storage/app/private/livewire-tmp \
     storage/framework/cache/data \
     storage/framework/sessions \
     storage/framework/views \
