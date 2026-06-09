@@ -120,6 +120,31 @@ it('lets users create forum threads and replies', function (): void {
     ]);
 });
 
+it('renders forum thread pages for users created before public ids existed', function (): void {
+    $user = User::factory()->create(['role' => 'customer', 'public_id' => null]);
+    $section = ForumSection::query()->create([
+        'name' => 'Legacy Users',
+        'slug' => 'legacy-users',
+        'is_active' => true,
+    ]);
+
+    $this->actingAs($user)
+        ->post(route('forum.threads.store', $section), [
+            'title' => 'Legacy thread',
+            'body' => 'This thread page should not return 500.',
+        ])
+        ->assertRedirect();
+
+    $thread = $section->threads()->firstOrFail();
+
+    $this->actingAs($user)
+        ->get(route('forum.threads.show', [$section, $thread]))
+        ->assertOk()
+        ->assertSee('Legacy thread');
+
+    expect($user->fresh()->public_id)->not->toBeNull();
+});
+
 it('lets thread owners and section moderators manage forum content with activity logs', function (): void {
     Storage::fake('public_uploads');
 

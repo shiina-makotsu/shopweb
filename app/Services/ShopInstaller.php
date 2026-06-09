@@ -40,6 +40,7 @@ class ShopInstaller
             ['email' => $data['admin_email']],
             [
                 'name' => $data['admin_name'],
+                'public_id' => 'admin',
                 'password' => Hash::make($data['admin_password']),
                 'role' => 'admin',
                 'account_type' => 'regular',

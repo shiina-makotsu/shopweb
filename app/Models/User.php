@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Str;
 
 class User extends Authenticatable implements FilamentUser
 {
@@ -49,6 +50,19 @@ class User extends Authenticatable implements FilamentUser
             'can_view_order_numbers' => 'boolean',
             'can_view_tracking_numbers' => 'boolean',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::created(function (User $user): void {
+            if (filled($user->public_id)) {
+                return;
+            }
+
+            $user->forceFill([
+                'public_id' => static::uniquePublicId($user),
+            ])->saveQuietly();
+        });
     }
 
     public function canAccessPanel(Panel $panel): bool
@@ -150,5 +164,21 @@ class User extends Authenticatable implements FilamentUser
     {
         return $this->role === 'admin'
             || $this->moderatedForumSections()->whereKey($section->id)->exists();
+    }
+
+    private static function uniquePublicId(User $user): string
+    {
+        $base = $user->email === 'admin@example.com'
+            ? 'admin'
+            : 'user_'.($user->id ?: Str::lower(Str::random(8)));
+
+        $publicId = $base;
+        $index = 2;
+
+        while (static::query()->where('public_id', $publicId)->whereKeyNot($user->id)->exists()) {
+            $publicId = $base.'_'.$index++;
+        }
+
+        return $publicId;
     }
 }
