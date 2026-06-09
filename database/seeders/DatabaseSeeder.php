@@ -58,7 +58,7 @@ class DatabaseSeeder extends Seeder
             ['email' => 'admin@example.com'],
             [
                 'name' => 'Admin',
-                'public_id' => 'admin',
+                'public_id' => 'staff_admin',
                 'password' => Hash::make('password'),
                 'role' => 'admin',
                 'account_type' => 'regular',
@@ -66,7 +66,7 @@ class DatabaseSeeder extends Seeder
         );
 
         if (blank($admin->public_id)) {
-            $admin->forceFill(['public_id' => 'admin'])->save();
+            $admin->forceFill(['public_id' => 'staff_admin'])->save();
         }
 
         $category = Category::query()->firstOrCreate(

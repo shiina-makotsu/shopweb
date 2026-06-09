@@ -318,8 +318,35 @@ it('renders backend and frontend user edit forms by database id for legacy publi
     $legacyAdmin->forceFill(['public_id' => null])->saveQuietly();
     $legacyCustomer->forceFill(['public_id' => null])->saveQuietly();
 
+    $this->actingAs($legacyAdmin)
+        ->get(route('user.section', 'profile'))
+        ->assertOk()
+        ->assertSee('个人资料');
+
+    $this->actingAs($legacyCustomer)
+        ->get(route('user.section', 'profile'))
+        ->assertOk()
+        ->assertSee('个人资料');
+
+    $legacyAdmin->refresh();
+    $legacyCustomer->refresh();
+
+    expect($legacyAdmin->public_id)->toStartWith('staff_')
+        ->and($legacyCustomer->public_id)->toStartWith('user_');
+
+    $this->actingAs($admin)
+        ->get("/admin/admin-users/{$legacyAdmin->public_id}/edit")
+        ->assertOk()
+        ->assertSee('头像')
+        ->assertSee('个人简介');
+
     $this->actingAs($admin)
         ->get("/admin/admin-users/{$legacyAdmin->id}/edit")
+        ->assertOk()
+        ->assertSee('后台用户 ID');
+
+    $this->actingAs($admin)
+        ->get("/admin/customers/{$legacyCustomer->public_id}/edit")
         ->assertOk()
         ->assertSee('头像')
         ->assertSee('个人简介');
@@ -327,6 +354,15 @@ it('renders backend and frontend user edit forms by database id for legacy publi
     $this->actingAs($admin)
         ->get("/admin/customers/{$legacyCustomer->id}/edit")
         ->assertOk()
-        ->assertSee('头像')
-        ->assertSee('个人简介');
+        ->assertSee('用户 ID');
+});
+
+it('namespaces backoffice public ids away from customer ids', function (): void {
+    $admin = User::factory()->create(['role' => 'admin', 'public_id' => 'plain_admin']);
+    $operator = User::factory()->create(['role' => 'operator', 'public_id' => 'operator_plain']);
+    $customer = User::factory()->create(['role' => 'customer', 'public_id' => 'customer_plain']);
+
+    expect($admin->fresh()->public_id)->toStartWith('staff_')
+        ->and($operator->fresh()->public_id)->toStartWith('staff_')
+        ->and($customer->fresh()->public_id)->toBe('customer_plain');
 });

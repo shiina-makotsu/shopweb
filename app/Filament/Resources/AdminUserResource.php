@@ -35,7 +35,6 @@ class AdminUserResource extends Resource
     protected static string|\UnitEnum|null $navigationGroup = '用户';
     protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedUserGroup;
     protected static ?int $navigationSort = 60;
-    protected static ?string $recordRouteKeyName = 'id';
 
     public static function canAccess(): bool
     {
@@ -52,16 +51,34 @@ class AdminUserResource extends Resource
         return parent::getEloquentQuery()->whereIn('role', AdminAccess::panelRoles());
     }
 
+    public static function resolveRecordRouteBinding(int|string $key, ?\Closure $modifyQuery = null): ?Model
+    {
+        $record = parent::resolveRecordRouteBinding($key, $modifyQuery);
+
+        if ($record || ! ctype_digit((string) $key)) {
+            return $record;
+        }
+
+        $query = static::getRecordRouteBindingEloquentQuery();
+
+        if ($modifyQuery) {
+            $query = $modifyQuery($query) ?? $query;
+        }
+
+        return $query->whereKey((int) $key)->first();
+    }
+
     public static function form(Schema $schema): Schema
     {
         return $schema->components([
             TextInput::make('name')->label('用户名')->required()->maxLength(255),
             TextInput::make('public_id')
-                ->label('用户 ID')
+                ->label('后台用户 ID')
                 ->required()
                 ->regex('/^[A-Za-z0-9_]+$/')
                 ->unique(ignoreRecord: true)
-                ->maxLength(40),
+                ->maxLength(40)
+                ->helperText('后台用户使用 staff_ 前缀，用于和前台用户区分。'),
             TextInput::make('email')->label('邮箱')->email()->required()->unique(ignoreRecord: true)->maxLength(255),
             FileUpload::make('avatar_path')
                 ->label('头像')
@@ -111,7 +128,7 @@ class AdminUserResource extends Resource
                     ->searchable(query: fn (Builder $query, string $search): Builder => RegexSearch::where($query, ['email'], $search))
                     ->sortable(),
                 TextColumn::make('public_id')
-                    ->label('用户 ID')
+                    ->label('后台用户 ID')
                     ->searchable(query: fn (Builder $query, string $search): Builder => RegexSearch::where($query, ['public_id'], $search))
                     ->sortable(),
                 TextColumn::make('role')

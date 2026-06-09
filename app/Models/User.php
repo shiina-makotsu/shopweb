@@ -18,6 +18,8 @@ class User extends Authenticatable implements FilamentUser
     use HasFactory;
     use Notifiable;
 
+    public const BACKOFFICE_PUBLIC_ID_PREFIX = 'staff_';
+
     protected $fillable = [
         'name',
         'public_id',
@@ -55,15 +57,30 @@ class User extends Authenticatable implements FilamentUser
 
     protected static function booted(): void
     {
-        static::created(function (User $user): void {
-            if (filled($user->public_id)) {
+        static::saving(function (User $user): void {
+            if (! $user->exists && blank($user->public_id)) {
                 return;
             }
 
-            $user->forceFill([
-                'public_id' => static::uniquePublicId($user),
-            ])->saveQuietly();
+            $user->public_id = static::publicIdForRole($user);
         });
+
+        static::created(function (User $user): void {
+            $user->ensurePublicId();
+        });
+    }
+
+    public function ensurePublicId(): void
+    {
+        $publicId = static::publicIdForRole($this);
+
+        if ($this->public_id === $publicId) {
+            return;
+        }
+
+        $this->forceFill([
+            'public_id' => $publicId,
+        ])->saveQuietly();
     }
 
     public function canAccessPanel(Panel $panel): bool
@@ -156,6 +173,15 @@ class User extends Authenticatable implements FilamentUser
         return 'public_id';
     }
 
+    public function getRouteKey(): mixed
+    {
+        if ($this->exists) {
+            $this->ensurePublicId();
+        }
+
+        return parent::getRouteKey();
+    }
+
     public function displayName(): string
     {
         return $this->nickname ?: $this->name;
@@ -169,17 +195,82 @@ class User extends Authenticatable implements FilamentUser
 
     private static function uniquePublicId(User $user): string
     {
+        return AdminAccess::canAccessPanel($user)
+            ? static::uniqueStaffPublicId($user)
+            : static::uniqueCustomerPublicId($user);
+    }
+
+    private static function publicIdForRole(User $user): string
+    {
+        $publicId = (string) $user->public_id;
+
+        if (AdminAccess::canAccessPanel($user)) {
+            if (static::isStaffPublicId($publicId)) {
+                return $publicId;
+            }
+
+            return static::uniqueStaffPublicId($user);
+        }
+
+        if (filled($publicId) && ! static::isStaffPublicId($publicId)) {
+            return $publicId;
+        }
+
+        return static::uniqueCustomerPublicId($user);
+    }
+
+    private static function uniqueStaffPublicId(User $user): string
+    {
         $base = $user->email === 'admin@example.com'
-            ? 'admin'
-            : 'user_'.($user->id ?: Str::lower(Str::random(8)));
+            ? self::BACKOFFICE_PUBLIC_ID_PREFIX.'admin'
+            : self::BACKOFFICE_PUBLIC_ID_PREFIX.($user->id ?: static::slugForPublicId($user->email ?: Str::random(8)));
+
+        return static::uniquePublicIdFromBase($base, $user);
+    }
+
+    private static function uniqueCustomerPublicId(User $user): string
+    {
+        $base = 'user_'.($user->id ?: Str::lower(Str::random(8)));
+
+        return static::uniquePublicIdFromBase($base, $user);
+    }
+
+    private static function uniquePublicIdFromBase(string $base, User $user): string
+    {
+        $base = substr(static::slugForPublicId($base), 0, 40);
 
         $publicId = $base;
         $index = 2;
 
-        while (static::query()->where('public_id', $publicId)->whereKeyNot($user->id)->exists()) {
-            $publicId = $base.'_'.$index++;
+        while (static::publicIdExists($publicId, $user)) {
+            $suffix = '_'.$index++;
+            $publicId = substr($base, 0, 40 - strlen($suffix)).$suffix;
         }
 
         return $publicId;
+    }
+
+    private static function publicIdExists(string $publicId, User $user): bool
+    {
+        $query = static::query()->where('public_id', $publicId);
+
+        if ($user->getKey()) {
+            $query->whereKeyNot($user->getKey());
+        }
+
+        return $query->exists();
+    }
+
+    private static function isStaffPublicId(string $publicId): bool
+    {
+        return str_starts_with(Str::lower($publicId), self::BACKOFFICE_PUBLIC_ID_PREFIX);
+    }
+
+    private static function slugForPublicId(string $value): string
+    {
+        $value = preg_replace('/[^A-Za-z0-9_]+/', '_', $value) ?: '';
+        $value = trim($value, '_');
+
+        return $value === '' ? Str::lower(Str::random(8)) : $value;
     }
 }

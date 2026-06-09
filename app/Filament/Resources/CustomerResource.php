@@ -40,7 +40,6 @@ class CustomerResource extends Resource
     protected static string|\UnitEnum|null $navigationGroup = '用户';
     protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedUsers;
     protected static ?int $navigationSort = 30;
-    protected static ?string $recordRouteKeyName = 'id';
 
     public static function canCreate(): bool
     {
@@ -65,6 +64,23 @@ class CustomerResource extends Resource
             ->withSum('orders as orders_total_cents', 'total_cents');
     }
 
+    public static function resolveRecordRouteBinding(int|string $key, ?\Closure $modifyQuery = null): ?Model
+    {
+        $record = parent::resolveRecordRouteBinding($key, $modifyQuery);
+
+        if ($record || ! ctype_digit((string) $key)) {
+            return $record;
+        }
+
+        $query = static::getRecordRouteBindingEloquentQuery();
+
+        if ($modifyQuery) {
+            $query = $modifyQuery($query) ?? $query;
+        }
+
+        return $query->whereKey((int) $key)->first();
+    }
+
     public static function form(Schema $schema): Schema
     {
         return $schema->components([
@@ -74,9 +90,10 @@ class CustomerResource extends Resource
                     ->label('用户 ID')
                     ->required()
                     ->regex('/^[A-Za-z0-9_]+$/')
+                    ->notRegex('/^staff_/i')
                     ->unique(ignoreRecord: true)
                     ->maxLength(40)
-                    ->helperText('只能使用英文、数字、下划线；不能和其他用户重复。'),
+                    ->helperText('只能使用英文、数字、下划线；不能和其他用户重复；staff_ 前缀保留给后台用户。'),
                 TextInput::make('name')->label('用户名')->required()->maxLength(255),
                 TextInput::make('nickname')->label('昵称')->maxLength(255),
                 TextInput::make('email')->label('注册邮箱')->email()->required()->unique(ignoreRecord: true)->maxLength(255),

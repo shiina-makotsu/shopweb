@@ -4,6 +4,7 @@ use App\Support\AdminAccess;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 
 return new class extends Migration
 {
@@ -15,14 +16,20 @@ return new class extends Migration
 
         DB::table('users')
             ->select(['id', 'email', 'role', 'public_id'])
-            ->whereNull('public_id')
-            ->orWhere('public_id', '')
+            ->whereIn('role', AdminAccess::panelRoles())
             ->orderBy('id')
             ->lazy()
             ->each(function (object $user): void {
-                $base = in_array($user->role, AdminAccess::panelRoles(), true)
-                    ? ($user->email === 'admin@example.com' ? 'staff_admin' : 'staff_'.$user->id)
-                    : 'user_'.$user->id;
+                $current = (string) ($user->public_id ?? '');
+
+                if (str_starts_with(Str::lower($current), 'staff_')) {
+                    return;
+                }
+
+                $base = $user->email === 'admin@example.com'
+                    ? 'staff_admin'
+                    : 'staff_'.$user->id;
+
                 $publicId = $base;
                 $index = 2;
 

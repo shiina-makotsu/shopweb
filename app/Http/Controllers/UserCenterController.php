@@ -13,6 +13,7 @@ class UserCenterController extends Controller
     public function show(Request $request): View
     {
         $user = $request->user();
+        $user->ensurePublicId();
 
         $orderCounts = Order::query()
             ->whereBelongsTo($user)
@@ -38,6 +39,7 @@ class UserCenterController extends Controller
     public function section(Request $request, string $section): View|RedirectResponse
     {
         $user = $request->user();
+        $user->ensurePublicId();
 
         $allowed = ['profile', 'wishlists', 'favorites', 'addresses', 'privacy', 'interface', 'membership'];
         abort_unless(in_array($section, $allowed, true), 404);

@@ -84,6 +84,17 @@ it('registers customers with a simple human verification challenge', function ()
 
     $this->withSession(['register_captcha_answer' => 7])
         ->post(route('register'), [
+            'public_id' => 'staff_taken',
+            'name' => 'staff-prefix-user',
+            'email' => 'staff-prefix-user@example.com',
+            'password' => 'password',
+            'password_confirmation' => 'password',
+            'captcha_answer' => 7,
+        ])
+        ->assertInvalid(['public_id']);
+
+    $this->withSession(['register_captcha_answer' => 7])
+        ->post(route('register'), [
             'public_id' => 'new_user',
             'name' => 'new-user',
             'email' => 'new-user@example.com',
