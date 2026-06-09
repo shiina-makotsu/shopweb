@@ -1,6 +1,6 @@
 # ShopWeb
 
-轻量自研版商城，基于 Laravel、Livewire 和 Filament 构建。
+一个简易商店系统。轻量自研版商城，基于 Laravel、Livewire 和 Filament 构建。
 
 ## 功能概览
 
