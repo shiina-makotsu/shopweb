@@ -36,6 +36,9 @@ class Order extends Model
         'payment_status',
         'subtotal_cents',
         'discount_cents',
+        'shipping_fee_cents',
+        'shipment_plan',
+        'shipment_notice',
         'total_cents',
         'coupon_id',
         'coupon_code',
@@ -44,6 +47,7 @@ class Order extends Model
         'contact_email',
         'requires_shipping',
         'shipping_address',
+        'shipping_province',
         'shipping_carrier_id',
         'tracking_number',
         'tracking_url',
@@ -72,6 +76,7 @@ class Order extends Model
     {
         return [
             'requires_shipping' => 'boolean',
+            'shipment_plan' => 'array',
             'digital_delivery_attachment_paths' => 'array',
             'digital_delivery_sent_at' => 'datetime',
             'digital_delivery_viewed_at' => 'datetime',
@@ -111,6 +116,11 @@ class Order extends Model
     public function couponRedemption(): HasOne
     {
         return $this->hasOne(CouponRedemption::class);
+    }
+
+    public function paymentVerificationLogs(): HasMany
+    {
+        return $this->hasMany(PaymentVerificationLog::class);
     }
 
     public function afterSalesRequests(): HasMany

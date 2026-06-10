@@ -4,7 +4,11 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Support\AdminAccess;
+use App\Support\Money;
+use App\Support\ProfitMetrics;
 use App\Support\ReportMetrics;
+use Carbon\Carbon;
+use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ReportExportController extends Controller
@@ -43,6 +47,54 @@ class ReportExportController extends Controller
         ])->all());
     }
 
+    public function profitOverview(Request $request, ProfitMetrics $metrics): StreamedResponse
+    {
+        abort_unless(AdminAccess::can('finance'), 403);
+
+        $dateFrom = $this->parseDate($request->query('date_from'));
+        $dateTo = $this->parseDate($request->query('date_to'));
+        $summary = $metrics->summary($dateFrom, $dateTo);
+        $warehouseRows = collect($metrics->warehouseBreakdown($dateFrom, $dateTo))
+            ->map(fn (array $row): array => [
+                $row['warehouse_name'],
+                Money::format((int) $row['sales_cents']),
+                Money::format((int) $row['cost_cents']),
+                Money::format((int) $row['profit_cents']),
+                $this->formatRate($row['profit_rate']),
+                $row['orders_count'],
+            ])
+            ->all();
+
+        return $this->download('report-profit-overview.csv', [
+            '类型',
+            '名称',
+            '销售额',
+            '采购成本',
+            '毛利润',
+            '毛利润率',
+            '总成本',
+            '总利润',
+            '总利润率',
+            '完成订单',
+        ], [
+            [
+                '汇总',
+                $this->dateRangeLabel($dateFrom, $dateTo),
+                Money::format($summary['sales_cents']),
+                Money::format($summary['purchase_cost_cents']),
+                Money::format($summary['gross_profit_cents']),
+                $this->formatRate($summary['gross_profit_rate']),
+                Money::format($summary['cost_cents']),
+                Money::format($summary['profit_cents']),
+                $this->formatRate($summary['profit_rate']),
+                $summary['completed_orders'],
+            ],
+            [],
+            ['仓库利润', '仓库', '销售额', '成本', '利润', '利润率', '完成订单'],
+            ...$warehouseRows,
+        ]);
+    }
+
     /**
      * @param  array<int, array<int, string|int>>  $rows
      */
@@ -60,5 +112,32 @@ class ReportExportController extends Controller
         }, $filename, [
             'Content-Type' => 'text/csv; charset=UTF-8',
         ]);
+    }
+
+    private function parseDate(mixed $date): ?Carbon
+    {
+        if (! is_string($date) || trim($date) === '') {
+            return null;
+        }
+
+        try {
+            return Carbon::parse($date);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    private function formatRate(?float $rate): string
+    {
+        return $rate === null ? '-' : number_format($rate * 100, 2).'%';
+    }
+
+    private function dateRangeLabel(?Carbon $dateFrom, ?Carbon $dateTo): string
+    {
+        if (! $dateFrom && ! $dateTo) {
+            return '全部日期';
+        }
+
+        return ($dateFrom?->toDateString() ?: '开始').' 至 '.($dateTo?->toDateString() ?: '结束');
     }
 }

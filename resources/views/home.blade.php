@@ -48,8 +48,8 @@
             <span class="mt-1 block text-sm text-slate-600">像聊天一样和客服即时沟通，可附带订单、图片或文件。</span>
         </a>
         <a class="rounded-sm border border-pink-200 bg-white px-4 py-4 hover:bg-pink-50" href="{{ route('support.demands') }}">
-            <span class="block text-base font-semibold text-pink-900">售后需求</span>
-            <span class="mt-1 block text-sm text-slate-600">提交退款、售后、投诉反馈或其他需要后台处理的问题。</span>
+            <span class="block text-base font-semibold text-pink-900">客服工单</span>
+            <span class="mt-1 block text-sm text-slate-600">提交投诉反馈、账号问题或其他需要后台处理的问题。</span>
         </a>
         <a class="rounded-sm border border-slate-200 bg-white px-4 py-4 hover:bg-blue-50" href="{{ route('friend-links.index') }}">
             <span class="block text-base font-semibold text-slate-900">友情链接</span>

@@ -17,6 +17,7 @@ class Procurement extends Model
         'product_id',
         'incoming_product_id',
         'created_by_id',
+        'warehouse_id',
         'name',
         'quantity',
         'purchase_amount_cents',
@@ -53,6 +54,11 @@ class Procurement extends Model
     public function createdBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by_id');
+    }
+
+    public function warehouse(): BelongsTo
+    {
+        return $this->belongsTo(Warehouse::class);
     }
 
     public function allocations(): HasMany

@@ -103,7 +103,19 @@ it('exports report csv files for users with report access', function (): void {
         ->assertOk()
         ->assertHeader('content-type', 'text/csv; charset=UTF-8');
 
+    $this->actingAs($finance)
+        ->get(route('admin.report-exports.profit-overview', [
+            'date_from' => now()->subDay()->toDateString(),
+            'date_to' => now()->addDay()->toDateString(),
+        ]))
+        ->assertOk()
+        ->assertHeader('content-type', 'text/csv; charset=UTF-8');
+
     $this->actingAs($customer)
         ->get(route('admin.report-exports.product-sales'))
+        ->assertForbidden();
+
+    $this->actingAs($customer)
+        ->get(route('admin.report-exports.profit-overview'))
         ->assertForbidden();
 });

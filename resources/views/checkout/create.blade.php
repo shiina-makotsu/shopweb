@@ -24,6 +24,16 @@
                             <input class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" type="email" name="contact_email" value="{{ old('contact_email', auth()->user()->email) }}">
                         </label>
                         @if($requiresShipping)
+                            <label class="block">
+                                <span class="text-sm font-medium">收货省份 / 地区</span>
+                                <select class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" name="shipping_province" required>
+                                    <option value="">请选择省份</option>
+                                    @foreach($provinceOptions as $provinceValue => $provinceLabel)
+                                        <option value="{{ $provinceValue }}" @selected(old('shipping_province', $shippingProvince) === $provinceValue)>{{ $provinceLabel }}</option>
+                                    @endforeach
+                                </select>
+                                <span class="mt-1 block text-xs text-slate-500">邮费按省份匹配；没有单独设置的省份会使用“其他地区”邮费。</span>
+                            </label>
                             <label class="block md:col-span-2">
                                 <span class="text-sm font-medium">收货地址</span>
                                 <textarea class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" name="shipping_address" rows="3" required>{{ old('shipping_address', $defaultAddress?->formatted()) }}</textarea>
@@ -64,6 +74,38 @@
                     <div class="flex justify-between text-sm">
                         <span>商品小计</span>
                         <span class="font-semibold">@money($subtotalCents)</span>
+                    </div>
+                    @if($requiresShipping)
+                        <div class="mt-2 flex justify-between text-sm">
+                            <span>邮费{{ $shippingProvince ? '（'.$shippingProvince.'）' : '' }}</span>
+                            <span class="font-semibold">@money($shippingQuote['shipping_fee_cents'])</span>
+                        </div>
+                        @if($shippingQuote['notice'])
+                            <div class="mt-3 rounded-sm border border-amber-300 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
+                                {{ $shippingQuote['notice'] }}
+                            </div>
+                        @endif
+                        @if(! empty($shippingQuote['shipments']))
+                            <div class="mt-3 space-y-2 text-xs text-slate-600">
+                                @foreach($shippingQuote['shipments'] as $shipment)
+                                    <div class="rounded-sm border border-slate-200 bg-white px-3 py-2">
+                                        <div class="flex justify-between gap-3 font-medium text-slate-800">
+                                            <span>{{ $shipment['warehouse_name'] }}</span>
+                                            <span>@money($shipment['fee_cents'])</span>
+                                        </div>
+                                        <p class="mt-1">
+                                            @foreach($shipment['items'] as $shipmentItem)
+                                                <span>{{ $shipmentItem['title'] }} x {{ $shipmentItem['quantity'] }}</span>@if(! $loop->last)<span>，</span>@endif
+                                            @endforeach
+                                        </p>
+                                    </div>
+                                @endforeach
+                            </div>
+                        @endif
+                    @endif
+                    <div class="mt-2 flex justify-between border-t border-slate-200 pt-3 text-sm">
+                        <span>预计应付</span>
+                        <span class="font-semibold">@money($subtotalCents + (int) $shippingQuote['shipping_fee_cents'])</span>
                     </div>
                 </div>
             </aside>

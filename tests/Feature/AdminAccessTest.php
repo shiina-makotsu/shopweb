@@ -30,6 +30,7 @@ it('applies basic backoffice role permissions', function (): void {
 
     $this->actingAs($finance)->get('/admin/orders')->assertOk();
     $this->actingAs($finance)->get('/admin/coupons')->assertOk();
+    $this->actingAs($finance)->get('/admin/payment-verification-logs')->assertOk();
     $this->actingAs($finance)->get('/admin/products')->assertForbidden();
 
     $this->actingAs($warehouse)->get('/admin/products')->assertOk();
@@ -46,6 +47,8 @@ it('applies basic backoffice role permissions', function (): void {
     $this->actingAs($support)->get('/admin/forum-activity-logs')->assertOk();
     $this->actingAs($support)->get('/admin/support-chat-sessions')->assertOk();
     $this->actingAs($support)->get('/admin/support-tickets')->assertOk();
+    $this->actingAs($support)->get('/admin/support-ai-settings')->assertOk();
+    $this->actingAs($support)->get('/admin/payment-verification-logs')->assertForbidden();
     $this->actingAs($support)->get('/admin/orders')->assertForbidden();
 });
 

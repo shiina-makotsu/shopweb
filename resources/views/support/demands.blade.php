@@ -1,8 +1,8 @@
-<x-layouts.app title="售后/客服需求">
+<x-layouts.app title="客服工单">
     <section class="grid gap-4 lg:grid-cols-[1fr_360px]">
         <div class="rounded-sm border border-slate-300 bg-white">
             <div class="border-b border-slate-200 bg-slate-100 px-4 py-3">
-                <h1 class="text-lg font-semibold">售后/客服需求</h1>
+                <h1 class="text-lg font-semibold">客服工单</h1>
                 @if($guestId ?? null)
                     <p class="mt-1 text-xs text-slate-600">游客 ID：{{ $guestId }}。请保存该浏览器会话以查看客服回复。</p>
                 @endif
@@ -49,7 +49,7 @@
 
         <aside class="rounded-sm border border-slate-300 bg-white">
             <div class="border-b border-slate-200 bg-slate-100 px-4 py-3">
-                <h2 class="text-base font-semibold">提交需求</h2>
+                <h2 class="text-base font-semibold">提交工单</h2>
             </div>
             <form method="post" action="{{ route('support.store') }}" class="space-y-3 px-4 py-4 text-sm">
                 @csrf
@@ -58,7 +58,7 @@
                     <select class="mt-1 w-full rounded-sm border border-slate-300 bg-white px-3 py-2" name="category" required>
                         <option value="consultation" @selected(old('category', $selectedOrder ? 'after_sale' : 'consultation') === 'consultation')>商品咨询</option>
                         <option value="complaint" @selected(old('category', $selectedOrder ? 'after_sale' : 'consultation') === 'complaint')>投诉反馈</option>
-                        <option value="after_sale" @selected(old('category', $selectedOrder ? 'after_sale' : 'consultation') === 'after_sale')>退款售后</option>
+                        <option value="after_sale" @selected(old('category', $selectedOrder ? 'after_sale' : 'consultation') === 'after_sale')>订单售后</option>
                         <option value="other" @selected(old('category', $selectedOrder ? 'after_sale' : 'consultation') === 'other')>其他问题</option>
                     </select>
                 </label>
@@ -89,7 +89,7 @@
                         <input class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2" type="email" name="guest_email" value="{{ old('guest_email') }}" maxlength="255">
                     </label>
                 @endguest
-                <button class="rounded-sm border border-blue-700 bg-blue-700 px-4 py-2 font-medium text-white hover:bg-blue-800" type="submit">提交</button>
+                <button class="rounded-sm border border-blue-700 bg-blue-700 px-4 py-2 font-medium text-white hover:bg-blue-800" type="submit">提交工单</button>
             </form>
         </aside>
     </section>

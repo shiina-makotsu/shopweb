@@ -14,6 +14,9 @@ class AfterSalesRequest extends Model
     public const RESOLUTION_REFUND = 'refund';
     public const RESOLUTION_COUPON = 'coupon';
     public const RESOLUTION_MESSAGE = 'message';
+    public const REFUND_REQUESTED = 'requested';
+    public const REFUND_APPROVED = 'approved';
+    public const REFUND_REJECTED = 'rejected';
 
     protected $fillable = [
         'user_id',
@@ -26,6 +29,11 @@ class AfterSalesRequest extends Model
         'admin_note',
         'resolution_type',
         'refund_amount_cents',
+        'refund_status',
+        'refund_requested_by_id',
+        'refund_requested_at',
+        'refund_reviewed_by_id',
+        'refund_reviewed_at',
         'coupon_id',
         'resolved_at',
     ];
@@ -33,6 +41,8 @@ class AfterSalesRequest extends Model
     protected function casts(): array
     {
         return [
+            'refund_requested_at' => 'datetime',
+            'refund_reviewed_at' => 'datetime',
             'resolved_at' => 'datetime',
         ];
     }
@@ -55,5 +65,15 @@ class AfterSalesRequest extends Model
     public function coupon(): BelongsTo
     {
         return $this->belongsTo(Coupon::class);
+    }
+
+    public function refundRequester(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'refund_requested_by_id');
+    }
+
+    public function refundReviewer(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'refund_reviewed_by_id');
     }
 }

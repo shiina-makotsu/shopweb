@@ -94,6 +94,7 @@ class ProcurementService
 
                 $item->update([
                     'incoming_product_id' => $procurement->incoming_product_id,
+                    'warehouse_id' => $procurement->warehouse_id,
                     'status' => Order::STATUS_INCOMING,
                 ]);
 

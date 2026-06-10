@@ -69,6 +69,56 @@ class AdminAccess
         return in_array($area, self::allowedAreas($user->role), true);
     }
 
+    public static function canAction(string $action, ?User $user = null): bool
+    {
+        $user ??= Auth::user();
+
+        if (! $user) {
+            return false;
+        }
+
+        if ($user->role === self::ROLE_ADMIN) {
+            return true;
+        }
+
+        return in_array($user->role, self::actionRoles($action), true);
+    }
+
+    /**
+     * @return array<string>
+     */
+    public static function actionRoles(string $action): array
+    {
+        return match ($action) {
+            'orders.confirm_payment', 'orders.reject_payment' => [
+                self::ROLE_FINANCE,
+            ],
+            'inventory.adjust' => [
+                self::ROLE_WAREHOUSE,
+            ],
+            'procurement.receive' => [
+                self::ROLE_PURCHASING,
+                self::ROLE_WAREHOUSE,
+            ],
+            'finance.manage_costs' => [
+                self::ROLE_FINANCE,
+            ],
+            'after_sales.request_refund' => [
+                self::ROLE_SUPPORT,
+            ],
+            'after_sales.refund' => [
+                self::ROLE_FINANCE,
+                self::ROLE_SALES,
+            ],
+            'after_sales.resolve' => [
+                self::ROLE_SUPPORT,
+                self::ROLE_FINANCE,
+                self::ROLE_SALES,
+            ],
+            default => [],
+        };
+    }
+
     /**
      * @return array<string>
      */

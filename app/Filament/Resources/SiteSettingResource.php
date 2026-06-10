@@ -48,7 +48,9 @@ class SiteSettingResource extends Resource
     public static function form(Schema $schema): Schema
     {
         return $schema->components([
-            Section::make('商店信息')->schema([
+            Section::make('基础信息')
+                ->description('站点名称、联系方式和页脚文案等全局信息。')
+                ->schema([
                 TextInput::make('site_name')
                     ->label('站点名称')
                     ->maxLength(255)
@@ -63,12 +65,19 @@ class SiteSettingResource extends Resource
                 TextInput::make('copyright_text')->label('页脚版权信息')->maxLength(500)->columnSpanFull(),
             ])->columns(2)->columnSpanFull(),
 
-            Section::make('外观')->schema([
+            Section::make('品牌与模板')
+                ->description('Logo、站点图标和前台模板。')
+                ->schema([
                 self::imagePathSelect('logo_path', 'Logo', '从媒体库选择图片；也可以点击加号直接上传新 Logo。'),
                 self::imagePathSelect('favicon_path', '站点图标', '建议使用方形 PNG/SVG/ICO。'),
                 Select::make('theme_template')->label('前台模板')->options([
                     'default' => '默认模板',
                 ])->default('default')->dehydrateStateUsing(fn (?string $state): string => $state ?: 'default'),
+            ])->columns(2)->columnSpanFull(),
+
+            Section::make('颜色与布局')
+                ->description('控制前台基础配色、按钮圆角和商品卡片密度。')
+                ->schema([
                 ColorPicker::make('primary_color')
                     ->label('主色')
                     ->default('#7CBFE2')
@@ -81,8 +90,6 @@ class SiteSettingResource extends Resource
                     ->label('背景色')
                     ->default('#FFF9FC')
                     ->dehydrateStateUsing(fn (?string $state): string => preg_match('/^#[0-9a-fA-F]{6}$/', (string) $state) ? (string) $state : '#FFF9FC'),
-                self::imagePathSelect('home_background_path', '首页背景图', '可选。设置后首页会使用该图作为页面背景。'),
-                self::imagePathSelect('auth_background_path', '登录/注册背景图', '可选。设置后登录和注册页使用该图作为背景。'),
                 Select::make('button_radius')->label('按钮圆角')->options([
                     'none' => '直角',
                     'sm' => '小圆角',
@@ -94,12 +101,23 @@ class SiteSettingResource extends Resource
                 ])->default('comfortable')->dehydrateStateUsing(fn (?string $state): string => $state ?: 'comfortable'),
             ])->columns(2)->columnSpanFull(),
 
-            Section::make('订单隐私')->schema([
+            Section::make('页面背景')
+                ->description('只控制页面背景图，不影响 Logo 或媒体库资源。')
+                ->schema([
+                    self::imagePathSelect('home_background_path', '首页背景图', '可选。设置后首页会使用该图作为页面背景。'),
+                    self::imagePathSelect('auth_background_path', '登录/注册背景图', '可选。设置后登录和注册页使用该图作为背景。'),
+                ])->columns(2)->columnSpanFull(),
+
+            Section::make('订单隐私')
+                ->description('超级管理员可控制前台用户默认能否看到订单号和物流号。')
+                ->schema([
                 Toggle::make('show_order_numbers_to_users')->label('默认向用户显示订单号')->default(false),
                 Toggle::make('show_tracking_numbers_to_users')->label('默认向用户显示国内物流号')->default(true),
             ])->visible(fn (): bool => auth()->user()?->isSuperAdmin() ?? false)->columns(2)->columnSpanFull(),
 
-            Section::make('语言')->schema([
+            Section::make('语言')
+                ->description('前台语言默认跟随系统，并预留后续多语言扩展。')
+                ->schema([
                 Select::make('default_locale_mode')->label('默认语言模式')->options([
                     'system' => '跟随系统语言',
                     'zh_CN' => '中文',
@@ -117,13 +135,20 @@ class SiteSettingResource extends Resource
                 ])->default(['zh_CN', 'en', 'ja', 'ko', 'fr']),
             ])->columns(2)->columnSpanFull(),
 
-            Section::make('扩展接口')->schema([
+            Section::make('页面音乐')
+                ->description('页面音乐是前台体验功能，只允许选择音频文件。')
+                ->schema([
                 Toggle::make('page_music_enabled')->label('启用页面音乐')->default(false),
                 self::audioAssetPathSelect('page_music_asset_path', '页面音乐文件', '只允许引用或上传音频文件。'),
                 Select::make('page_music_mode')->label('播放模式')->options([
                     'manual' => '手动播放',
                     'page' => '按页面配置',
                 ])->default('manual'),
+            ])->columns(2)->columnSpanFull(),
+
+            Section::make('导购网页宠物')
+                ->description('导购宠物和前台导购 AI 的预留配置。客服 AI 已移动到客服菜单。')
+                ->schema([
                 Toggle::make('guide_pet_enabled')->label('启用导购网页宠物')->default(false),
                 self::assetPathSelect('guide_pet_asset_path', '导购宠物资源', '可上传宠物图片或动效资源，后续对接 AI 导购。'),
                 TextInput::make('guide_pet_api_endpoint')->label('AI 接口地址')->maxLength(500),
@@ -135,12 +160,6 @@ class SiteSettingResource extends Resource
                     'product' => '商品页',
                     'cart' => '购物车',
                 ])->default('storefront'),
-                Toggle::make('support_ai_enabled')->label('启用客服 AI 安抚')->default(false),
-                TextInput::make('support_ai_endpoint')->label('客服 AI 接口地址')->maxLength(500),
-                TextInput::make('support_ai_api_key')->label('客服 AI API Key')->password()->revealable()->maxLength(255),
-                TextInput::make('support_ai_model')->label('客服 AI 模型标识')->maxLength(255),
-                TextInput::make('support_ai_idle_minutes')->label('无人接待自动接入分钟数')->numeric()->minValue(1)->default(10),
-                Textarea::make('support_ai_system_prompt')->label('客服 AI 预设内容')->rows(5)->columnSpanFull()->helperText('用于较长时间没有客服接待时，对客户进行安抚或心理咨询。'),
             ])->columns(2)->columnSpanFull(),
         ]);
     }

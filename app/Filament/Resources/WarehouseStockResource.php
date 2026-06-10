@@ -9,9 +9,11 @@ use App\Filament\Resources\WarehouseStockResource\Pages\ListWarehouseStocks;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\Procurement;
+use App\Models\Warehouse;
 use App\Models\WarehouseMovement;
 use App\Models\WarehouseStock;
 use App\Services\WarehouseService;
+use App\Support\AdminAccess;
 use App\Support\RegexSearch;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
@@ -25,6 +27,7 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 
 class WarehouseStockResource extends Resource
 {
@@ -39,10 +42,27 @@ class WarehouseStockResource extends Resource
     protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedArchiveBox;
     protected static ?int $navigationSort = 20;
 
+    public static function canCreate(): bool
+    {
+        return AdminAccess::canAction('inventory.adjust');
+    }
+
+    public static function canEdit(Model $record): bool
+    {
+        return AdminAccess::canAction('inventory.adjust');
+    }
+
     public static function form(Schema $schema): Schema
     {
         return $schema->components([
             Section::make('仓库条目')->schema([
+                Select::make('warehouse_id')
+                    ->label('所属仓库')
+                    ->options(fn (): array => Warehouse::query()->where('is_active', true)->orderBy('sort_order')->orderBy('name')->pluck('name', 'id')->all())
+                    ->searchable()
+                    ->preload()
+                    ->default(fn (): ?int => Warehouse::query()->where('is_active', true)->orderBy('sort_order')->orderBy('id')->value('id'))
+                    ->required(),
                 Select::make('product_id')
                     ->label('商品')
                     ->options(fn (): array => Product::query()->orderBy('title')->limit(200)->pluck('title', 'id')->all())
@@ -62,7 +82,7 @@ class WarehouseStockResource extends Resource
                     ->options(fn (): array => Procurement::query()->latest()->limit(100)->pluck('name', 'id')->all())
                     ->searchable()
                     ->preload(),
-                TextInput::make('name')->label('仓库名称')->required()->maxLength(255),
+                TextInput::make('name')->label('条目名称')->required()->maxLength(255),
                 TextInput::make('sku')->label('仓库 SKU')->maxLength(255),
                 TextInput::make('quantity')->label('仓内数量')->numeric()->default(0)->required(),
                 TextInput::make('reserved_quantity')->label('预留数量')->numeric()->minValue(0)->default(0),
@@ -76,9 +96,10 @@ class WarehouseStockResource extends Resource
         return $table
             ->columns([
                 TextColumn::make('name')
-                    ->label('仓库名称')
+                    ->label('条目名称')
                     ->searchable(query: fn (Builder $query, string $search): Builder => RegexSearch::where($query, ['name', 'sku', 'note'], $search))
                     ->sortable(),
+                TextColumn::make('warehouse.name')->label('所属仓库')->sortable()->toggleable(),
                 TextColumn::make('product.title')->label('商品')->limit(32)->toggleable(),
                 TextColumn::make('variant.sku')->label('SKU')->searchable()->toggleable(),
                 TextColumn::make('procurement.name')->label('采购')->limit(32)->toggleable(),
@@ -92,6 +113,7 @@ class WarehouseStockResource extends Resource
                 Action::make('adjust')
                     ->label('调整')
                     ->icon(Heroicon::OutlinedAdjustmentsHorizontal)
+                    ->visible(fn (): bool => AdminAccess::canAction('inventory.adjust'))
                     ->form([
                         Select::make('type')
                             ->label('调整类型')

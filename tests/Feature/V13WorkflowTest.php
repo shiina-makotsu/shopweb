@@ -3,6 +3,7 @@
 use App\Models\Category;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\PaymentVerificationLog;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\ShippingCarrier;
@@ -92,11 +93,26 @@ it('auto checks payment proof for user display while keeping backend payment sub
         ->and($order->fresh()->payment_auto_check_status)->toBe(Order::AUTO_CHECK_PASSED)
         ->and($order->fresh()->userPaymentLabel())->toBe('已付款');
 
+    $this->assertDatabaseHas('payment_verification_logs', [
+        'order_id' => $order->id,
+        'user_id' => $user->id,
+        'payment_proof_path' => $path,
+        'expected_order_number' => 'PAY-1',
+        'detected_order_number' => 'PAY-1',
+        'expected_amount_cents' => 100,
+        'auto_result' => PaymentVerificationLog::AUTO_PASSED,
+    ]);
+
     app(OrderService::class)->rejectPayment($order);
 
     expect($order->fresh()->payment_status)->toBe(Order::PAYMENT_PENDING)
         ->and($order->fresh()->status)->toBe(Order::STATUS_PENDING_PAYMENT)
         ->and($order->fresh()->userPaymentLabel())->toBe('待支付');
+
+    $this->assertDatabaseHas('payment_verification_logs', [
+        'order_id' => $order->id,
+        'manual_result' => PaymentVerificationLog::MANUAL_REJECTED,
+    ]);
 });
 
 it('shows payment proof images to admins and a payment success state to customers', function (): void {
@@ -336,5 +352,5 @@ it('lets customers create support tickets and admins view them in backoffice', f
         ->get('/admin/support-tickets')
         ->assertOk()
         ->assertSee('物流问题')
-        ->assertSee('客服/售后需求');
+        ->assertSee('客服工单');
 });

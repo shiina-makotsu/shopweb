@@ -12,8 +12,8 @@ class ListSiteSettings extends ListRecords
 
     public function mount(): void
     {
-        SiteSetting::query()->firstOrCreate([], ['site_name' => config('app.name')]);
+        $setting = SiteSetting::query()->firstOrCreate([], ['site_name' => config('app.name')]);
 
-        parent::mount();
+        $this->redirect(SiteSettingResource::getUrl('edit', ['record' => $setting]), navigate: false);
     }
 }

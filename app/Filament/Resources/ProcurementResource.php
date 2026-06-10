@@ -9,8 +9,10 @@ use App\Filament\Resources\ProcurementResource\Pages\ListProcurements;
 use App\Models\OrderItem;
 use App\Models\Procurement;
 use App\Models\Product;
+use App\Models\Warehouse;
 use App\Services\ProcurementService;
 use App\Services\WarehouseService;
+use App\Support\AdminAccess;
 use App\Support\Money;
 use App\Support\RegexSearch;
 use Filament\Actions\Action;
@@ -54,6 +56,13 @@ class ProcurementResource extends Resource
                     ->preload()
                     ->required(),
                 TextInput::make('name')->label('采购名称')->required()->maxLength(255),
+                Select::make('warehouse_id')
+                    ->label('入库仓库')
+                    ->options(fn (): array => Warehouse::query()->where('is_active', true)->orderBy('sort_order')->orderBy('name')->pluck('name', 'id')->all())
+                    ->searchable()
+                    ->preload()
+                    ->default(fn (): ?int => Warehouse::query()->where('is_active', true)->orderBy('sort_order')->orderBy('id')->value('id'))
+                    ->required(),
                 TextInput::make('quantity')->label('采购数量')->numeric()->minValue(0)->default(0)->required(),
                 TextInput::make('purchase_amount_cents')->label('采购金额（分）')->numeric()->minValue(0)->default(0)->required(),
                 TextInput::make('shipping_amount_cents')->label('运输成本（分）')->numeric()->minValue(0)->default(0),
@@ -92,6 +101,7 @@ class ProcurementResource extends Resource
                     ->sortable(),
                 TextColumn::make('product.title')->label('原商品')->sortable(),
                 TextColumn::make('incomingProduct.title')->label('进货中商品')->limit(32)->toggleable(),
+                TextColumn::make('warehouse.name')->label('入库仓库')->toggleable(),
                 TextColumn::make('quantity')->label('数量')->sortable(),
                 TextColumn::make('purchase_amount_cents')->label('采购金额')->formatStateUsing(fn ($state): string => Money::format((int) $state))->sortable(),
                 TextColumn::make('shipping_amount_cents')->label('运输成本')->formatStateUsing(fn ($state): string => Money::format((int) $state))->sortable(),
@@ -141,7 +151,7 @@ class ProcurementResource extends Resource
                             ->rows(3)
                             ->helperText('货物到达仓库后确认入库，采购状态会变为已入库，并自动增加仓库数量。'),
                     ])
-                    ->visible(fn (Procurement $record): bool => $record->status !== Procurement::STATUS_RECEIVED && $record->status !== Procurement::STATUS_CANCELLED)
+                    ->visible(fn (Procurement $record): bool => AdminAccess::canAction('procurement.receive') && $record->status !== Procurement::STATUS_RECEIVED && $record->status !== Procurement::STATUS_CANCELLED)
                     ->action(fn (Procurement $record, array $data) => app(WarehouseService::class)->receiveProcurement($record, auth()->user(), $data['warehouse_note'] ?? null)),
             ]);
     }

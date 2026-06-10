@@ -15,7 +15,7 @@
             ['label' => '论坛', 'url' => route('forum.index'), 'opens_new_tab' => false, 'children' => collect()],
             ['label' => '物流查询', 'url' => route('shipments.show'), 'opens_new_tab' => false, 'children' => collect()],
             ['label' => '客服会话', 'url' => route('support.index'), 'opens_new_tab' => false, 'children' => collect()],
-            ['label' => '售后需求', 'url' => route('support.demands'), 'opens_new_tab' => false, 'children' => collect()],
+            ['label' => '客服工单', 'url' => route('support.demands'), 'opens_new_tab' => false, 'children' => collect()],
         ]);
     $menuLabel = fn ($item): string => is_array($item) ? $item['label'] : $item->label;
     $menuUrl = fn ($item): string => is_array($item) ? $item['url'] : $item->resolvedUrl();
@@ -71,6 +71,8 @@
             <div class="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 px-4 py-2">
                 <p>{{ $siteSettings?->welcome_message ?: '欢迎来到 '.$storeName }}</p>
                 <nav class="flex flex-wrap items-center gap-x-4 gap-y-2">
+                    <a class="hover:text-blue-700" href="{{ route('support.index') }}">客服</a>
+                    <a class="hover:text-blue-700" href="{{ route('support.demands') }}">工单</a>
                     @auth
                         <a class="relative inline-flex items-center hover:text-blue-700" href="{{ route('announcements.index') }}" title="公告">
                             <span aria-hidden="true">🔔</span>
@@ -222,12 +224,12 @@
                                 <a class="block px-3 py-2 hover:bg-blue-50 hover:text-blue-800" href="{{ route('user.center') }}">个人信息</a>
                                 <a class="block px-3 py-2 hover:bg-blue-50 hover:text-blue-800" href="{{ route('orders.index') }}">我的订单</a>
                                 <a class="block px-3 py-2 hover:bg-blue-50 hover:text-blue-800" href="{{ route('support.index') }}">客服会话</a>
-                                <a class="block px-3 py-2 hover:bg-blue-50 hover:text-blue-800" href="{{ route('support.demands') }}">售后需求</a>
+                                <a class="block px-3 py-2 hover:bg-blue-50 hover:text-blue-800" href="{{ route('support.demands') }}">客服工单</a>
                             @else
                                 <a class="block px-3 py-2 hover:bg-blue-50 hover:text-blue-800" href="{{ route('login') }}">登录</a>
                                 <a class="block px-3 py-2 hover:bg-blue-50 hover:text-blue-800" href="{{ route('register') }}">注册新账号</a>
                                 <a class="block px-3 py-2 hover:bg-blue-50 hover:text-blue-800" href="{{ route('support.index') }}">游客客服</a>
-                                <a class="block px-3 py-2 hover:bg-blue-50 hover:text-blue-800" href="{{ route('support.demands') }}">售后需求</a>
+                                <a class="block px-3 py-2 hover:bg-blue-50 hover:text-blue-800" href="{{ route('support.demands') }}">客服工单</a>
                             @endauth
                         </nav>
                     </section>

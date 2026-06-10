@@ -233,7 +233,7 @@ it('lets thread owners and section moderators manage forum content with activity
 it('lets guests create support tickets with a generated guest id', function (): void {
     $this->get(route('support.demands'))
         ->assertOk()
-        ->assertSee('售后/客服需求');
+        ->assertSee('客服工单');
 
     $this->post(route('support.store'), [
         'category' => 'consultation',
@@ -258,6 +258,8 @@ it('supports chat style customer service sessions with attachments and admin rec
     $this->get(route('support.index'))
         ->assertOk()
         ->assertSee('客服会话')
+        ->assertSee('正在排队等待客服接入')
+        ->assertSee('最长等待约 10 分钟')
         ->assertSee('暂无消息');
 
     $this->post(route('support.messages.store'), [
@@ -539,6 +541,7 @@ it('adds support ai comfort messages when an open chat waits too long', function
     $this->withSession(['support_guest_id' => 'guest_idle_ai'])
         ->get(route('support.sessions.show', $session))
         ->assertOk()
+        ->assertSee('最长等待约 1 分钟')
         ->assertSee('我先陪你等客服接入。');
 
     $this->assertDatabaseHas('support_chat_messages', [

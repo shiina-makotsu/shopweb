@@ -8,8 +8,10 @@ use App\Filament\Resources\OrderResource\Pages\ListOrders;
 use App\Models\Order;
 use App\Models\Product;
 use App\Services\OrderService;
+use App\Support\AdminAccess;
 use App\Support\Money;
 use App\Support\OrderStatusPresenter;
+use App\Support\OrderTimeline;
 use App\Support\RegexSearch;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
@@ -55,6 +57,7 @@ class OrderResource extends Resource
                 TextInput::make('payment_status')->label('付款状态')->disabled(),
                 TextInput::make('subtotal_cents')->label('小计')->disabled()->formatStateUsing(fn ($state): string => Money::format((int) $state)),
                 TextInput::make('discount_cents')->label('优惠')->disabled()->formatStateUsing(fn ($state): string => Money::format((int) $state)),
+                TextInput::make('shipping_fee_cents')->label('邮费')->disabled()->formatStateUsing(fn ($state): string => Money::format((int) $state)),
                 TextInput::make('total_cents')->label('应付')->disabled()->formatStateUsing(fn ($state): string => Money::format((int) $state)),
                 TextInput::make('coupon_code')->label('优惠码')->disabled(),
                 TextInput::make('payment_proof_path')->label('付款凭证路径')->disabled()->columnSpanFull(),
@@ -76,7 +79,9 @@ class OrderResource extends Resource
                 TextInput::make('contact_name')->label('联系人')->disabled(),
                 TextInput::make('contact_phone')->label('电话')->disabled(),
                 TextInput::make('contact_email')->label('邮箱')->disabled(),
+                TextInput::make('shipping_province')->label('收货省份')->disabled(),
                 Textarea::make('shipping_address')->label('收货地址')->disabled()->rows(3)->columnSpanFull(),
+                Textarea::make('shipment_notice')->label('多仓发货提醒')->disabled()->rows(3)->columnSpanFull(),
                 Select::make('shipping_carrier_id')->label('物流承运商')->relationship('shippingCarrier', 'name')->searchable()->preload(),
                 TextInput::make('tracking_number')->label('物流单号')->maxLength(255),
                 TextInput::make('tracking_url')->label('物流查询链接')->maxLength(500)->columnSpanFull(),
@@ -89,7 +94,48 @@ class OrderResource extends Resource
                 Textarea::make('customer_note')->label('客户备注')->disabled()->rows(3)->columnSpanFull(),
                 Textarea::make('admin_note')->label('后台备注')->rows(4)->columnSpanFull(),
             ])->columns(2)->columnSpanFull(),
+            Section::make('业务时间线')->schema([
+                Placeholder::make('timeline')
+                    ->label('')
+                    ->content(fn (?Order $record): HtmlString => static::timelineHtml($record))
+                    ->columnSpanFull(),
+            ])->columnSpanFull(),
         ]);
+    }
+
+    private static function timelineHtml(?Order $record): HtmlString
+    {
+        if (! $record) {
+            return new HtmlString('<p style="color:#64748b;">保存订单后显示业务时间线。</p>');
+        }
+
+        $events = app(OrderTimeline::class)->events($record);
+
+        if ($events === []) {
+            return new HtmlString('<p style="color:#64748b;">暂无业务时间线。</p>');
+        }
+
+        $items = collect($events)->map(function (array $event): string {
+            $time = e($event['time']->format('Y-m-d H:i'));
+            $label = e($event['label']);
+            $detail = e($event['detail'] ?: '-');
+            $actor = $event['actor'] ? '<span style="color:#64748b;">'.e($event['actor']).'</span>' : '';
+
+            return <<<HTML
+                <li style="display:grid;grid-template-columns:140px 1fr;gap:12px;padding:10px 0;border-bottom:1px solid #e2e8f0;">
+                    <time style="color:#64748b;font-size:12px;">{$time}</time>
+                    <div>
+                        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                            <strong>{$label}</strong>
+                            {$actor}
+                        </div>
+                        <p style="margin-top:4px;color:#475569;font-size:13px;line-height:1.5;">{$detail}</p>
+                    </div>
+                </li>
+            HTML;
+        })->implode('');
+
+        return new HtmlString('<ol style="margin:0;padding:0;list-style:none;">'.$items.'</ol>');
     }
 
     public static function table(Table $table): Table
@@ -107,6 +153,7 @@ class OrderResource extends Resource
                     ->label('邮箱')
                     ->searchable(query: fn (Builder $query, string $search): Builder => $query->whereHas('user', fn (Builder $userQuery) => RegexSearch::where($userQuery, ['email'], $search))),
                 TextColumn::make('total_cents')->label('金额')->formatStateUsing(fn ($state) => Money::format($state))->sortable(),
+                TextColumn::make('shipping_fee_cents')->label('邮费')->formatStateUsing(fn ($state) => Money::format((int) $state))->sortable()->toggleable(),
                 TextColumn::make('status')
                     ->label('订单状态')
                     ->formatStateUsing(fn (?string $state): string => app(OrderStatusPresenter::class)->label($state))
@@ -128,7 +175,7 @@ class OrderResource extends Resource
                 Action::make('confirmPayment')
                     ->label('确认收款')
                     ->requiresConfirmation()
-                    ->visible(fn (Order $record): bool => $record->payment_status !== Order::PAYMENT_CONFIRMED && $record->status !== Order::STATUS_CANCELLED)
+                    ->visible(fn (Order $record): bool => AdminAccess::canAction('orders.confirm_payment') && $record->payment_status !== Order::PAYMENT_CONFIRMED && $record->status !== Order::STATUS_CANCELLED)
                     ->action(fn (Order $record) => app(OrderService::class)->confirmPayment($record, auth()->user())),
                 Action::make('ship')
                     ->label('发货')
@@ -195,7 +242,7 @@ class OrderResource extends Resource
                     ->form([
                         Textarea::make('admin_note')->label('驳回说明')->rows(3),
                     ])
-                    ->visible(fn (Order $record): bool => $record->payment_status === Order::PAYMENT_SUBMITTED)
+                    ->visible(fn (Order $record): bool => AdminAccess::canAction('orders.reject_payment') && $record->payment_status === Order::PAYMENT_SUBMITTED)
                     ->action(fn (Order $record, array $data) => app(OrderService::class)->rejectPayment($record, $data['admin_note'] ?? null, auth()->user())),
                 Action::make('fulfill')
                     ->label('标记完成')

@@ -39,8 +39,9 @@ class WarehouseMovementResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
-            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with(['stock', 'procurement', 'order', 'user', 'variant']))
+            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with(['warehouse', 'stock', 'procurement', 'order', 'user', 'variant']))
             ->columns([
+                TextColumn::make('warehouse.name')->label('仓库')->toggleable(),
                 TextColumn::make('stock.name')
                     ->label('仓库条目')
                     ->searchable(query: fn (Builder $query, string $search): Builder => $query->whereHas('stock', fn (Builder $stockQuery) => RegexSearch::where($stockQuery, ['name', 'sku'], $search)))

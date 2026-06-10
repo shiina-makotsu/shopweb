@@ -12,6 +12,9 @@ use App\Models\MediaAsset;
 use App\Models\Page;
 use App\Models\SiteSetting;
 use App\Models\User;
+use App\Models\Warehouse;
+use App\Models\WarehouseShippingRate;
+use App\Models\WarehouseStock;
 use App\Services\OrderService;
 
 it('allows a customer to add a sku to cart and create an order', function (): void {
@@ -453,7 +456,7 @@ it('orders home product sections and places store pages in the welcome header', 
         ->assertSee('折扣商品')
         ->assertSee('概念商品')
         ->assertSee('客服会话')
-        ->assertSee('售后需求')
+        ->assertSee('客服工单')
         ->assertSee('折扣测试商品')
         ->assertSee('概念测试商品')
         ->assertSee('购买')
@@ -1082,4 +1085,177 @@ it('shows the next flash sale time when a flash sale has not started yet', funct
         ->assertOk()
         ->assertSee('下次秒杀：'.$startsAt->format('m-d H:i'))
         ->assertSee('未开始');
+});
+
+it('calculates checkout shipping from warehouse province rates and product extra fees', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+    $category = \App\Models\Category::query()->create(['name' => '邮费', 'slug' => 'shipping-fee', 'is_active' => true]);
+
+    $warehouse = Warehouse::query()->create([
+        'name' => '测试 A 仓',
+        'country' => '中国',
+        'street' => '测试占位地址',
+        'is_active' => true,
+    ]);
+    WarehouseShippingRate::query()->create([
+        'warehouse_id' => $warehouse->id,
+        'name' => '北京',
+        'provinces' => ['北京'],
+        'fee_cents' => 1200,
+        'is_active' => true,
+    ]);
+    WarehouseShippingRate::query()->create([
+        'warehouse_id' => $warehouse->id,
+        'name' => '其他地区',
+        'fee_cents' => 2000,
+        'is_default' => true,
+        'is_active' => true,
+    ]);
+
+    $productA = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => '大件商品 A',
+        'slug' => 'heavy-product-a',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_LOGISTICS,
+        'shipping_extra_fee_cents' => 200,
+    ]);
+    $variantA = ProductVariant::query()->create([
+        'product_id' => $productA->id,
+        'sku' => 'SHIP-A',
+        'price_cents' => 10000,
+        'stock' => 5,
+        'is_active' => true,
+    ]);
+
+    $productB = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => '大件商品 B',
+        'slug' => 'heavy-product-b',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_LOGISTICS,
+        'shipping_extra_fee_cents' => 300,
+    ]);
+    $variantB = ProductVariant::query()->create([
+        'product_id' => $productB->id,
+        'sku' => 'SHIP-B',
+        'price_cents' => 20000,
+        'stock' => 5,
+        'is_active' => true,
+    ]);
+
+    foreach ([$variantA, $variantB] as $variant) {
+        WarehouseStock::query()->create([
+            'warehouse_id' => $warehouse->id,
+            'product_id' => $variant->product_id,
+            'product_variant_id' => $variant->id,
+            'name' => $variant->product->title,
+            'sku' => $variant->sku,
+            'quantity' => 5,
+        ]);
+    }
+
+    $this->post(route('cart.items.store'), ['variant_id' => $variantA->id, 'quantity' => 1]);
+    $this->post(route('cart.items.store'), ['variant_id' => $variantB->id, 'quantity' => 1]);
+
+    $this->actingAs($user)->post(route('checkout.store'), [
+        'contact_name' => '收件人',
+        'contact_phone' => '13800000000',
+        'contact_email' => 'ship@example.com',
+        'shipping_province' => '北京',
+        'shipping_address' => '中国 北京市 朝阳区 测试路 1 号',
+    ])->assertRedirect();
+
+    $order = Order::query()->where('user_id', $user->id)->firstOrFail();
+
+    expect($order->shipping_fee_cents)->toBe(1700)
+        ->and($order->total_cents)->toBe(31700)
+        ->and($order->shipment_notice)->toBeNull()
+        ->and($order->items()->where('warehouse_id', $warehouse->id)->count())->toBe(2);
+});
+
+it('warns and charges per warehouse when an order must ship from multiple warehouses', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+    $category = \App\Models\Category::query()->create(['name' => '多仓', 'slug' => 'multi-warehouse', 'is_active' => true]);
+
+    $warehouseA = Warehouse::query()->create(['name' => '测试 A 仓', 'country' => '中国', 'street' => 'A 仓占位', 'is_active' => true]);
+    $warehouseB = Warehouse::query()->create(['name' => '测试 B 仓', 'country' => '中国', 'street' => 'B 仓占位', 'is_active' => true]);
+
+    WarehouseShippingRate::query()->create([
+        'warehouse_id' => $warehouseA->id,
+        'name' => '北京',
+        'provinces' => ['北京'],
+        'fee_cents' => 1200,
+        'is_active' => true,
+    ]);
+    WarehouseShippingRate::query()->create([
+        'warehouse_id' => $warehouseB->id,
+        'name' => '北京',
+        'provinces' => ['北京'],
+        'fee_cents' => 1800,
+        'is_active' => true,
+    ]);
+
+    $productA = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => '多仓商品 A',
+        'slug' => 'multi-product-a',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_LOGISTICS,
+        'shipping_extra_fee_cents' => 200,
+    ]);
+    $variantA = ProductVariant::query()->create(['product_id' => $productA->id, 'sku' => 'MULTI-A', 'price_cents' => 10000, 'stock' => 5, 'is_active' => true]);
+
+    $productB = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => '多仓商品 B',
+        'slug' => 'multi-product-b',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_LOGISTICS,
+        'shipping_extra_fee_cents' => 300,
+    ]);
+    $variantB = ProductVariant::query()->create(['product_id' => $productB->id, 'sku' => 'MULTI-B', 'price_cents' => 20000, 'stock' => 5, 'is_active' => true]);
+
+    WarehouseStock::query()->create([
+        'warehouse_id' => $warehouseA->id,
+        'product_id' => $productA->id,
+        'product_variant_id' => $variantA->id,
+        'name' => $productA->title,
+        'sku' => $variantA->sku,
+        'quantity' => 5,
+    ]);
+    WarehouseStock::query()->create([
+        'warehouse_id' => $warehouseB->id,
+        'product_id' => $productB->id,
+        'product_variant_id' => $variantB->id,
+        'name' => $productB->title,
+        'sku' => $variantB->sku,
+        'quantity' => 5,
+    ]);
+
+    $this->post(route('cart.items.store'), ['variant_id' => $variantA->id, 'quantity' => 1]);
+    $this->post(route('cart.items.store'), ['variant_id' => $variantB->id, 'quantity' => 1]);
+
+    $this->actingAs($user)
+        ->get(route('checkout.create'))
+        ->assertOk()
+        ->assertSee('本订单需要多仓发货')
+        ->assertSee('测试 A 仓')
+        ->assertSee('测试 B 仓');
+
+    $this->actingAs($user)->post(route('checkout.store'), [
+        'contact_name' => '收件人',
+        'contact_phone' => '13800000000',
+        'contact_email' => 'multi@example.com',
+        'shipping_province' => '北京',
+        'shipping_address' => '中国 北京市 朝阳区 测试路 2 号',
+    ])->assertRedirect();
+
+    $order = Order::query()->where('user_id', $user->id)->firstOrFail();
+
+    expect($order->shipping_fee_cents)->toBe(3500)
+        ->and($order->total_cents)->toBe(33500)
+        ->and($order->shipment_notice)->toContain('多仓发货')
+        ->and($order->items()->where('warehouse_id', $warehouseA->id)->count())->toBe(1)
+        ->and($order->items()->where('warehouse_id', $warehouseB->id)->count())->toBe(1);
 });

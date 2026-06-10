@@ -26,9 +26,9 @@ class SupportTicketResource extends Resource
 
     protected static ?string $model = SupportTicket::class;
     protected static string $permissionArea = 'support';
-    protected static ?string $navigationLabel = '客服/售后需求';
-    protected static ?string $modelLabel = '客服/售后需求';
-    protected static ?string $pluralModelLabel = '客服/售后需求';
+    protected static ?string $navigationLabel = '客服工单';
+    protected static ?string $modelLabel = '客服工单';
+    protected static ?string $pluralModelLabel = '客服工单';
     protected static string|\UnitEnum|null $navigationGroup = '客服';
     protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedInboxStack;
     protected static ?int $navigationSort = 20;
@@ -46,14 +46,14 @@ class SupportTicketResource extends Resource
     public static function form(Schema $schema): Schema
     {
         return $schema->components([
-            Section::make('用户问题')->schema([
+            Section::make('工单内容')->schema([
                 Placeholder::make('user_email')->label('用户邮箱')->content(fn (?SupportTicket $record): string => $record?->user?->email ?? '-'),
                 Placeholder::make('order_number')->label('关联订单')->content(fn (?SupportTicket $record): string => $record?->order?->order_number ?? '-'),
                 TextInput::make('category')->label('分类')->disabled(),
                 TextInput::make('subject')->label('主题')->disabled()->columnSpanFull(),
                 Textarea::make('message')->label('内容')->disabled()->rows(6)->columnSpanFull(),
             ])->columns(2)->columnSpanFull(),
-            Section::make('处理')->schema([
+            Section::make('处理记录')->schema([
                 Select::make('status')->label('状态')->options([
                     SupportTicket::STATUS_OPEN => '待处理',
                     SupportTicket::STATUS_REPLIED => '已回复',

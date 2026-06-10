@@ -54,6 +54,7 @@ class Product extends Model
         'crowdfunding_goal_cents',
         'crowdfunding_reward',
         'crowdfunding_cancelled_at',
+        'shipping_extra_fee_cents',
         'sort_order',
     ];
 

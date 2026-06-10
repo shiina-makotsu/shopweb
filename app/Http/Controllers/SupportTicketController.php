@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\SiteSetting;
 use App\Models\SupportChatMessage;
 use App\Models\SupportChatSession;
 use App\Models\SupportTicket;
@@ -72,7 +73,7 @@ class SupportTicketController extends Controller
             'status' => SupportTicket::STATUS_OPEN,
         ]);
 
-        return back()->with('status', '售后/客服需求已提交，后台客服会在处理后显示回复。');
+        return back()->with('status', '客服工单已提交，后台客服会在处理后显示回复。');
     }
 
     public function sendMessage(Request $request): RedirectResponse
@@ -229,6 +230,7 @@ class SupportTicketController extends Controller
         app(SupportChatService::class)->comfortIfIdle($session);
         $this->markAdminMessagesRead($request, $session);
         $session->load(['messages.sender', 'assignedAdmin', 'order']);
+        $settings = SiteSetting::query()->first();
 
         $sessions = $this->visibleSessions($request)
             ->with(['assignedAdmin', 'order'])
@@ -252,6 +254,8 @@ class SupportTicketController extends Controller
             'guestId' => $request->user() ? null : $this->guestId($request),
             'selectedOrder' => $selectedOrder,
             'orders' => $this->userOrders($request),
+            'supportAiEnabled' => (bool) ($settings?->support_ai_enabled ?? false),
+            'supportAiIdleMinutes' => max(1, (int) ($settings?->support_ai_idle_minutes ?: 10)),
         ]);
     }
 

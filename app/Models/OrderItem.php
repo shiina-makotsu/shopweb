@@ -14,6 +14,7 @@ class OrderItem extends Model
         'order_id',
         'product_id',
         'product_variant_id',
+        'warehouse_id',
         'product_title',
         'product_status',
         'variant_sku',
@@ -41,6 +42,11 @@ class OrderItem extends Model
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);
+    }
+
+    public function warehouse(): BelongsTo
+    {
+        return $this->belongsTo(Warehouse::class);
     }
 
     public function incomingProduct(): BelongsTo

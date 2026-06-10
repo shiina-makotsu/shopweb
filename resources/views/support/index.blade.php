@@ -27,7 +27,7 @@
                 </div>
                 <div class="mt-3 grid grid-cols-2 gap-2 text-xs">
                     <a class="rounded-sm border border-slate-300 bg-white px-3 py-2 text-center font-medium hover:bg-blue-50 hover:text-blue-800" href="{{ route('support.index') }}">即时会话</a>
-                    <a class="rounded-sm border border-slate-300 bg-white px-3 py-2 text-center font-medium hover:bg-blue-50 hover:text-blue-800" href="{{ route('support.demands') }}">售后需求</a>
+                    <a class="rounded-sm border border-slate-300 bg-white px-3 py-2 text-center font-medium hover:bg-blue-50 hover:text-blue-800" href="{{ route('support.demands') }}">客服工单</a>
                 </div>
             </div>
 
@@ -75,9 +75,19 @@
                     @if($session->isEnded())
                         <p class="mt-1 text-xs text-amber-700">本次接待已结束。继续发送消息会重新发起会话。</p>
                     @endif
+                    @if(! $session->assigned_admin_id && $session->status === SupportChatSession::STATUS_OPEN)
+                        <div class="mt-3 rounded-sm border border-blue-200 bg-blue-50 px-3 py-2 text-xs leading-5 text-blue-900">
+                            正在排队等待客服接入。最长等待约 {{ $supportAiIdleMinutes }} 分钟；
+                            @if($supportAiEnabled)
+                                超过后会自动进入 AI 安抚接待，你仍然可以继续补充订单、截图或文件。
+                            @else
+                                客服会按队列尽快处理，你可以继续补充订单、截图或文件。
+                            @endif
+                        </div>
+                    @endif
                 </div>
                 <div class="flex flex-wrap gap-2 text-xs">
-                    <a class="rounded-sm border border-slate-300 bg-white px-3 py-2 font-medium hover:bg-slate-50" href="{{ route('support.demands') }}">提交售后需求</a>
+                    <a class="rounded-sm border border-slate-300 bg-white px-3 py-2 font-medium hover:bg-slate-50" href="{{ route('support.demands') }}">提交客服工单</a>
                     <button
                         class="rounded-sm border border-red-200 bg-white px-3 py-2 font-medium text-red-700 hover:bg-red-50"
                         type="button"

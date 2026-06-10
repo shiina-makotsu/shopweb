@@ -55,7 +55,12 @@ class DashboardStats extends StatsOverviewWidget
                 ->descriptionIcon(Heroicon::OutlinedChartBar)
                 ->color('primary'),
 
-            Stat::make('利润', Money::format($profit['profit_cents']))
+            Stat::make('毛利润', Money::format($profit['gross_profit_cents']))
+                ->description('销售额 - 采购成本')
+                ->descriptionIcon(Heroicon::OutlinedPresentationChartLine)
+                ->color($profit['gross_profit_cents'] >= 0 ? 'success' : 'danger'),
+
+            Stat::make('总利润', Money::format($profit['profit_cents']))
                 ->description('销售额 - 总成本')
                 ->descriptionIcon(Heroicon::OutlinedChartPie)
                 ->color($profit['profit_cents'] >= 0 ? 'success' : 'danger'),

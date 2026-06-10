@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class WarehouseStock extends Model
 {
     protected $fillable = [
+        'warehouse_id',
         'product_id',
         'product_variant_id',
         'procurement_id',
@@ -18,6 +19,11 @@ class WarehouseStock extends Model
         'reserved_quantity',
         'note',
     ];
+
+    public function warehouse(): BelongsTo
+    {
+        return $this->belongsTo(Warehouse::class);
+    }
 
     public function product(): BelongsTo
     {

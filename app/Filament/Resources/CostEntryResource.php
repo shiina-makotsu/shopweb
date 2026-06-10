@@ -8,6 +8,7 @@ use App\Filament\Resources\CostEntryResource\Pages\EditCostEntry;
 use App\Filament\Resources\CostEntryResource\Pages\ListCostEntries;
 use App\Models\CostEntry;
 use App\Models\Procurement;
+use App\Support\AdminAccess;
 use App\Support\Money;
 use App\Support\RegexSearch;
 use Filament\Actions\DeleteAction;
@@ -24,6 +25,7 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 
 class CostEntryResource extends Resource
 {
@@ -37,6 +39,21 @@ class CostEntryResource extends Resource
     protected static string|\UnitEnum|null $navigationGroup = '财务';
     protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedBanknotes;
     protected static ?int $navigationSort = 20;
+
+    public static function canCreate(): bool
+    {
+        return AdminAccess::canAction('finance.manage_costs');
+    }
+
+    public static function canEdit(Model $record): bool
+    {
+        return AdminAccess::canAction('finance.manage_costs');
+    }
+
+    public static function canDelete(Model $record): bool
+    {
+        return AdminAccess::canAction('finance.manage_costs') && ! $record->is_auto;
+    }
 
     public static function form(Schema $schema): Schema
     {
@@ -74,8 +91,8 @@ class CostEntryResource extends Resource
                 TextColumn::make('updated_at')->label('更新')->dateTime('Y-m-d H:i')->sortable(),
             ])
             ->defaultSort('updated_at', 'desc')
-            ->recordActions([EditAction::make(), DeleteAction::make()->visible(fn (CostEntry $record): bool => ! $record->is_auto)])
-            ->toolbarActions([DeleteBulkAction::make()]);
+            ->recordActions([EditAction::make(), DeleteAction::make()->visible(fn (CostEntry $record): bool => static::canDelete($record))])
+            ->toolbarActions([DeleteBulkAction::make()->visible(fn (): bool => AdminAccess::canAction('finance.manage_costs'))]);
     }
 
     public static function getPages(): array

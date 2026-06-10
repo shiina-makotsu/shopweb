@@ -4,10 +4,12 @@ namespace App\Services;
 
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\InventoryMovement;
 use App\Models\Procurement;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\User;
+use App\Models\Warehouse;
 use App\Models\WarehouseMovement;
 use App\Models\WarehouseStock;
 use Illuminate\Support\Facades\DB;
@@ -21,14 +23,18 @@ class WarehouseService
             $product = $procurement->incomingProduct ?: $procurement->product;
             $variant = $product?->variants()->oldest('id')->first();
             $quantity = (int) $procurement->quantity;
+            $warehouse = $procurement->warehouse ?: $this->defaultWarehouse();
 
-            $stock = $this->stockFor($product, $variant, $procurement, $procurement->name);
+            $stock = $this->stockFor($product, $variant, $warehouse, $procurement, $procurement->name);
             $this->move($stock, $quantity, WarehouseMovement::TYPE_RECEIVED, [
+                'warehouse_id' => $warehouse?->id,
                 'procurement_id' => $procurement->id,
                 'product_id' => $product?->id,
                 'product_variant_id' => $variant?->id,
                 'user_id' => $actor?->id,
                 'note' => $note ?: '采购确认入库：'.$procurement->name,
+                'sync_variant_stock' => true,
+                'sync_variant_stock_reason' => 'warehouse_received',
             ]);
 
             $procurement->update([
@@ -47,15 +53,19 @@ class WarehouseService
             foreach ($order->items as $item) {
                 $product = $item->incomingProduct ?: $item->product;
                 $variant = $this->variantForItem($item, $product);
-                $stock = $this->stockFor($product, $variant, null, $item->product_title);
+                $warehouse = $item->warehouse ?: $this->defaultWarehouse();
+                $stock = $this->stockFor($product, $variant, $warehouse, null, $item->product_title);
 
                 $this->move($stock, -1 * (int) $item->quantity, WarehouseMovement::TYPE_SHIPPED, [
+                    'warehouse_id' => $warehouse?->id,
                     'order_id' => $order->id,
                     'order_item_id' => $item->id,
                     'product_id' => $product?->id,
                     'product_variant_id' => $variant?->id,
                     'user_id' => $actor?->id,
                     'note' => $note ?: '订单发货自动出库：'.$order->order_number,
+                    'sync_variant_stock' => $item->product_status !== Product::STATUS_PUBLISHED,
+                    'sync_variant_stock_reason' => 'warehouse_shipped',
                 ]);
             }
         });
@@ -69,15 +79,19 @@ class WarehouseService
             foreach ($order->items as $item) {
                 $product = $item->incomingProduct ?: $item->product;
                 $variant = $this->variantForItem($item, $product);
-                $stock = $this->stockFor($product, $variant, null, $item->product_title);
+                $warehouse = $item->warehouse ?: $this->defaultWarehouse();
+                $stock = $this->stockFor($product, $variant, $warehouse, null, $item->product_title);
 
                 $this->move($stock, (int) $item->quantity, WarehouseMovement::TYPE_RETURNED, [
+                    'warehouse_id' => $warehouse?->id,
                     'order_id' => $order->id,
                     'order_item_id' => $item->id,
                     'product_id' => $product?->id,
                     'product_variant_id' => $variant?->id,
                     'user_id' => $actor?->id,
                     'note' => $note ?: '拒收/退回确认入库：'.$order->order_number,
+                    'sync_variant_stock' => true,
+                    'sync_variant_stock_reason' => 'warehouse_returned',
                 ]);
             }
         });
@@ -90,11 +104,14 @@ class WarehouseService
             : WarehouseMovement::TYPE_ADJUSTMENT;
 
         $this->move($stock, $delta, $type, [
+            'warehouse_id' => $stock->warehouse_id,
             'procurement_id' => $stock->procurement_id,
             'product_id' => $stock->product_id,
             'product_variant_id' => $stock->product_variant_id,
             'user_id' => $actor?->id,
             'note' => $note,
+            'sync_variant_stock' => true,
+            'sync_variant_stock_reason' => 'warehouse_'.$type,
         ]);
     }
 
@@ -108,8 +125,9 @@ class WarehouseService
             $stock->increment('quantity', $delta);
             $stock->refresh();
 
-            return WarehouseMovement::query()->create([
+            $movement = WarehouseMovement::query()->create([
                 'warehouse_stock_id' => $stock->id,
+                'warehouse_id' => $context['warehouse_id'] ?? $stock->warehouse_id,
                 'procurement_id' => $context['procurement_id'] ?? null,
                 'order_id' => $context['order_id'] ?? null,
                 'order_item_id' => $context['order_item_id'] ?? null,
@@ -121,12 +139,62 @@ class WarehouseService
                 'quantity_after' => (int) $stock->quantity,
                 'note' => $context['note'] ?? null,
             ]);
+
+            if (($context['sync_variant_stock'] ?? false) && $stock->product_variant_id) {
+                $this->syncVariantStockDelta($stock, $delta, $context, $movement);
+            }
+
+            return $movement;
         });
     }
 
-    private function stockFor(?Product $product, ?ProductVariant $variant, ?Procurement $procurement = null, ?string $fallbackName = null): WarehouseStock
+    /**
+     * @param  array<string, mixed>  $context
+     */
+    private function syncVariantStockDelta(WarehouseStock $stock, int $delta, array $context, WarehouseMovement $movement): void
     {
+        $variant = ProductVariant::query()
+            ->whereKey($stock->product_variant_id)
+            ->lockForUpdate()
+            ->first();
+
+        if (! $variant) {
+            return;
+        }
+
+        $oldStock = (int) $variant->stock;
+        $newStock = max(0, $oldStock + $delta);
+
+        if ($newStock === $oldStock) {
+            return;
+        }
+
+        $variant->forceFill(['stock' => $newStock])->save();
+
+        InventoryMovement::query()->create([
+            'product_variant_id' => $variant->id,
+            'order_id' => $context['order_id'] ?? null,
+            'user_id' => $context['user_id'] ?? null,
+            'delta' => $newStock - $oldStock,
+            'stock_after' => $newStock,
+            'reason' => $context['sync_variant_stock_reason'] ?? 'warehouse_sync',
+            'note' => trim(($context['note'] ?? '').' / 仓库流水 #'.$movement->id, ' /'),
+        ]);
+
+        $product = $variant->product()->first();
+        if ($product?->status === Product::STATUS_PUBLISHED && $product->activeVariants()->sum('stock') <= 0) {
+            $product->update(['status' => Product::STATUS_SOLD_OUT]);
+        } elseif ($product?->status === Product::STATUS_SOLD_OUT && $product->activeVariants()->sum('stock') > 0) {
+            $product->update(['status' => Product::STATUS_PUBLISHED]);
+        }
+    }
+
+    private function stockFor(?Product $product, ?ProductVariant $variant, ?Warehouse $warehouse = null, ?Procurement $procurement = null, ?string $fallbackName = null): WarehouseStock
+    {
+        $warehouse ??= $this->defaultWarehouse();
+
         $query = WarehouseStock::query()
+            ->where('warehouse_id', $warehouse?->id)
             ->where('product_id', $product?->id)
             ->where('product_variant_id', $variant?->id);
 
@@ -141,6 +209,7 @@ class WarehouseService
         }
 
         return WarehouseStock::query()->create([
+            'warehouse_id' => $warehouse?->id,
             'product_id' => $product?->id,
             'product_variant_id' => $variant?->id,
             'procurement_id' => $procurement?->id,
@@ -163,5 +232,13 @@ class WarehouseService
         }
 
         return $product?->variants()->oldest('id')->first();
+    }
+
+    private function defaultWarehouse(): Warehouse
+    {
+        return Warehouse::query()->firstOrCreate(
+            ['name' => '默认仓库'],
+            ['country' => '中国', 'is_active' => true, 'sort_order' => 0],
+        );
     }
 }

@@ -130,6 +130,7 @@ Route::middleware(['auth', 'admin'])->prefix('admin/payment-proofs')->name('admi
 Route::middleware(['auth', 'admin'])->prefix('admin/report-exports')->name('admin.report-exports.')->group(function (): void {
     Route::get('/product-sales', [ReportExportController::class, 'productSales'])->name('product-sales');
     Route::get('/category-sales', [ReportExportController::class, 'categorySales'])->name('category-sales');
+    Route::get('/profit-overview', [ReportExportController::class, 'profitOverview'])->name('profit-overview');
 });
 
 Route::middleware(['auth', 'admin'])->prefix('admin/backups')->name('admin.backups.')->group(function (): void {

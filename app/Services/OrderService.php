@@ -6,11 +6,13 @@ use App\Mail\OrderShippedMail;
 use App\Models\CouponRedemption;
 use App\Models\InventoryMovement;
 use App\Models\Order;
+use App\Models\PaymentVerificationLog;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\ShippingCarrier;
 use App\Models\SiteSetting;
 use App\Models\User;
+use App\Support\ChinaRegions;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\ValidationException;
@@ -21,6 +23,7 @@ class OrderService
     public function __construct(
         private readonly CartService $cart,
         private readonly CouponService $coupons,
+        private readonly ShippingQuoteService $shippingQuotes,
         private readonly AdminActivityLogger $activity,
     ) {}
 
@@ -36,7 +39,10 @@ class OrderService
             $subtotalCents = (int) $cartItems->sum('line_total_cents');
             $coupon = $this->coupons->resolve($data['coupon_code'] ?? null, $user, $subtotalCents, $cartItems);
             $discountCents = $coupon?->discountFor($subtotalCents) ?? 0;
-            $totalCents = max(0, $subtotalCents - $discountCents);
+            $shippingProvince = $data['shipping_province'] ?? ChinaRegions::guessProvinceFromAddress($data['shipping_address'] ?? null);
+            $shippingQuote = $this->shippingQuotes->quote($cartItems, $shippingProvince);
+            $shippingFeeCents = (int) $shippingQuote['shipping_fee_cents'];
+            $totalCents = max(0, $subtotalCents - $discountCents + $shippingFeeCents);
 
             $order = Order::query()->create([
                 'user_id' => $user->id,
@@ -45,6 +51,9 @@ class OrderService
                 'payment_status' => Order::PAYMENT_PENDING,
                 'subtotal_cents' => $subtotalCents,
                 'discount_cents' => $discountCents,
+                'shipping_fee_cents' => $shippingFeeCents,
+                'shipment_plan' => $shippingQuote['shipments'],
+                'shipment_notice' => $shippingQuote['notice'],
                 'total_cents' => $totalCents,
                 'coupon_id' => $coupon?->id,
                 'coupon_code' => $coupon?->code,
@@ -53,6 +62,7 @@ class OrderService
                 'contact_email' => $data['contact_email'] ?? null,
                 'requires_shipping' => (bool) ($data['requires_shipping'] ?? false),
                 'shipping_address' => $data['shipping_address'] ?? null,
+                'shipping_province' => $shippingQuote['province'],
                 'customer_note' => $data['customer_note'] ?? null,
             ]);
 
@@ -74,6 +84,7 @@ class OrderService
                 $order->items()->create([
                     'product_id' => $product->id,
                     'product_variant_id' => $variant->id,
+                    'warehouse_id' => $shippingQuote['item_warehouse_map'][(int) $variant->id] ?? null,
                     'product_title' => $product->title,
                     'product_status' => $product->status,
                     'variant_sku' => $variant->sku,
@@ -103,12 +114,29 @@ class OrderService
 
     public function markPaymentSubmitted(Order $order, string $path): void
     {
+        $autoResult = $this->autoCheckPaymentProof($order, $path);
+
         $order->update([
             'payment_proof_path' => $path,
             'payment_status' => Order::PAYMENT_SUBMITTED,
             'payment_submitted_at' => now(),
             'payment_auto_checked_at' => now(),
-            'payment_auto_check_status' => $this->autoCheckPaymentProof($order, $path),
+            'payment_auto_check_status' => $autoResult,
+        ]);
+
+        PaymentVerificationLog::query()->create([
+            'order_id' => $order->id,
+            'user_id' => $order->user_id,
+            'payment_proof_path' => $path,
+            'expected_order_number' => $order->order_number,
+            'detected_order_number' => $autoResult === Order::AUTO_CHECK_PASSED ? $order->order_number : null,
+            'expected_amount_cents' => (int) $order->total_cents,
+            'auto_result' => $autoResult,
+            'metadata' => [
+                'payment_status' => Order::PAYMENT_SUBMITTED,
+                'auto_checked_at' => now()->toDateTimeString(),
+                'checker' => 'local_v1_placeholder',
+            ],
         ]);
 
         $this->activity->log('payment_proof_submitted', $order, $order->order_number, [
@@ -144,6 +172,8 @@ class OrderService
                 'status' => $nextStatus,
                 'payment_status' => Order::PAYMENT_CONFIRMED,
             ], $actor);
+
+            $this->markLatestPaymentVerification($order, PaymentVerificationLog::MANUAL_CONFIRMED, $actor);
         });
     }
 
@@ -337,6 +367,8 @@ class OrderService
             'payment_auto_check_status' => Order::AUTO_CHECK_FAILED,
             'note' => $note,
         ], $actor);
+
+        $this->markLatestPaymentVerification($order, PaymentVerificationLog::MANUAL_REJECTED, $actor, $note);
     }
 
     public function fulfill(Order $order, ?User $actor = null, ?string $reason = null): void
@@ -542,6 +574,23 @@ class OrderService
         }
 
         return $path !== '' && $order->order_number !== '' ? Order::AUTO_CHECK_PASSED : Order::AUTO_CHECK_FAILED;
+    }
+
+    private function markLatestPaymentVerification(Order $order, string $result, ?User $actor = null, ?string $note = null): void
+    {
+        $log = $order->paymentVerificationLogs()
+            ->latest('id')
+            ->first();
+
+        if (! $log) {
+            return;
+        }
+
+        $log->update([
+            'actor_user_id' => $actor?->id,
+            'manual_result' => $result,
+            'note' => $note ?: $log->note,
+        ]);
     }
 
     private function hasDigitalDeliveryData(array $data): bool
