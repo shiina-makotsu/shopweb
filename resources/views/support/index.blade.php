@@ -130,6 +130,11 @@
                                     @endif
                                 </div>
                             @endif
+                            @if($isMine)
+                                <p class="mt-1 text-right text-[11px] text-blue-700">
+                                    {{ $message->read_at ? '✓✓ 已读' : '✓ 已发送' }}
+                                </p>
+                            @endif
                         </div>
                     </article>
                 @empty

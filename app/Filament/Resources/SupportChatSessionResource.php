@@ -46,6 +46,11 @@ class SupportChatSessionResource extends Resource
         return false;
     }
 
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()->whereNotNull('user_id');
+    }
+
     public static function form(Schema $schema): Schema
     {
         return $schema->components([

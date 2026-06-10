@@ -7,6 +7,12 @@
         $isPurchasable = $product->isDirectlyPurchasable();
         $allowsVoting = $product->allowsVoting();
         $allowsCrowdfunding = $product->allowsCrowdfunding() && $firstVariant;
+        $wishlistActive = auth()->check()
+            ? auth()->user()->wishlists()->where('product_id', $product->id)->exists()
+            : false;
+        $favoriteActive = auth()->check()
+            ? auth()->user()->favorites()->where('product_id', $product->id)->exists()
+            : false;
     @endphp
 
     <section class="mb-4 rounded-sm border border-slate-300 bg-white">
@@ -71,6 +77,31 @@
                         @endforeach
                     </div>
                 @endif
+
+                <div class="mt-4 flex flex-wrap gap-2">
+                    <form method="post" action="{{ route('support.sessions.store') }}">
+                        @csrf
+                        <input type="hidden" name="product_id" value="{{ $product->id }}">
+                        <button class="rounded-sm border border-blue-700 bg-white px-4 py-2 text-sm font-medium text-blue-800 hover:bg-blue-50" type="submit">咨询此商品</button>
+                    </form>
+                    @auth
+                        <form method="post" action="{{ route('products.wishlist.toggle', $product) }}">
+                            @csrf
+                            <button class="rounded-sm border px-4 py-2 text-sm font-medium {{ $wishlistActive ? 'border-pink-300 bg-pink-50 text-pink-800' : 'border-slate-300 bg-white text-slate-700 hover:bg-pink-50 hover:text-pink-800' }}" type="submit">
+                                {{ $wishlistActive ? '已在愿望单' : '加入愿望单' }}
+                            </button>
+                        </form>
+                        <form method="post" action="{{ route('products.favorite.toggle', $product) }}">
+                            @csrf
+                            <button class="rounded-sm border px-4 py-2 text-sm font-medium {{ $favoriteActive ? 'border-blue-300 bg-blue-50 text-blue-800' : 'border-slate-300 bg-white text-slate-700 hover:bg-blue-50 hover:text-blue-800' }}" type="submit">
+                                {{ $favoriteActive ? '已收藏' : '收藏商品' }}
+                            </button>
+                        </form>
+                    @else
+                        <a class="rounded-sm border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-pink-50 hover:text-pink-800" href="{{ route('login') }}">加入愿望单</a>
+                        <a class="rounded-sm border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-blue-50 hover:text-blue-800" href="{{ route('login') }}">收藏商品</a>
+                    @endauth
+                </div>
 
                 <div class="mt-4 rounded-sm border border-red-200 bg-red-50 px-4 py-3">
                     <p class="text-sm text-slate-600">{{ $product->isConcept() ? '预计价格' : '售价' }}</p>

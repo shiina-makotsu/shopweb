@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Order;
+use App\Models\Product;
 use App\Models\SupportChatMessage;
 use App\Models\SupportChatSession;
 use App\Models\SupportTicket;
@@ -36,7 +37,12 @@ class SupportTicketController extends Controller
     public function storeSession(Request $request): RedirectResponse
     {
         $order = $this->selectedOrder($request, $request->input('order_id'));
+        $product = $this->selectedProduct($request);
         $session = $this->createSession($request, $order);
+
+        if ($product) {
+            $this->sendProductContextMessage($request, $session, $product);
+        }
 
         return redirect()
             ->route('support.sessions.show', $session)
@@ -193,6 +199,20 @@ class SupportTicketController extends Controller
             ->first();
     }
 
+    private function selectedProduct(Request $request): ?Product
+    {
+        $productId = $request->input('product_id');
+
+        if (! $productId) {
+            return null;
+        }
+
+        return Product::query()
+            ->publiclyVisible()
+            ->whereKey($productId)
+            ->first();
+    }
+
     private function guestId(Request $request): string
     {
         if (! $request->session()->has('support_guest_id')) {
@@ -207,6 +227,7 @@ class SupportTicketController extends Controller
         $session ??= $this->currentSession($request, $selectedOrder);
         $session->endIfIdle();
         app(SupportChatService::class)->comfortIfIdle($session);
+        $this->markAdminMessagesRead($request, $session);
         $session->load(['messages.sender', 'assignedAdmin', 'order']);
 
         $sessions = $this->visibleSessions($request)
@@ -279,6 +300,22 @@ class SupportTicketController extends Controller
         ]);
     }
 
+    private function sendProductContextMessage(Request $request, SupportChatSession $session, Product $product): void
+    {
+        $product->loadMissing('variants');
+
+        $session->messages()->create([
+            'sender_user_id' => $request->user()?->id,
+            'sender_type' => $request->user() ? SupportChatMessage::SENDER_CUSTOMER : SupportChatMessage::SENDER_GUEST,
+            'body' => $this->productMessage($product),
+        ]);
+
+        $session->update([
+            'status' => SupportChatSession::STATUS_OPEN,
+            'last_message_at' => now(),
+        ]);
+    }
+
     private function visibleSessions(Request $request): Builder
     {
         $query = SupportChatSession::query()
@@ -343,6 +380,36 @@ class SupportTicketController extends Controller
 商品：
 {$items}
 TEXT);
+    }
+
+    private function productMessage(Product $product): string
+    {
+        $price = $product->starting_price_cents !== null
+            ? Money::format($product->starting_price_cents)
+            : '暂无价格';
+        $url = route('products.show', $product);
+        $summary = trim((string) $product->summary);
+
+        return trim(<<<TEXT
+商品咨询：
+商品：{$product->title}
+状态：{$product->statusLabel()}
+价格：{$price}
+链接：{$url}
+{$summary}
+TEXT);
+    }
+
+    private function markAdminMessagesRead(Request $request, SupportChatSession $session): void
+    {
+        if ($request->user()?->isBackofficeUser()) {
+            return;
+        }
+
+        $session->messages()
+            ->where('sender_type', SupportChatMessage::SENDER_ADMIN)
+            ->whereNull('read_at')
+            ->update(['read_at' => now()]);
     }
 
     /**

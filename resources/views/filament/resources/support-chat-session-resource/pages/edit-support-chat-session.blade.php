@@ -75,6 +75,11 @@
                                     @endif
                                 </div>
                             @endif
+                            @if($isAdmin)
+                                <p class="mt-1 text-right text-[11px] text-blue-700 dark:text-blue-300">
+                                    {{ $message->read_at ? '✓✓ 用户已读' : '✓ 已发送' }}
+                                </p>
+                            @endif
                         </div>
                     </article>
                 @empty

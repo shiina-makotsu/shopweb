@@ -37,6 +37,11 @@ class SupportChatService
             $session->refresh();
         }
 
+        $session->messages()
+            ->whereIn('sender_type', [SupportChatMessage::SENDER_CUSTOMER, SupportChatMessage::SENDER_GUEST])
+            ->whereNull('read_at')
+            ->update(['read_at' => now()]);
+
         $session->messages()->create([
             'sender_user_id' => $admin->id,
             'sender_type' => SupportChatMessage::SENDER_ADMIN,

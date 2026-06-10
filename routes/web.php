@@ -20,6 +20,7 @@ use App\Http\Controllers\PageController;
 use App\Http\Controllers\PrivateMessageController;
 use App\Http\Controllers\ProductCommentController;
 use App\Http\Controllers\ProductController;
+use App\Http\Controllers\ProductPreferenceController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\ShipmentController;
 use App\Http\Controllers\SupportTicketController;
@@ -99,6 +100,8 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/orders/{order}/digital-delivery/copied', [OrderController::class, 'markDigitalCopied'])->name('orders.digital-delivery.copied');
     Route::get('/orders/{order}/digital-delivery/{index}', [OrderController::class, 'downloadDigitalAttachment'])->name('orders.digital-delivery.download');
     Route::post('/products/{product:slug}/comments', [ProductCommentController::class, 'store'])->name('product-comments.store');
+    Route::post('/products/{product:slug}/wishlist', [ProductPreferenceController::class, 'toggleWishlist'])->name('products.wishlist.toggle');
+    Route::post('/products/{product:slug}/favorite', [ProductPreferenceController::class, 'toggleFavorite'])->name('products.favorite.toggle');
     Route::post('/products/{product:slug}/intent-vote', [VoteController::class, 'intent'])->name('votes.intent');
     Route::post('/products/{product:slug}/price-vote', [VoteController::class, 'price'])->name('votes.price');
     Route::get('/messages/{user:public_id}', [PrivateMessageController::class, 'thread'])->name('messages.thread');

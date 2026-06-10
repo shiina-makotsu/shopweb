@@ -19,6 +19,13 @@ class EditSupportChatSession extends EditRecord
 
     public string $replyMessage = '';
 
+    public function mount(int|string $record): void
+    {
+        parent::mount($record);
+
+        $this->markCustomerMessagesRead();
+    }
+
     public function quickReplies()
     {
         return SupportQuickReply::query()
@@ -94,5 +101,15 @@ class EditSupportChatSession extends EditRecord
     public function isAdminMessage(SupportChatMessage $message): bool
     {
         return $message->sender_type === SupportChatMessage::SENDER_ADMIN;
+    }
+
+    protected function markCustomerMessagesRead(): void
+    {
+        $this->record->messages()
+            ->whereIn('sender_type', [SupportChatMessage::SENDER_CUSTOMER, SupportChatMessage::SENDER_GUEST])
+            ->whereNull('read_at')
+            ->update(['read_at' => now()]);
+
+        $this->record->load(['messages.sender', 'assignedAdmin', 'order', 'user']);
     }
 }

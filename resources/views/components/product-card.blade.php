@@ -19,6 +19,12 @@
     };
     $canCart = $variant && $product->isDirectlyPurchasable();
     $canCrowdfund = $variant && $product->allowsCrowdfunding();
+    $wishlistActive = auth()->check()
+        ? auth()->user()->wishlists()->where('product_id', $product->id)->exists()
+        : false;
+    $favoriteActive = auth()->check()
+        ? auth()->user()->favorites()->where('product_id', $product->id)->exists()
+        : false;
 @endphp
 
 <article class="bg-white">
@@ -85,6 +91,25 @@
             @else
                 <a href="{{ route('products.show', $product) }}" class="rounded-sm border border-blue-700 bg-blue-700 px-3 py-2 text-center text-xs font-medium text-white hover:bg-blue-800">{{ $actionLabel }}</a>
             @endif
+        </div>
+        <div class="grid gap-2 sm:grid-cols-2">
+            @auth
+                <form method="post" action="{{ route('products.wishlist.toggle', $product) }}">
+                    @csrf
+                    <button class="w-full rounded-sm border px-3 py-2 text-xs font-medium {{ $wishlistActive ? 'border-pink-300 bg-pink-50 text-pink-800' : 'border-slate-300 bg-white text-slate-700 hover:bg-pink-50 hover:text-pink-800' }}" type="submit">
+                        {{ $wishlistActive ? '已在愿望单' : '加入愿望单' }}
+                    </button>
+                </form>
+                <form method="post" action="{{ route('products.favorite.toggle', $product) }}">
+                    @csrf
+                    <button class="w-full rounded-sm border px-3 py-2 text-xs font-medium {{ $favoriteActive ? 'border-blue-300 bg-blue-50 text-blue-800' : 'border-slate-300 bg-white text-slate-700 hover:bg-blue-50 hover:text-blue-800' }}" type="submit">
+                        {{ $favoriteActive ? '已收藏' : '收藏商品' }}
+                    </button>
+                </form>
+            @else
+                <a class="rounded-sm border border-slate-300 bg-white px-3 py-2 text-center text-xs font-medium text-slate-700 hover:bg-pink-50 hover:text-pink-800" href="{{ route('login') }}">加入愿望单</a>
+                <a class="rounded-sm border border-slate-300 bg-white px-3 py-2 text-center text-xs font-medium text-slate-700 hover:bg-blue-50 hover:text-blue-800" href="{{ route('login') }}">收藏商品</a>
+            @endauth
         </div>
     </div>
 </article>

@@ -8,6 +8,7 @@ use App\Models\Category;
 use App\Models\Product;
 use App\Models\ProductComment;
 use App\Models\ProductVariant;
+use App\Models\SupportChatMessage;
 use App\Models\SupportChatSession;
 use App\Models\SupportTicket;
 use App\Models\SiteSetting;
@@ -279,21 +280,86 @@ it('supports chat style customer service sessions with attachments and admin rec
 
     app(\App\Services\SupportChatService::class)->reply($session, $admin, '这里是客服回复。');
 
+    expect($message->fresh()->read_at)->not->toBeNull();
+
+    $adminReply = $session->messages()
+        ->where('sender_type', SupportChatMessage::SENDER_ADMIN)
+        ->firstOrFail();
+
+    expect($adminReply->read_at)->toBeNull();
+
     $this->get(route('support.index'))
         ->assertOk()
         ->assertSee('客服 客服甲 为您服务')
         ->assertSee('这里是客服回复。');
 
-    $this->actingAs($admin)
-        ->get('/admin/support-chat-sessions')
-        ->assertOk()
-        ->assertSee('客服会话');
+    expect($adminReply->fresh()->read_at)->not->toBeNull();
 
     $this->actingAs($admin)
-        ->get("/admin/support-chat-sessions/{$session->id}/edit")
+        ->get('/admin/guest-support-chat-sessions')
+        ->assertOk()
+        ->assertSee('游客会话');
+
+    $this->actingAs($admin)
+        ->get("/admin/guest-support-chat-sessions/{$session->id}/edit")
         ->assertOk()
         ->assertSee('会话 #'.$session->id)
         ->assertSee('发送回复');
+});
+
+it('starts product support chats and toggles product preferences from product pages', function (): void {
+    $product = Product::query()->create([
+        'title' => '客服咨询商品',
+        'slug' => 'support-chat-product',
+        'summary' => '用于测试商品页客服入口。',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_ONLINE,
+    ]);
+    ProductVariant::query()->create([
+        'product_id' => $product->id,
+        'sku' => 'SUPPORT-PRODUCT-1',
+        'price_cents' => 5200,
+        'stock' => 5,
+        'is_active' => true,
+    ]);
+
+    $user = User::factory()->create(['role' => 'customer']);
+
+    $this->actingAs($user)
+        ->get(route('products.show', $product))
+        ->assertOk()
+        ->assertSee('咨询此商品')
+        ->assertSee('加入愿望单')
+        ->assertSee('收藏商品');
+
+    $this->actingAs($user)
+        ->post(route('products.wishlist.toggle', $product))
+        ->assertRedirect();
+
+    $this->assertDatabaseHas('product_wishlists', [
+        'user_id' => $user->id,
+        'product_id' => $product->id,
+    ]);
+
+    $this->actingAs($user)
+        ->post(route('products.favorite.toggle', $product))
+        ->assertRedirect();
+
+    $this->assertDatabaseHas('product_favorites', [
+        'user_id' => $user->id,
+        'product_id' => $product->id,
+    ]);
+
+    $this->actingAs($user)
+        ->post(route('support.sessions.store'), ['product_id' => $product->id])
+        ->assertRedirect();
+
+    $session = SupportChatSession::query()->whereBelongsTo($user)->firstOrFail();
+    $message = $session->messages()->firstOrFail();
+
+    expect($message->sender_type)->toBe(SupportChatMessage::SENDER_CUSTOMER)
+        ->and($message->body)->toContain('商品咨询')
+        ->and($message->body)->toContain($product->title);
 });
 
 it('supports multiple chat windows and closes deleted windows against later replies', function (): void {
