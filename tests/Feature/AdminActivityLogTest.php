@@ -48,7 +48,7 @@ it('records admin activity for order payment and cancellation actions', function
     expect(AdminActivityLog::query()->count())->toBe(2);
 });
 
-it('shows admin activity logs in the admin panel', function (): void {
+it('shows readable admin activity logs in the admin panel', function (): void {
     $admin = User::factory()->create(['role' => 'admin']);
 
     AdminActivityLog::query()->create([
@@ -61,6 +61,6 @@ it('shows admin activity logs in the admin panel', function (): void {
     $this->actingAs($admin)
         ->get('/admin/admin-activity-logs')
         ->assertOk()
-        ->assertSee('products_csv_imported')
-        ->assertSee('商品/SKU CSV 导入');
+        ->assertSee('导入商品/SKU CSV')
+        ->assertSee('结果：处理数量：1、新增数量：1');
 });

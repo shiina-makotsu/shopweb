@@ -177,24 +177,23 @@ class SiteSettingResource extends Resource
             ->createOptionForm([
                 FileUpload::make('path')
                     ->label('上传图片')
+                    ->helperText('上传图片，或填写下方外部图片 URL。')
                     ->disk('public_uploads')
                     ->directory('site')
                     ->image()
-                    ->maxSize(5120)
-                    ->required(),
+                    ->maxSize(5120),
+                TextInput::make('external_url')
+                    ->label('外部图片 URL')
+                    ->url()
+                    ->maxLength(2048),
                 TextInput::make('name')->label('名称')->maxLength(255),
                 TextInput::make('alt')->label('Alt 文案')->maxLength(255),
             ])
             ->createOptionUsing(function (array $data) use ($name): string {
-                $path = is_array($data['path']) ? reset($data['path']) : $data['path'];
-
-                $asset = MediaAsset::query()->create([
-                    'name' => $data['name'] ?: pathinfo($path, PATHINFO_FILENAME),
-                    'path' => $path,
-                    'disk' => 'public_uploads',
-                    'alt' => $data['alt'] ?? null,
-                    'usage' => str_contains($name, 'background') ? MediaAsset::USAGE_BACKGROUND : MediaAsset::USAGE_LOGO,
-                ]);
+                $asset = MediaAsset::createImageFromUploadOrUrl(
+                    $data,
+                    str_contains($name, 'background') ? MediaAsset::USAGE_BACKGROUND : MediaAsset::USAGE_LOGO,
+                );
 
                 return $asset->path;
             });

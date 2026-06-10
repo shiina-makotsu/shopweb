@@ -13,24 +13,18 @@ trait HandlesPageCoverUpload
     protected function attachUploadedCover(array $data): array
     {
         $path = $data['cover_upload'] ?? null;
+        $externalUrl = $data['cover_external_url'] ?? null;
         unset($data['cover_upload']);
+        unset($data['cover_external_url']);
 
-        if (blank($path)) {
+        if (blank($path) && blank($externalUrl)) {
             return $data;
         }
 
-        $path = is_array($path) ? reset($path) : $path;
-
-        if (! is_string($path) || blank($path)) {
-            return $data;
-        }
-
-        $asset = MediaAsset::query()->create([
-            'name' => pathinfo($path, PATHINFO_FILENAME),
+        $asset = MediaAsset::createImageFromUploadOrUrl([
             'path' => $path,
-            'disk' => 'public_uploads',
-            'usage' => MediaAsset::USAGE_PAGE,
-        ]);
+            'external_url' => $externalUrl,
+        ], MediaAsset::USAGE_PAGE);
 
         $data['cover_media_asset_id'] = $asset->id;
 

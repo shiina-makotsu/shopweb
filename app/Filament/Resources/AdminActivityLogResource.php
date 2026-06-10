@@ -53,26 +53,28 @@ class AdminActivityLogResource extends Resource
                     ->dateTime('Y-m-d H:i:s')
                     ->sortable(),
                 TextColumn::make('user.email')
-                    ->label('操作者')
+                    ->label('操作人')
                     ->placeholder('系统')
                     ->searchable(),
                 TextColumn::make('action')
-                    ->label('动作')
+                    ->label('操作')
+                    ->state(fn (AdminActivityLog $record): string => $record->actionLabel())
                     ->badge()
                     ->searchable()
                     ->sortable(),
                 TextColumn::make('subject_type')
                     ->label('对象')
-                    ->formatStateUsing(fn (?string $state, AdminActivityLog $record): string => $state ? class_basename($state).' #'.$record->subject_id : '-')
+                    ->state(fn (AdminActivityLog $record): string => $record->subjectLabel())
                     ->placeholder('-'),
                 TextColumn::make('description')
                     ->label('说明')
                     ->searchable()
                     ->limit(48),
                 TextColumn::make('properties')
-                    ->label('详情')
-                    ->formatStateUsing(fn ($state): string => json_encode($state ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES))
-                    ->limit(64),
+                    ->label('操作摘要')
+                    ->state(fn (AdminActivityLog $record): string => $record->propertiesSummary())
+                    ->limit(96)
+                    ->wrap(),
                 TextColumn::make('ip_address')->label('IP')->toggleable(),
             ])
             ->defaultSort('created_at', 'desc');

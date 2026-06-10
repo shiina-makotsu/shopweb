@@ -35,6 +35,7 @@ it('applies basic backoffice role permissions', function (): void {
 
     $this->actingAs($warehouse)->get('/admin/products')->assertOk();
     $this->actingAs($warehouse)->get('/admin/inventory-movements')->assertOk();
+    $this->actingAs($warehouse)->get('/admin/warehouses')->assertOk();
     $this->actingAs($warehouse)->get('/admin/orders')->assertForbidden();
 
     $this->actingAs($sales)->get('/admin/orders')->assertOk();

@@ -94,27 +94,32 @@ class SiteSetting extends Model
 
     public function logoUrl(): ?string
     {
-        return $this->logo_path ? Storage::disk('public_uploads')->url($this->logo_path) : null;
+        return $this->assetUrl($this->logo_path);
     }
 
     public function faviconUrl(): ?string
     {
-        return $this->favicon_path ? Storage::disk('public_uploads')->url($this->favicon_path) : null;
+        return $this->assetUrl($this->favicon_path);
     }
 
     public function homeBackgroundUrl(): ?string
     {
-        return $this->home_background_path ? Storage::disk('public_uploads')->url($this->home_background_path) : null;
+        return $this->assetUrl($this->home_background_path);
     }
 
     public function homeWelcomeImageUrl(): ?string
     {
-        return $this->home_welcome_image_path ? Storage::disk('public_uploads')->url($this->home_welcome_image_path) : null;
+        return $this->assetUrl($this->home_welcome_image_path);
     }
 
     public function authBackgroundUrl(): ?string
     {
-        return $this->auth_background_path ? Storage::disk('public_uploads')->url($this->auth_background_path) : null;
+        return $this->assetUrl($this->auth_background_path);
+    }
+
+    public function paymentQrUrl(): ?string
+    {
+        return $this->assetUrl($this->payment_qr_path);
     }
 
     /**
@@ -139,5 +144,18 @@ class SiteSetting extends Model
     private function color(?string $value, string $fallback): string
     {
         return preg_match('/^#[0-9a-fA-F]{6}$/', (string) $value) ? (string) $value : $fallback;
+    }
+
+    private function assetUrl(?string $path): ?string
+    {
+        if (! $path) {
+            return null;
+        }
+
+        if (MediaAsset::isExternalUrl($path)) {
+            return $path;
+        }
+
+        return Storage::disk('public_uploads')->url($path);
     }
 }

@@ -82,7 +82,7 @@
                     <h2 class="border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold">付款说明</h2>
                     <div class="content-body px-4 py-4 text-sm">
                         @if($settings?->payment_qr_path)
-                            <img class="mb-4 h-40 w-40 rounded-sm border border-slate-200 object-contain" src="{{ \Illuminate\Support\Facades\Storage::disk('public_uploads')->url($settings->payment_qr_path) }}" alt="付款二维码">
+                            <img class="mb-4 h-40 w-40 rounded-sm border border-slate-200 object-contain" src="{{ $settings->paymentQrUrl() }}" alt="付款二维码">
                         @endif
                         <div class="mb-4 rounded-sm border border-blue-200 bg-blue-50 px-3 py-3 text-blue-900">
                             <p class="font-medium">付款备注单号：{{ $order->order_number }}</p>

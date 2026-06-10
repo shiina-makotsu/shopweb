@@ -11,6 +11,7 @@ use App\Support\RegexSearch;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -38,13 +39,44 @@ class SupportQuickReplyResource extends Resource
     public static function form(Schema $schema): Schema
     {
         return $schema->components([
-            Section::make('预设回复')->schema([
-                TextInput::make('title')->label('标题')->required()->maxLength(255),
-                TextInput::make('category')->label('分类')->maxLength(255),
+            Section::make('规则设置')->schema([
+                TextInput::make('title')->label('规则名称')->required()->maxLength(255),
+                Select::make('match_mode')
+                    ->label('匹配方式')
+                    ->options([
+                        SupportQuickReply::MATCH_KEYWORD => '关键词',
+                        SupportQuickReply::MATCH_REGEX => '正则',
+                    ])
+                    ->default(SupportQuickReply::MATCH_KEYWORD)
+                    ->required(),
+                Textarea::make('match_pattern')
+                    ->label('检测语句')
+                    ->helperText('关键词模式可用逗号或换行分隔；正则模式支持直接写表达式。')
+                    ->required()
+                    ->rows(4)
+                    ->columnSpanFull(),
+                Select::make('trigger_action')
+                    ->label('命中动作')
+                    ->options([
+                        SupportQuickReply::ACTION_REPLY => '自动回复',
+                        SupportQuickReply::ACTION_AI => '接入 AI',
+                        SupportQuickReply::ACTION_NOTIFY_STAFF => '提醒客服接待',
+                    ])
+                    ->default(SupportQuickReply::ACTION_REPLY)
+                    ->required(),
+                Textarea::make('body')
+                    ->label('回复词 / 提示内容')
+                    ->helperText('自动回复会直接发送这段内容；AI 接入和提醒客服也可用作提示文本。')
+                    ->required()
+                    ->rows(5)
+                    ->columnSpanFull(),
                 TextInput::make('sort_order')->label('排序')->numeric()->default(0),
                 Toggle::make('is_active')->label('启用')->default(true),
-                Textarea::make('body')->label('回复内容')->required()->rows(6)->columnSpanFull(),
             ])->columns(2)->columnSpanFull(),
+
+            Section::make('内部备注')->schema([
+                TextInput::make('category')->label('分组备注')->maxLength(255),
+            ])->columnSpanFull(),
         ]);
     }
 
@@ -53,10 +85,17 @@ class SupportQuickReplyResource extends Resource
         return $table
             ->columns([
                 TextColumn::make('title')
-                    ->label('标题')
-                    ->searchable(query: fn (Builder $query, string $search): Builder => RegexSearch::where($query, ['title', 'category', 'body'], $search))
+                    ->label('规则名称')
+                    ->searchable(query: fn (Builder $query, string $search): Builder => RegexSearch::where($query, ['title', 'match_pattern', 'body', 'category'], $search))
                     ->sortable(),
-                TextColumn::make('category')->label('分类')->toggleable(),
+                TextColumn::make('match_mode')->label('匹配方式')->formatStateUsing(fn (string $state): string => $state === SupportQuickReply::MATCH_REGEX ? '正则' : '关键词'),
+                TextColumn::make('trigger_action')->label('命中动作')->formatStateUsing(fn (string $state): string => match ($state) {
+                    SupportQuickReply::ACTION_AI => '接入 AI',
+                    SupportQuickReply::ACTION_NOTIFY_STAFF => '提醒客服接待',
+                    default => '自动回复',
+                }),
+                TextColumn::make('match_pattern')->label('检测语句')->limit(36)->wrap(),
+                TextColumn::make('body')->label('回复词')->limit(36)->wrap(),
                 TextColumn::make('sort_order')->label('排序')->sortable(),
                 TextColumn::make('is_active')->label('状态')->formatStateUsing(fn (bool $state): string => $state ? '启用' : '停用')->badge(),
                 TextColumn::make('updated_at')->label('更新')->dateTime('Y-m-d H:i')->sortable(),

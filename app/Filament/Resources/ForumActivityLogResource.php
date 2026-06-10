@@ -52,8 +52,13 @@ class ForumActivityLogResource extends Resource
         return $table
             ->columns([
                 TextColumn::make('created_at')->label('时间')->dateTime('Y-m-d H:i:s')->sortable(),
-                TextColumn::make('actor.public_id')->label('操作者')->searchable(),
-                TextColumn::make('action')->label('动作')->badge()->searchable()->sortable(),
+                TextColumn::make('actor.public_id')->label('操作人')->searchable(),
+                TextColumn::make('action')
+                    ->label('操作')
+                    ->state(fn (ForumActivityLog $record): string => $record->actionLabel())
+                    ->badge()
+                    ->searchable()
+                    ->sortable(),
                 TextColumn::make('section.name')->label('版块')->sortable(),
                 TextColumn::make('thread.title')->label('帖子')->limit(32)->searchable(),
                 TextColumn::make('targetUser.public_id')->label('目标用户')->toggleable(),

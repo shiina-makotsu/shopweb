@@ -76,7 +76,7 @@ class SupportTicketController extends Controller
         return back()->with('status', '客服工单已提交，后台客服会在处理后显示回复。');
     }
 
-    public function sendMessage(Request $request): RedirectResponse
+    public function sendMessage(Request $request, SupportChatService $chat): RedirectResponse
     {
         $data = $request->validate([
             'message' => ['nullable', 'string', 'max:3000'],
@@ -121,6 +121,10 @@ class SupportTicketController extends Controller
             'body' => $body,
             ...$attachment,
         ]);
+
+        if (filled($body)) {
+            $chat->applyQuickReplyRules($session, (string) $body);
+        }
 
         $session->update([
             'status' => $session->assigned_admin_id ? SupportChatSession::STATUS_ACTIVE : SupportChatSession::STATUS_OPEN,

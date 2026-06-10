@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\SupportChatMessage;
 use App\Models\SupportChatSession;
+use App\Models\SupportQuickReply;
 use App\Models\SiteSetting;
 use App\Models\User;
 use Illuminate\Validation\ValidationException;
@@ -53,6 +54,53 @@ class SupportChatService
             'status' => SupportChatSession::STATUS_ACTIVE,
             'ended_at' => null,
         ]);
+    }
+
+    public function applyQuickReplyRules(SupportChatSession $session, string $message): ?SupportQuickReply
+    {
+        $message = trim($message);
+
+        if ($message === '') {
+            return null;
+        }
+
+        $reply = SupportQuickReply::query()
+            ->active()
+            ->orderBy('sort_order')
+            ->orderBy('id')
+            ->get()
+            ->first(fn (SupportQuickReply $quickReply): bool => $quickReply->matches($message));
+
+        if (! $reply) {
+            return null;
+        }
+
+        $body = trim((string) $reply->body);
+
+        if ($body === '') {
+            $body = match ($reply->trigger_action) {
+                SupportQuickReply::ACTION_AI => '已接入 AI 客服，请继续描述你的问题。',
+                SupportQuickReply::ACTION_NOTIFY_STAFF => '已提醒客服接待，请稍候。',
+                default => '收到。',
+            };
+        }
+
+        if ($reply->trigger_action === SupportQuickReply::ACTION_AI) {
+            $settings = SiteSetting::query()->first();
+            $aiPrompt = trim((string) $settings?->support_ai_system_prompt);
+            if ($aiPrompt !== '') {
+                $body = $aiPrompt."\n\n".$body;
+            }
+        }
+
+        $session->messages()->create([
+            'sender_type' => SupportChatMessage::SENDER_SYSTEM,
+            'body' => $body,
+        ]);
+
+        $session->update(['last_message_at' => now()]);
+
+        return $reply;
     }
 
     public function end(SupportChatSession $session, ?User $admin = null): void

@@ -13,8 +13,8 @@ use App\Support\RegexSearch;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
-use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Repeater;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -50,9 +50,9 @@ class WarehouseResource extends Resource
                 TextInput::make('country')->label('国家')->default('中国')->maxLength(100),
                 Select::make('province')->label('省份')->options(ChinaRegions::provinceOptions())->searchable(),
                 TextInput::make('city')->label('城市')->maxLength(100),
-                TextInput::make('district')->label('区/县')->maxLength(100),
-                TextInput::make('street')->label('街道 / 门牌')->placeholder('可填测试仓、A 仓等占位文字')->maxLength(255)->columnSpanFull(),
-                Textarea::make('address')->label('完整地址补充')->placeholder('这里可以是实际地址，也可以是用于测试或内部识别的仓库位置说明。')->rows(3)->columnSpanFull(),
+                TextInput::make('district')->label('区 / 县')->maxLength(100),
+                TextInput::make('street')->label('街道 / 门牌')->placeholder('可填写测试仓、A 仓等内部占位文字')->maxLength(255)->columnSpanFull(),
+                Textarea::make('address')->label('完整地址补充')->placeholder('这里可以是实际地址，也可以是测试或内部识别用的位置说明。')->rows(3)->columnSpanFull(),
                 TextInput::make('sort_order')->label('排序')->numeric()->default(0),
                 Toggle::make('is_active')->label('启用')->default(true),
                 Textarea::make('note')->label('备注')->rows(3)->columnSpanFull(),
@@ -102,7 +102,9 @@ class WarehouseResource extends Resource
                     ->limit(56),
                 TextColumn::make('contact_name')->label('联系人')->toggleable(),
                 TextColumn::make('phone')->label('电话')->toggleable(),
-                TextColumn::make('stocks_count')->counts('stocks')->label('库存条目')->sortable(),
+                TextColumn::make('stocks_count')
+                    ->label('库存条目')
+                    ->state(fn (Warehouse $record): int => $record->stocks()->count()),
                 IconColumn::make('is_active')->label('启用')->boolean(),
                 TextColumn::make('sort_order')->label('排序')->sortable(),
                 TextColumn::make('updated_at')->label('更新')->dateTime('Y-m-d H:i')->sortable(),

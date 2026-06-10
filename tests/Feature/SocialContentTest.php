@@ -12,6 +12,7 @@ use App\Models\SupportChatMessage;
 use App\Models\SupportChatSession;
 use App\Models\SupportTicket;
 use App\Models\SiteSetting;
+use App\Models\SupportQuickReply;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -549,4 +550,51 @@ it('adds support ai comfort messages when an open chat waits too long', function
         'sender_type' => \App\Models\SupportChatMessage::SENDER_SYSTEM,
         'body' => '我先陪你等客服接入。',
     ]);
+});
+
+it('matches support quick replies by keyword and regex rules', function (): void {
+    SupportQuickReply::query()->create([
+        'title' => '退款自动回复',
+        'body' => '请先提供订单号，我来帮你核对。',
+        'match_pattern' => "退款\n退货",
+        'match_mode' => SupportQuickReply::MATCH_KEYWORD,
+        'trigger_action' => SupportQuickReply::ACTION_REPLY,
+        'sort_order' => 1,
+        'is_active' => true,
+    ]);
+
+    SupportQuickReply::query()->create([
+        'title' => '人工接待提醒',
+        'body' => '已提醒客服尽快接待。',
+        'match_pattern' => '/(人工|客服)/',
+        'match_mode' => SupportQuickReply::MATCH_REGEX,
+        'trigger_action' => SupportQuickReply::ACTION_NOTIFY_STAFF,
+        'sort_order' => 2,
+        'is_active' => true,
+    ]);
+
+    $guestId = 'guest_quick_reply';
+
+    $this->withSession(['support_guest_id' => $guestId])
+        ->post(route('support.messages.store'), [
+            'message' => '我想退款',
+        ])
+        ->assertRedirect();
+
+    $session = SupportChatSession::query()->where('guest_id', $guestId)->firstOrFail();
+
+    expect($session->messages()->where('sender_type', SupportChatMessage::SENDER_SYSTEM)->exists())->toBeTrue();
+    expect($session->messages()->where('sender_type', SupportChatMessage::SENDER_SYSTEM)->latest()->first()->body)
+        ->toContain('请先提供订单号');
+
+    $this->withSession(['support_guest_id' => $guestId])
+        ->post(route('support.messages.store'), [
+            'support_chat_session_id' => $session->id,
+            'message' => '麻烦人工处理一下',
+        ])
+        ->assertRedirect();
+
+    expect($session->fresh()->messages()->where('sender_type', SupportChatMessage::SENDER_SYSTEM)->count())->toBeGreaterThanOrEqual(2)
+        ->and($session->fresh()->messages()->where('sender_type', SupportChatMessage::SENDER_SYSTEM)->where('body', 'like', '%已提醒客服尽快接待%')->exists())
+        ->toBeTrue();
 });

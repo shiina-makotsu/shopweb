@@ -17,7 +17,6 @@ use Filament\Schemas\Components\Section;
 use Filament\Schemas\Contracts\HasSchemas;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
-use Illuminate\Support\Facades\Storage;
 
 class PaymentSettingsPage extends Page implements HasSchemas
 {
@@ -120,24 +119,20 @@ class PaymentSettingsPage extends Page implements HasSchemas
             ->createOptionForm([
                 FileUpload::make('path')
                     ->label('上传图片')
+                    ->helperText('上传图片，或填写下方外部图片 URL。')
                     ->disk('public_uploads')
                     ->directory('payments')
                     ->image()
-                    ->maxSize(5120)
-                    ->required(),
+                    ->maxSize(5120),
+                TextInput::make('external_url')
+                    ->label('外部图片 URL')
+                    ->url()
+                    ->maxLength(2048),
                 TextInput::make('name')->label('名称')->maxLength(255),
                 TextInput::make('alt')->label('Alt 文案')->maxLength(255),
             ])
             ->createOptionUsing(function (array $data): string {
-                $path = is_array($data['path']) ? reset($data['path']) : $data['path'];
-
-                $asset = MediaAsset::query()->create([
-                    'name' => $data['name'] ?: pathinfo($path, PATHINFO_FILENAME),
-                    'path' => $path,
-                    'disk' => 'public_uploads',
-                    'mime_type' => Storage::disk('public_uploads')->mimeType($path) ?: 'image/png',
-                    'alt' => $data['alt'] ?? null,
-                ]);
+                $asset = MediaAsset::createImageFromUploadOrUrl($data, MediaAsset::USAGE_GENERAL);
 
                 return $asset->path;
             });

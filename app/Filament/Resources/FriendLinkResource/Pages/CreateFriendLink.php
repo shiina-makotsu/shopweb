@@ -8,4 +8,13 @@ use Filament\Resources\Pages\CreateRecord;
 class CreateFriendLink extends CreateRecord
 {
     protected static string $resource = FriendLinkResource::class;
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    protected function mutateFormDataBeforeCreate(array $data): array
+    {
+        return FriendLinkResource::normalizeImageFormData($data);
+    }
 }

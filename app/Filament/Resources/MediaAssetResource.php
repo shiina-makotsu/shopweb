@@ -60,13 +60,19 @@ class MediaAssetResource extends Resource
             Section::make('资源文件')->schema([
                 FileUpload::make('path')
                     ->label('文件')
+                    ->helperText('上传本地文件，或在下方填写外部图片 URL。两者至少填写一个。')
                     ->disk('public_uploads')
                     ->directory('media')
                     ->acceptedFileTypes(self::acceptedFileTypes())
                     ->maxSize(20480)
                     ->openable()
                     ->downloadable()
-                    ->required()
+                    ->columnSpanFull(),
+                TextInput::make('external_url')
+                    ->label('外部图片 URL')
+                    ->helperText('支持 http:// 或 https:// 图片链接。保存后会作为外部资源引用，不会下载到服务器。')
+                    ->url()
+                    ->maxLength(2048)
                     ->columnSpanFull(),
                 TextInput::make('name')->label('名称')->maxLength(255),
                 TextInput::make('alt')->label('Alt 文案')->maxLength(255),
@@ -96,8 +102,7 @@ class MediaAssetResource extends Resource
             ->columns([
                 ImageColumn::make('path')
                     ->label('预览')
-                    ->state(fn (MediaAsset $record): ?string => $record->isImage() ? $record->path : null)
-                    ->disk('public_uploads')
+                    ->state(fn (MediaAsset $record): ?string => $record->isImage() ? $record->url() : null)
                     ->imageSize(56)
                     ->defaultImageUrl(asset('favicon.ico')),
                 TextColumn::make('name')->label('名称')->searchable()->sortable(),
@@ -169,6 +174,50 @@ class MediaAssetResource extends Resource
             'application/vnd.ms-excel',
             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    public static function prepareAssetFormData(array $data): array
+    {
+        if (MediaAsset::isExternalUrl($data['path'] ?? null)) {
+            $data['external_url'] = $data['path'];
+            $data['path'] = null;
+        }
+
+        return $data;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    public static function normalizeAssetFormData(array $data): array
+    {
+        $path = $data['path'] ?? null;
+        $path = is_array($path) ? reset($path) : $path;
+
+        if (! is_string($path) || blank($path)) {
+            $path = MediaAsset::pathFromUploadOrUrl($data);
+        }
+
+        unset($data['external_url']);
+
+        if (MediaAsset::isExternalUrl($path)) {
+            $data['path'] = $path;
+            $data['disk'] = 'external';
+            $data['mime_type'] = ($data['mime_type'] ?? null) ?: 'image/external';
+            $data['size'] = null;
+
+            return $data;
+        }
+
+        $data['path'] = $path;
+        $data['disk'] = $data['disk'] ?? 'public_uploads';
+
+        return $data;
     }
 
     /**

@@ -31,6 +31,14 @@ class FriendLink extends Model
 
     public function imageUrl(): ?string
     {
-        return $this->image_path ? Storage::disk('public_uploads')->url($this->image_path) : null;
+        if (! $this->image_path) {
+            return null;
+        }
+
+        if (MediaAsset::isExternalUrl($this->image_path)) {
+            return $this->image_path;
+        }
+
+        return Storage::disk('public_uploads')->url($this->image_path);
     }
 }

@@ -67,6 +67,12 @@ class PageResource extends Resource
                     ->visibility('public')
                     ->maxSize(5120)
                     ->columnSpanFull(),
+                TextInput::make('cover_external_url')
+                    ->label('封面图 URL')
+                    ->helperText('也可以直接填写 http:// 或 https:// 图片链接，保存后会加入媒体库并设为封面。')
+                    ->url()
+                    ->maxLength(2048)
+                    ->columnSpanFull(),
                 TextInput::make('sort_order')->label('排序')->numeric()->default(0),
                 Toggle::make('is_published')->label('发布')->default(false),
                 Textarea::make('excerpt')->label('摘要')->rows(3)->maxLength(1000)->columnSpanFull(),
@@ -104,7 +110,7 @@ class PageResource extends Resource
             ->columns([
                 ImageColumn::make('coverMediaAsset.path')
                     ->label('封面')
-                    ->disk('public_uploads')
+                    ->state(fn (Page $record): ?string => $record->coverMediaAsset?->isImage() ? $record->coverMediaAsset->url() : null)
                     ->imageSize(48)
                     ->defaultImageUrl(asset('favicon.ico')),
                 TextColumn::make('title')->label('标题')->searchable(),

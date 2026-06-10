@@ -107,24 +107,20 @@ class HomeContentPage extends Page implements HasSchemas
             ->createOptionForm([
                 FileUpload::make('path')
                     ->label('上传图片')
+                    ->helperText('上传图片，或填写下方外部图片 URL。')
                     ->disk('public_uploads')
                     ->directory('site')
                     ->image()
-                    ->maxSize(5120)
-                    ->required(),
+                    ->maxSize(5120),
+                TextInput::make('external_url')
+                    ->label('外部图片 URL')
+                    ->url()
+                    ->maxLength(2048),
                 TextInput::make('name')->label('名称')->maxLength(255),
                 TextInput::make('alt')->label('Alt 文案')->maxLength(255),
             ])
             ->createOptionUsing(function (array $data): string {
-                $path = is_array($data['path']) ? reset($data['path']) : $data['path'];
-
-                $asset = MediaAsset::query()->create([
-                    'name' => $data['name'] ?: pathinfo($path, PATHINFO_FILENAME),
-                    'path' => $path,
-                    'disk' => 'public_uploads',
-                    'alt' => $data['alt'] ?? null,
-                    'usage' => MediaAsset::USAGE_HOME,
-                ]);
+                $asset = MediaAsset::createImageFromUploadOrUrl($data, MediaAsset::USAGE_HOME);
 
                 return $asset->path;
             });

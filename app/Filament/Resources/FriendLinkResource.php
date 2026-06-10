@@ -7,6 +7,7 @@ use App\Filament\Resources\FriendLinkResource\Pages\CreateFriendLink;
 use App\Filament\Resources\FriendLinkResource\Pages\EditFriendLink;
 use App\Filament\Resources\FriendLinkResource\Pages\ListFriendLinks;
 use App\Models\FriendLink;
+use App\Models\MediaAsset;
 use App\Support\RegexSearch;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
@@ -45,12 +46,17 @@ class FriendLinkResource extends Resource
                 TextInput::make('url')->label('链接地址')->url()->required()->maxLength(500),
                 FileUpload::make('image_path')
                     ->label('链接图像')
+                    ->helperText('可以上传图片，也可以填写下方的外链图片 URL。编辑时若上传新文件，会优先使用上传内容。')
                     ->disk('public_uploads')
                     ->directory('friend-links')
                     ->image()
                     ->maxSize(5120)
                     ->openable()
                     ->downloadable(),
+                TextInput::make('image_url')
+                    ->label('链接图像 URL')
+                    ->url()
+                    ->maxLength(2048),
                 TextInput::make('sort_order')->label('排序')->numeric()->default(0),
                 Toggle::make('is_active')->label('启用')->default(true),
                 Textarea::make('description')->label('链接介绍')->rows(3)->columnSpanFull(),
@@ -62,7 +68,7 @@ class FriendLinkResource extends Resource
     {
         return $table
             ->columns([
-                ImageColumn::make('image_path')->label('图像')->disk('public_uploads')->imageSize(40),
+                ImageColumn::make('image_path')->label('图像')->state(fn (FriendLink $record): ?string => $record->imageUrl())->imageSize(40),
                 TextColumn::make('site_name')
                     ->label('网站名称')
                     ->searchable(query: fn (Builder $query, string $search): Builder => RegexSearch::where($query, ['site_name', 'url', 'description'], $search))
@@ -75,6 +81,50 @@ class FriendLinkResource extends Resource
             ->defaultSort('sort_order')
             ->recordActions([EditAction::make(), DeleteAction::make()])
             ->toolbarActions([DeleteBulkAction::make()]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    public static function prepareImageFormData(array $data): array
+    {
+        if (MediaAsset::isExternalUrl($data['image_path'] ?? null)) {
+            $data['image_url'] = $data['image_path'];
+            $data['image_path'] = null;
+        }
+
+        return $data;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    public static function normalizeImageFormData(array $data): array
+    {
+        $imagePath = $data['image_path'] ?? null;
+        $imagePath = is_array($imagePath) ? reset($imagePath) : $imagePath;
+        $imageUrl = trim((string) ($data['image_url'] ?? ''));
+        unset($data['image_url']);
+
+        if (is_string($imagePath) && blank($imagePath) === false) {
+            $data['image_path'] = $imagePath;
+
+            return $data;
+        }
+
+        if ($imageUrl !== '') {
+            if (! MediaAsset::isExternalUrl($imageUrl)) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'image_url' => '请输入以 http:// 或 https:// 开头的图片链接。',
+                ]);
+            }
+
+            $data['image_path'] = $imageUrl;
+        }
+
+        return $data;
     }
 
     public static function getPages(): array
