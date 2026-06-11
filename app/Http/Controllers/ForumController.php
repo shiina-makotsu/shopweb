@@ -7,9 +7,11 @@ use App\Models\ForumSection;
 use App\Models\ForumThread;
 use App\Models\MediaAsset;
 use App\Services\ForumActivityLogger;
+use App\Support\ForumThreadTemplate;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 class ForumController extends Controller
@@ -97,6 +99,14 @@ class ForumController extends Controller
                 ->get()
                 ->filter(fn (ForumSection $candidate): bool => $candidate->canBePostedBy($request->user()))
                 ->values(),
+            'threadTemplates' => ForumThreadTemplate::options(),
+            'threadTemplateBodies' => collect(ForumThreadTemplate::options())
+                ->mapWithKeys(fn (string $label, string $key): array => [$key => ForumThreadTemplate::defaultBody($key)])
+                ->all(),
+            'threadTemplateTitles' => collect(ForumThreadTemplate::options())
+                ->mapWithKeys(fn (string $label, string $key): array => [$key => ForumThreadTemplate::defaultTitle($key)])
+                ->all(),
+            'selectedThreadTemplate' => ForumThreadTemplate::normalize($request->query('template')),
         ]);
     }
 
@@ -136,6 +146,7 @@ class ForumController extends Controller
             'user_id' => $request->user()->id,
             'title' => $data['title'],
             'slug' => $slug,
+            'template' => ForumThreadTemplate::normalize($data['template'] ?? null),
             'body' => $data['body'],
             'attachment_paths' => $attachmentPaths,
         ]);
@@ -290,6 +301,7 @@ class ForumController extends Controller
     {
         return $request->validate([
             'title' => ['required', 'string', 'max:120'],
+            'template' => ['nullable', 'string', Rule::in(array_keys(ForumThreadTemplate::options()))],
             'body' => ['required', 'string', 'max:12000'],
             'attachments.*' => $this->attachmentRules(),
         ]);
@@ -302,8 +314,8 @@ class ForumController extends Controller
     {
         return [
             'file',
-            'max:10240',
-            'mimetypes:image/jpeg,image/png,image/gif,image/webp,application/pdf,application/zip,text/plain,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'max:51200',
+            'mimetypes:image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm,video/quicktime,application/pdf,application/zip,text/plain,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         ];
     }
 

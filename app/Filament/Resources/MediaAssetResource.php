@@ -104,7 +104,7 @@ class MediaAssetResource extends Resource
                     ->label('预览')
                     ->state(fn (MediaAsset $record): ?string => $record->isImage() ? $record->url() : null)
                     ->imageSize(56)
-                    ->defaultImageUrl(asset('favicon.ico')),
+                    ->defaultImageUrl('/favicon.ico'),
                 TextColumn::make('name')->label('名称')->searchable()->sortable(),
                 TextColumn::make('mime_type')->label('类型')->badge()->sortable(),
                 TextColumn::make('library')
@@ -164,6 +164,7 @@ class MediaAssetResource extends Resource
             'image/svg+xml',
             'video/mp4',
             'video/webm',
+            'video/quicktime',
             'application/pdf',
             'application/zip',
             'application/vnd.ms-powerpoint',

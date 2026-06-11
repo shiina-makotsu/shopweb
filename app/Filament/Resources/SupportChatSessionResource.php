@@ -9,6 +9,7 @@ use App\Models\SupportChatMessage;
 use App\Models\SupportChatSession;
 use App\Services\SupportChatService;
 use App\Support\RegexSearch;
+use App\Support\Url;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\Placeholder;
@@ -157,7 +158,7 @@ class SupportChatSessionResource extends Resource
             $attachment = '';
 
             if ($message->attachment_path) {
-                $url = route('support.messages.attachment', $message);
+                $url = Url::route('support.messages.attachment', $message);
                 $label = e($message->attachment_original_name ?: '附件');
                 $attachment = '<p style="margin-top:8px;"><a href="'.e($url).'" target="_blank" rel="noopener">查看附件：'.$label.'</a></p>';
             }

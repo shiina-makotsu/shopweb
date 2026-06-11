@@ -5,6 +5,7 @@ namespace App\Filament\Resources\ProductResource\Pages;
 use App\Filament\Resources\ProductResource;
 use App\Services\AdminActivityLogger;
 use App\Services\CsvImportService;
+use App\Support\Url;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Forms\Components\FileUpload;
@@ -56,7 +57,7 @@ class ListProducts extends ListRecords
             Action::make('exportCsv')
                 ->label('导出 SKU CSV')
                 ->icon(Heroicon::OutlinedArrowDownTray)
-                ->url(route('admin.exports.products'), true),
+                ->url(Url::route('admin.exports.products'), true),
             CreateAction::make(),
         ];
     }

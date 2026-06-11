@@ -1,10 +1,17 @@
+@php
+    $selectedTemplate = old('template', $selectedThreadTemplate ?? \App\Support\ForumThreadTemplate::GENERAL);
+    $templateTitles = $threadTemplateTitles ?? [];
+    $templateBodies = $threadTemplateBodies ?? [];
+    $path = fn (string $name, mixed $parameters = []): string => \App\Support\Url::route($name, $parameters);
+@endphp
+
 <x-layouts.app title="发布新帖">
     <section class="rounded-sm border border-slate-300 bg-white">
         <div class="border-b border-slate-200 bg-slate-100 px-4 py-2 text-sm text-slate-600">
-            <a class="hover:text-blue-800" href="{{ route('forum.index') }}">论坛</a>
+            <a class="hover:text-blue-800" href="{{ $path('forum.index') }}">论坛</a>
             @if($section)
                 <span class="mx-1">/</span>
-                <a class="hover:text-blue-800" href="{{ route('forum.sections.show', $section) }}">{{ $section->name }}</a>
+                <a class="hover:text-blue-800" href="{{ $path('forum.sections.show', $section) }}">{{ $section->name }}</a>
             @endif
         </div>
         <div class="border-b border-slate-200 px-4 py-4">
@@ -15,7 +22,7 @@
         @if($sections->isEmpty())
             <div class="px-4 py-8 text-sm text-slate-600">当前没有你可以发帖的版块。</div>
         @else
-            <form method="post" action="{{ $section ? route('forum.threads.store', $section) : route('forum.threads.store-global') }}" enctype="multipart/form-data" class="space-y-4 px-4 py-4 text-sm">
+            <form method="post" action="{{ $section ? $path('forum.threads.store', $section) : $path('forum.threads.store-global') }}" enctype="multipart/form-data" class="space-y-4 px-4 py-4 text-sm">
                 @csrf
                 @unless($section)
                     <label class="block">
@@ -27,23 +34,67 @@
                         </select>
                     </label>
                 @endunless
+
+                <label class="block">
+                    <span class="text-xs font-medium text-slate-600">发帖模板</span>
+                    <select class="mt-1 w-full rounded-sm border border-slate-300 bg-white px-3 py-2" name="template" data-thread-template>
+                        @foreach($threadTemplates as $key => $label)
+                            <option value="{{ $key }}" @selected($selectedTemplate === $key)>{{ $label }}</option>
+                        @endforeach
+                    </select>
+                    <span class="mt-1 block text-xs text-slate-500">选择交友、相亲、合租、招租、找租或资源发布模板后，会自动生成可编辑的正文结构。</span>
+                </label>
+
                 <label class="block">
                     <span class="text-xs font-medium text-slate-600">标题</span>
-                    <input class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2" name="title" maxlength="120" value="{{ old('title') }}" required>
+                    <input class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2" name="title" maxlength="120" value="{{ old('title', $templateTitles[$selectedTemplate] ?? '') }}" data-thread-title required>
                 </label>
+
                 <label class="block">
                     <span class="text-xs font-medium text-slate-600">正文</span>
-                    <textarea class="mt-1 min-h-40 w-full rounded-sm border border-slate-300 px-3 py-2" name="body" maxlength="12000" required>{{ old('body') }}</textarea>
+                    <textarea class="mt-1 min-h-64 w-full rounded-sm border border-slate-300 px-3 py-2" name="body" maxlength="12000" data-thread-body required>{{ old('body', $templateBodies[$selectedTemplate] ?? '') }}</textarea>
                 </label>
+
                 <label class="block">
-                    <span class="text-xs font-medium text-slate-600">图片/文件附件</span>
+                    <span class="text-xs font-medium text-slate-600">图片/视频/文件附件</span>
                     <input class="mt-1 block w-full rounded-sm border border-slate-300 px-3 py-2 text-xs" type="file" name="attachments[]" multiple>
+                    <span class="mt-1 block text-xs text-slate-500">支持图片、视频、PDF、压缩包和常见文档；合租/招租模板可上传房源照片、视频或位置截图。</span>
                 </label>
+
                 <div class="flex flex-wrap gap-2">
                     <button class="rounded-sm border border-blue-700 bg-blue-700 px-4 py-2 font-medium text-white hover:bg-blue-800" type="submit">发布</button>
-                    <a class="rounded-sm border border-slate-300 px-4 py-2 font-medium hover:bg-slate-50" href="{{ $section ? route('forum.sections.show', $section) : route('forum.index') }}">返回</a>
+                    <a class="rounded-sm border border-slate-300 px-4 py-2 font-medium hover:bg-slate-50" href="{{ $section ? $path('forum.sections.show', $section) : $path('forum.index') }}">返回</a>
                 </div>
             </form>
         @endif
     </section>
+
+    <script>
+        (() => {
+            const templateSelect = document.querySelector('[data-thread-template]');
+            const titleInput = document.querySelector('[data-thread-title]');
+            const bodyInput = document.querySelector('[data-thread-body]');
+            const titles = @json($templateTitles);
+            const bodies = @json($templateBodies);
+
+            if (!templateSelect || !titleInput || !bodyInput) {
+                return;
+            }
+
+            const knownTitles = Object.values(titles);
+            const knownBodies = Object.values(bodies);
+
+            templateSelect.addEventListener('change', () => {
+                const key = templateSelect.value;
+
+                if (titleInput.value.trim() === '' || knownTitles.includes(titleInput.value)) {
+                    titleInput.value = titles[key] || '';
+                }
+
+                if (bodyInput.value.trim() === '' || knownBodies.includes(bodyInput.value)) {
+                    bodyInput.value = bodies[key] || '';
+                }
+            });
+        })();
+    </script>
 </x-layouts.app>

@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\User;
+use App\Support\Url;
 use Illuminate\Support\Facades\File;
 
 it('allows admins to access backup downloads', function (): void {
@@ -10,8 +11,8 @@ it('allows admins to access backup downloads', function (): void {
         ->get('/admin/backups')
         ->assertOk()
         ->assertSee('数据库备份')
-        ->assertSee(route('admin.backups.database'), false)
-        ->assertSee(route('admin.backups.uploads'), false);
+        ->assertSee(Url::route('admin.backups.database'), false)
+        ->assertSee(Url::route('admin.backups.uploads'), false);
 });
 
 it('blocks customers from backup downloads', function (): void {

@@ -14,6 +14,7 @@ class Page extends Model
     protected $fillable = [
         'title',
         'slug',
+        'template',
         'cover_media_asset_id',
         'body',
         'excerpt',

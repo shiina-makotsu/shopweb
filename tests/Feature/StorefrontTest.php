@@ -16,6 +16,7 @@ use App\Models\Warehouse;
 use App\Models\WarehouseShippingRate;
 use App\Models\WarehouseStock;
 use App\Services\OrderService;
+use App\Support\Url;
 
 it('allows a customer to add a sku to cart and create an order', function (): void {
     $this->seed();
@@ -73,7 +74,7 @@ it('renders product tag listing pages', function (): void {
 
     $this->get(route('products.show', $product))
         ->assertOk()
-        ->assertSee(route('tags.show', $tag), false);
+        ->assertSee(Url::route('tags.show', $tag), false);
 });
 
 it('registers customers with a simple human verification challenge', function (): void {
@@ -490,8 +491,8 @@ it('always renders home discount and concept sections with empty states', functi
         ->assertSee('暂无折扣商品')
         ->assertSee('概念商品')
         ->assertSee('暂无概念商品')
-        ->assertSee(route('products.index', ['discount' => 1]), false)
-        ->assertSee(route('products.index', ['status' => Product::STATUS_CONCEPT]), false);
+        ->assertSee(Url::route('products.index', ['discount' => 1]), false)
+        ->assertSee(Url::route('products.index', ['status' => Product::STATUS_CONCEPT]), false);
 });
 
 it('filters storefront product lists by featured discount and concept sections', function (): void {
@@ -678,7 +679,7 @@ it('shows storefront purchase actions on product details and sold out badges', f
         ->assertSee('加入购物车')
         ->assertSee('立即购买')
         ->assertSee('data-cart-add-form', false)
-        ->assertSee(route('cart.buy-now'), false);
+        ->assertSee(Url::route('cart.buy-now'), false);
 
     $soldOut = Product::query()->create([
         'category_id' => $category->id,
@@ -1000,7 +1001,7 @@ it('renders friend links from the homepage and friend link listing', function ()
     $this->get(route('home'))
         ->assertOk()
         ->assertSee('友情链接')
-        ->assertSee(route('friend-links.index'), false);
+        ->assertSee(Url::route('friend-links.index'), false);
 
     $this->get(route('friend-links.index'))
         ->assertOk()

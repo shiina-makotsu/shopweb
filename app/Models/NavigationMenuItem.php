@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Url;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -47,7 +48,7 @@ class NavigationMenuItem extends Model
     public function resolvedUrl(): string
     {
         if ($this->route_name && \Route::has($this->route_name)) {
-            return route($this->route_name, $this->route_parameters ?? []);
+            return Url::route($this->route_name, $this->route_parameters ?? []);
         }
 
         return $this->url ?: '#';

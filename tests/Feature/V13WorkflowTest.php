@@ -12,6 +12,7 @@ use App\Models\SupportTicket;
 use App\Models\User;
 use App\Services\OrderService;
 use App\Support\OrderPrivacy;
+use App\Support\Url;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
@@ -162,7 +163,7 @@ it('shows payment proof images to admins and a payment success state to customer
         ->get("/admin/orders/{$order->id}/edit")
         ->assertOk()
         ->assertSee('付款凭证图片')
-        ->assertSee(route('admin.payment-proofs.show', $order), false);
+        ->assertSee(Url::route('admin.payment-proofs.show', $order), false);
 });
 
 it('keeps awaiting receipt orders open until the customer confirms receipt', function (): void {

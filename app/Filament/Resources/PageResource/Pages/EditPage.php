@@ -4,6 +4,7 @@ namespace App\Filament\Resources\PageResource\Pages;
 
 use App\Filament\Resources\PageResource;
 use App\Filament\Resources\PageResource\Pages\Concerns\HandlesPageCoverUpload;
+use App\Support\PageTemplate;
 use Filament\Resources\Pages\EditRecord;
 
 class EditPage extends EditRecord
@@ -18,6 +19,8 @@ class EditPage extends EditRecord
      */
     protected function mutateFormDataBeforeSave(array $data): array
     {
+        $data['template'] = PageTemplate::normalize($data['template'] ?? null);
+
         return $this->attachUploadedCover($data);
     }
 }

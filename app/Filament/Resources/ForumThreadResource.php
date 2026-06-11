@@ -6,6 +6,7 @@ use App\Filament\Concerns\ChecksAdminAccess;
 use App\Filament\Resources\ForumThreadResource\Pages\ListForumThreads;
 use App\Models\ForumThread;
 use App\Services\ForumActivityLogger;
+use App\Support\ForumThreadTemplate;
 use App\Support\RegexSearch;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteBulkAction;
@@ -40,6 +41,11 @@ class ForumThreadResource extends Resource
                     ->searchable(query: fn (Builder $query, string $search): Builder => RegexSearch::where($query, ['title', 'body'], $search))
                     ->sortable(),
                 TextColumn::make('section.name')->label('版块')->sortable(),
+                TextColumn::make('template')
+                    ->label('模板')
+                    ->formatStateUsing(fn (?string $state): string => ForumThreadTemplate::label($state))
+                    ->badge()
+                    ->sortable(),
                 TextColumn::make('user.public_id')->label('贴主 ID')->searchable(),
                 IconColumn::make('is_pinned')->label('置顶')->boolean(),
                 IconColumn::make('is_featured')->label('星标')->boolean(),

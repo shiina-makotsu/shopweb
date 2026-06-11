@@ -13,6 +13,7 @@ use App\Support\Money;
 use App\Support\OrderStatusPresenter;
 use App\Support\OrderTimeline;
 use App\Support\RegexSearch;
+use App\Support\Url;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\FileUpload;
@@ -70,7 +71,7 @@ class OrderResource extends Resource
                     ->label('付款凭证图片')
                     ->content(fn (?Order $record): HtmlString => new HtmlString(
                         $record?->payment_proof_path
-                            ? '<a href="'.e(route('admin.payment-proofs.show', $record)).'" target="_blank" rel="noopener"><img src="'.e(route('admin.payment-proofs.show', $record)).'" alt="付款凭证" style="max-width: 360px; max-height: 420px; border: 1px solid #cbd5e1; border-radius: 2px; object-fit: contain; background: #fff;" /></a>'
+                            ? '<a href="'.e(Url::route('admin.payment-proofs.show', $record)).'" target="_blank" rel="noopener"><img src="'.e(Url::route('admin.payment-proofs.show', $record)).'" alt="付款凭证" style="max-width: 360px; max-height: 420px; border: 1px solid #cbd5e1; border-radius: 2px; object-fit: contain; background: #fff;" /></a>'
                             : '<span style="color:#64748b;">暂未上传付款凭证</span>'
                     ))
                     ->columnSpanFull(),

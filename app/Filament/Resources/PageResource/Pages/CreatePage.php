@@ -4,6 +4,7 @@ namespace App\Filament\Resources\PageResource\Pages;
 
 use App\Filament\Resources\PageResource;
 use App\Filament\Resources\PageResource\Pages\Concerns\HandlesPageCoverUpload;
+use App\Support\PageTemplate;
 use Filament\Resources\Pages\CreateRecord;
 
 class CreatePage extends CreateRecord
@@ -18,6 +19,12 @@ class CreatePage extends CreateRecord
      */
     protected function mutateFormDataBeforeCreate(array $data): array
     {
+        $data['template'] = PageTemplate::normalize($data['template'] ?? null);
+
+        if (blank($data['body'] ?? null)) {
+            $data['body'] = PageTemplate::defaultBody($data['template']);
+        }
+
         return $this->attachUploadedCover($data);
     }
 }

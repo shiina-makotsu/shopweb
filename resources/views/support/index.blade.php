@@ -130,11 +130,11 @@
                             @if($message->hasAttachment())
                                 <div class="mt-2">
                                     @if($message->isImage())
-                                        <a href="{{ route('support.messages.attachment', $message) }}" target="_blank" rel="noopener">
-                                            <img class="max-h-64 rounded-sm border border-slate-200 object-contain" src="{{ route('support.messages.attachment', $message) }}" alt="{{ $message->attachment_original_name }}">
+                                        <a href="{{ \App\Support\Url::route('support.messages.attachment', $message) }}" target="_blank" rel="noopener">
+                                            <img class="max-h-64 rounded-sm border border-slate-200 object-contain" src="{{ \App\Support\Url::route('support.messages.attachment', $message) }}" alt="{{ $message->attachment_original_name }}">
                                         </a>
                                     @else
-                                        <a class="inline-flex rounded-sm border border-slate-300 bg-white px-3 py-2 text-xs font-medium hover:bg-slate-50" href="{{ route('support.messages.attachment', $message) }}">
+                                        <a class="inline-flex rounded-sm border border-slate-300 bg-white px-3 py-2 text-xs font-medium hover:bg-slate-50" href="{{ \App\Support\Url::route('support.messages.attachment', $message) }}">
                                             下载附件：{{ $message->attachment_original_name }}
                                         </a>
                                     @endif

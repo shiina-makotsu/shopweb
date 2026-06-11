@@ -5,6 +5,7 @@ namespace App\Filament\Pages;
 use App\Support\AdminAccess;
 use App\Support\Money;
 use App\Support\ProfitMetrics;
+use App\Support\Url;
 use BackedEnum;
 use Carbon\Carbon;
 use Filament\Pages\Page;
@@ -78,7 +79,7 @@ class ProfitOverviewPage extends Page
 
     public function exportUrl(): string
     {
-        return route('admin.report-exports.profit-overview', array_filter([
+        return Url::route('admin.report-exports.profit-overview', array_filter([
             'date_from' => $this->date_from,
             'date_to' => $this->date_to,
         ]));

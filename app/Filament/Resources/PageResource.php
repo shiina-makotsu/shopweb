@@ -8,6 +8,7 @@ use App\Filament\Resources\PageResource\Pages\EditPage;
 use App\Filament\Resources\PageResource\Pages\ListPages;
 use App\Models\MediaAsset;
 use App\Models\Page;
+use App\Support\PageTemplate;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
@@ -47,7 +48,25 @@ class PageResource extends Resource
                 TextInput::make('title')->label('标题')->required()->maxLength(255)
                     ->live(onBlur: true)
                     ->afterStateUpdated(fn ($state, callable $set) => $set('slug', Str::slug($state))),
-                TextInput::make('slug')->label('Slug')->required()->unique(ignoreRecord: true),
+                TextInput::make('slug')
+                    ->label('Slug')
+                    ->helperText('使用 404 作为 Slug 时，该页面会作为站点 404 页面内容。')
+                    ->required()
+                    ->unique(ignoreRecord: true),
+                Select::make('template')
+                    ->label('页面模板')
+                    ->options(PageTemplate::options())
+                    ->default(PageTemplate::DEFAULT)
+                    ->required()
+                    ->live()
+                    ->afterStateUpdated(function ($state, callable $set): void {
+                        if ($slug = PageTemplate::defaultSlug($state)) {
+                            $set('slug', $slug);
+                        }
+
+                        $set('body', PageTemplate::defaultBody($state));
+                    })
+                    ->helperText('功能模板会在前台自动渲染菜单、友链、搜索、资源发布或 404 内容；正文可继续写自定义说明。'),
                 Select::make('cover_media_asset_id')
                     ->label('封面图')
                     ->helperText('从媒体库选择已有图片；也可以使用下方上传框直接上传新封面。')
@@ -112,9 +131,13 @@ class PageResource extends Resource
                     ->label('封面')
                     ->state(fn (Page $record): ?string => $record->coverMediaAsset?->isImage() ? $record->coverMediaAsset->url() : null)
                     ->imageSize(48)
-                    ->defaultImageUrl(asset('favicon.ico')),
+                    ->defaultImageUrl('/favicon.ico'),
                 TextColumn::make('title')->label('标题')->searchable(),
                 TextColumn::make('slug')->label('Slug'),
+                TextColumn::make('template')
+                    ->label('模板')
+                    ->formatStateUsing(fn (?string $state): string => PageTemplate::label($state))
+                    ->badge(),
                 IconColumn::make('is_published')->label('发布')->boolean(),
                 TextColumn::make('sort_order')->label('排序')->sortable(),
                 TextColumn::make('updated_at')->label('更新')->dateTime('Y-m-d H:i')->sortable(),

@@ -14,6 +14,8 @@ use App\Models\SupportTicket;
 use App\Models\SiteSetting;
 use App\Models\SupportQuickReply;
 use App\Models\User;
+use App\Support\ForumThreadTemplate;
+use App\Support\Url;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 
@@ -121,6 +123,42 @@ it('lets users create forum threads and replies', function (): void {
         'forum_thread_id' => $thread->id,
         'user_id' => $user->id,
         'body' => '欢迎。',
+    ]);
+});
+
+it('lets users create typed forum threads with rich template attachments', function (): void {
+    Storage::fake('public_uploads');
+
+    $user = User::factory()->create(['role' => 'customer']);
+    $section = ForumSection::query()->create([
+        'name' => '合租招租',
+        'slug' => 'rent',
+        'is_active' => true,
+    ]);
+
+    $this->actingAs($user)
+        ->post(route('forum.threads.store', $section), [
+            'title' => '寻找合租人',
+            'template' => ForumThreadTemplate::ROOMMATE,
+            'body' => ForumThreadTemplate::defaultBody(ForumThreadTemplate::ROOMMATE),
+            'attachments' => [
+                UploadedFile::fake()->image('room.jpg'),
+                UploadedFile::fake()->create('tour.mp4', 256, 'video/mp4'),
+            ],
+        ])
+        ->assertRedirect();
+
+    $thread = $section->threads()->firstOrFail();
+
+    expect($thread->template)->toBe(ForumThreadTemplate::ROOMMATE)
+        ->and($thread->attachment_paths)->toHaveCount(2)
+        ->and($thread->body)->toContain('城市');
+
+    $this->assertDatabaseHas('media_assets', [
+        'usage' => MediaAsset::USAGE_FORUM,
+        'library' => MediaAsset::LIBRARY_FORUM_USER,
+        'uploaded_by_id' => $user->id,
+        'mime_type' => 'video/mp4',
     ]);
 });
 
@@ -468,7 +506,7 @@ it('searches products and users and links to private messages', function (): voi
         ->get(route('search.index', ['q' => 'alice']))
         ->assertOk()
         ->assertSee('Alice')
-        ->assertSee(route('messages.thread', $target), false);
+        ->assertSee(Url::route('messages.thread', $target), false);
 
     $this->actingAs($viewer)
         ->post(route('messages.store', $target), ['body' => '你好。'])

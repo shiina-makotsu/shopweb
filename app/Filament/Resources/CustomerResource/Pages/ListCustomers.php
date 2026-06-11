@@ -5,6 +5,7 @@ namespace App\Filament\Resources\CustomerResource\Pages;
 use App\Filament\Resources\CustomerResource;
 use App\Services\AdminActivityLogger;
 use App\Services\CsvImportService;
+use App\Support\Url;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Forms\Components\FileUpload;
@@ -56,7 +57,7 @@ class ListCustomers extends ListRecords
             Action::make('exportCsv')
                 ->label('导出前台用户 CSV')
                 ->icon(Heroicon::OutlinedArrowDownTray)
-                ->url(route('admin.exports.customers'), true),
+                ->url(Url::route('admin.exports.customers'), true),
         ];
     }
 

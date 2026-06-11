@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Url;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -21,6 +22,7 @@ class MediaAsset extends Model
     public const USAGE_PAGE = 'page';
     public const USAGE_PRODUCT = 'product';
     public const USAGE_PRESENTATION = 'presentation';
+    public const USAGE_RESOURCE = 'resource';
     public const USAGE_BACKGROUND = 'background';
     public const USAGE_FORUM = 'forum';
     public const LIBRARY_SITE = 'site';
@@ -156,24 +158,29 @@ class MediaAsset extends Model
         }
 
         $url = $this->url();
+        $relativeUrl = Url::relative($url);
 
         $pageCount = Page::query()
-            ->where(function (Builder $query) use ($url): void {
+            ->where(function (Builder $query) use ($url, $relativeUrl): void {
                 $query
                     ->where('body', 'like', "%{$this->path}%")
-                    ->orWhere('body', 'like', "%{$url}%");
+                    ->orWhere('body', 'like', "%{$url}%")
+                    ->orWhere('body', 'like', "%{$relativeUrl}%");
             })
             ->count();
 
         $settingCount = SiteSetting::query()
-            ->where(function (Builder $query) use ($url): void {
+            ->where(function (Builder $query) use ($url, $relativeUrl): void {
                 $query
                     ->where('home_content', 'like', "%{$this->path}%")
                     ->orWhere('home_content', 'like', "%{$url}%")
+                    ->orWhere('home_content', 'like', "%{$relativeUrl}%")
                     ->orWhere('payment_instructions', 'like', "%{$this->path}%")
                     ->orWhere('payment_instructions', 'like', "%{$url}%")
+                    ->orWhere('payment_instructions', 'like', "%{$relativeUrl}%")
                     ->orWhere('contact_info', 'like', "%{$this->path}%")
-                    ->orWhere('contact_info', 'like', "%{$url}%");
+                    ->orWhere('contact_info', 'like', "%{$url}%")
+                    ->orWhere('contact_info', 'like', "%{$relativeUrl}%");
             })
             ->count();
 
@@ -211,6 +218,7 @@ class MediaAsset extends Model
             self::USAGE_PAGE => '自定义页面',
             self::USAGE_PRODUCT => '商品图片',
             self::USAGE_PRESENTATION => 'PPT/展示资料',
+            self::USAGE_RESOURCE => '资源发布',
             self::USAGE_BACKGROUND => '背景图',
             self::USAGE_FORUM => '论坛用户资源',
         ];

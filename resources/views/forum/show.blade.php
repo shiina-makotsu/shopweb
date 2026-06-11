@@ -1,6 +1,7 @@
 @php
     $assetUrl = fn (string $path): string => \Illuminate\Support\Facades\Storage::disk('public_uploads')->url($path);
     $isImage = fn (string $path): bool => preg_match('/\.(jpe?g|png|gif|webp)$/i', $path) === 1;
+    $isVideo = fn (string $path): bool => preg_match('/\.(mp4|webm|mov)$/i', $path) === 1;
 @endphp
 
 <x-layouts.app :title="$thread->title">
@@ -45,6 +46,8 @@
                         <a class="rounded-sm border border-slate-200 bg-slate-50 px-3 py-2 text-xs hover:bg-blue-50" href="{{ $assetUrl($path) }}" download>
                             @if($isImage($path))
                                 <img class="mb-2 h-28 w-full rounded-sm object-cover" src="{{ $assetUrl($path) }}" alt="论坛附件">
+                            @elseif($isVideo($path))
+                                <video class="mb-2 h-28 w-full rounded-sm bg-black object-contain" src="{{ $assetUrl($path) }}" controls preload="metadata"></video>
                             @endif
                             下载附件：{{ basename($path) }}
                         </a>
@@ -122,6 +125,8 @@
                                 <a class="rounded-sm border border-slate-200 bg-slate-50 px-3 py-2 text-xs hover:bg-blue-50" href="{{ $assetUrl($path) }}" download>
                                     @if($isImage($path))
                                         <img class="mb-2 h-24 w-full rounded-sm object-cover" src="{{ $assetUrl($path) }}" alt="回复附件">
+                                    @elseif($isVideo($path))
+                                        <video class="mb-2 h-24 w-full rounded-sm bg-black object-contain" src="{{ $assetUrl($path) }}" controls preload="metadata"></video>
                                     @endif
                                     下载附件：{{ basename($path) }}
                                 </a>

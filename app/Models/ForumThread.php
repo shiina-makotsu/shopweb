@@ -14,6 +14,7 @@ class ForumThread extends Model
         'user_id',
         'title',
         'slug',
+        'template',
         'body',
         'attachment_paths',
         'is_pinned',
