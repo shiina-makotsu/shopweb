@@ -363,11 +363,11 @@ it('applies storefront appearance settings as css variables', function (): void 
         ->assertSee('--shop-button-radius: 6px', false)
         ->assertSee('--shop-product-card-padding: 0.5rem', false)
         ->assertSee('/uploads/site/favicon.png', false)
-        ->assertSee('--shop-page-background-image: url(http://localhost/uploads/site/home-bg.jpg)', false);
+        ->assertSee('--shop-page-background-image: url(/uploads/site/home-bg.jpg)', false);
 
     $this->get(route('login'))
         ->assertOk()
-        ->assertSee('--shop-page-background-image: url(http://localhost/uploads/site/auth-bg.jpg)', false);
+        ->assertSee('--shop-page-background-image: url(/uploads/site/auth-bg.jpg)', false);
 });
 
 it('can hide the home welcome section and query shipments by order number only', function (): void {
