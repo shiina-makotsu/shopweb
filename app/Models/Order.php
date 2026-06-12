@@ -118,6 +118,11 @@ class Order extends Model
         return $this->hasOne(CouponRedemption::class);
     }
 
+    public function couponRedemptions(): HasMany
+    {
+        return $this->hasMany(CouponRedemption::class);
+    }
+
     public function paymentVerificationLogs(): HasMany
     {
         return $this->hasMany(PaymentVerificationLog::class);

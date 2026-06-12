@@ -18,6 +18,8 @@ class CouponRedemption extends Model
         'coupon_id',
         'user_id',
         'order_id',
+        'order_item_id',
+        'user_coupon_id',
         'status',
         'discount_cents',
     ];
@@ -35,5 +37,15 @@ class CouponRedemption extends Model
     public function order(): BelongsTo
     {
         return $this->belongsTo(Order::class);
+    }
+
+    public function orderItem(): BelongsTo
+    {
+        return $this->belongsTo(OrderItem::class);
+    }
+
+    public function userCoupon(): BelongsTo
+    {
+        return $this->belongsTo(UserCoupon::class);
     }
 }

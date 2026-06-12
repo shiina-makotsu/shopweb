@@ -150,6 +150,11 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
         return $this->hasMany(UserAddress::class);
     }
 
+    public function coupons(): HasMany
+    {
+        return $this->hasMany(UserCoupon::class);
+    }
+
     public function productComments(): HasMany
     {
         return $this->hasMany(ProductComment::class);

@@ -67,7 +67,7 @@
         @endif
         <div class="flex items-end justify-between gap-3">
             <div>
-                <p class="text-base font-semibold text-red-700">@money($product->starting_price_cents)</p>
+                <p class="text-base font-semibold text-red-700">{{ $product->priceRangeLabel() }}</p>
                 @if($variant?->hasActiveDiscount())
                     <p class="text-xs text-slate-500 line-through">@money($variant->price_cents)</p>
                     <p class="text-xs font-medium text-pink-700">限时折扣</p>

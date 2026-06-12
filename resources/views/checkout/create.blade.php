@@ -44,11 +44,33 @@
 
                 <section class="rounded-sm border border-slate-300">
                     <h2 class="border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold">优惠与备注</h2>
-                    <div class="grid gap-4 p-4 md:grid-cols-2">
-                        <label class="block">
-                            <span class="text-sm font-medium">优惠码</span>
-                            <input class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm uppercase" name="coupon_code" value="{{ old('coupon_code') }}">
-                        </label>
+                    <div class="grid gap-4 p-4">
+                        <div class="space-y-3">
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <span class="text-sm font-medium">可用优惠码</span>
+                                <a class="text-xs font-medium text-blue-700 hover:text-blue-900" href="{{ route('user.section', 'coupons') }}">管理我的优惠码</a>
+                            </div>
+                            @foreach($items as $item)
+                                @php($lineCoupons = $availableCouponsByVariant[(int) $item['variant']->id] ?? [])
+                                @if($lineCoupons !== [])
+                                    <label class="block rounded-sm border border-slate-200 bg-white px-3 py-3">
+                                        <span class="block text-xs font-medium text-slate-700">{{ $item['product']->title }} / {{ $item['variant']->specLabel() }}</span>
+                                        <select class="mt-2 w-full rounded-sm border border-slate-300 bg-white px-3 py-2 text-sm" name="coupon_items[{{ $item['variant']->id }}]">
+                                            <option value="">不使用优惠码</option>
+                                            @foreach($lineCoupons as $userCoupon)
+                                                @php($coupon = $userCoupon->coupon)
+                                                <option value="{{ $userCoupon->id }}" @selected((string) old('coupon_items.'.$item['variant']->id) === (string) $userCoupon->id)>
+                                                    {{ $coupon->name }} / {{ $coupon->code }} / {{ $coupon->discountLabel() }} / {{ $coupon->scopeLabel() }}
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                    </label>
+                                @endif
+                            @endforeach
+                            @error('coupon_items')
+                                <p class="text-sm text-red-600">{{ $message }}</p>
+                            @enderror
+                        </div>
                         <label class="block md:col-span-2">
                             <span class="text-sm font-medium">备注</span>
                             <textarea class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" name="customer_note" rows="3">{{ old('customer_note') }}</textarea>

@@ -3,6 +3,7 @@
 use App\Models\Product;
 use App\Models\ProductMedia;
 use App\Models\Coupon;
+use App\Models\UserCoupon;
 use App\Models\FlashSale;
 use App\Models\FriendLink;
 use App\Models\Order;
@@ -1071,6 +1072,196 @@ it('applies global coupons and restricts product coupons to a single matching ca
         'discount_cents' => 1000,
         'total_cents' => 9000,
     ]);
+});
+
+it('shows product price ranges and defaults detail price to the first sku', function (): void {
+    $this->seed();
+
+    $category = \App\Models\Category::query()->firstOrFail();
+    $product = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => '多价格商品',
+        'slug' => 'range-price-product',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_ONLINE,
+    ]);
+    ProductVariant::query()->create([
+        'product_id' => $product->id,
+        'sku' => 'RANGE-HIGH',
+        'specs' => ['规格' => '高价'],
+        'price_cents' => 3000,
+        'stock' => 5,
+        'is_active' => true,
+    ]);
+    ProductVariant::query()->create([
+        'product_id' => $product->id,
+        'sku' => 'RANGE-LOW',
+        'specs' => ['规格' => '低价'],
+        'price_cents' => 1000,
+        'stock' => 5,
+        'is_active' => true,
+    ]);
+
+    $this->get(route('products.index'))
+        ->assertOk()
+        ->assertSee('¥10.00~¥30.00');
+
+    $this->get(route('products.show', $product))
+        ->assertOk()
+        ->assertSee('data-product-price', false)
+        ->assertSee('¥30.00')
+        ->assertSee('data-price="¥10.00"', false);
+});
+
+it('lets users claim coupons and apply one coupon per cart sku', function (): void {
+    $this->seed();
+
+    $user = User::factory()->create(['role' => 'customer']);
+    $category = \App\Models\Category::query()->firstOrFail();
+    $productA = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => '券包商品 A',
+        'slug' => 'wallet-coupon-product-a',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_ONLINE,
+    ]);
+    $variantA = ProductVariant::query()->create([
+        'product_id' => $productA->id,
+        'sku' => 'WALLET-A',
+        'price_cents' => 10000,
+        'stock' => 5,
+        'is_active' => true,
+    ]);
+    $productB = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => '券包商品 B',
+        'slug' => 'wallet-coupon-product-b',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_ONLINE,
+    ]);
+    $variantB = ProductVariant::query()->create([
+        'product_id' => $productB->id,
+        'sku' => 'WALLET-B',
+        'price_cents' => 5000,
+        'stock' => 5,
+        'is_active' => true,
+    ]);
+
+    $couponA = Coupon::query()->create([
+        'code' => 'WALLETA',
+        'name' => 'A 商品券',
+        'type' => Coupon::TYPE_FIXED,
+        'value' => 1000,
+        'scope' => Coupon::SCOPE_PRODUCT,
+        'product_id' => $productA->id,
+        'is_active' => true,
+    ]);
+    $couponA->products()->sync([$productA->id, $productB->id]);
+    $couponB = Coupon::query()->create([
+        'code' => 'WALLETB',
+        'name' => '全场九折',
+        'type' => Coupon::TYPE_PERCENT,
+        'value' => 10,
+        'scope' => Coupon::SCOPE_GLOBAL,
+        'is_active' => true,
+    ]);
+
+    $this->actingAs($user)
+        ->post(route('user.coupons.store'), ['coupon_code' => 'WALLETA'])
+        ->assertRedirect();
+    $this->actingAs($user)
+        ->post(route('user.coupons.store'), ['coupon_code' => 'WALLETB'])
+        ->assertRedirect();
+
+    $this->actingAs($user)
+        ->get(route('user.section', 'coupons'))
+        ->assertOk()
+        ->assertSee('A 商品券')
+        ->assertSee('券包商品 A')
+        ->assertSee('券包商品 B')
+        ->assertSee('全场九折');
+
+    $userCouponA = UserCoupon::query()->whereBelongsTo($user)->whereBelongsTo($couponA)->firstOrFail();
+    $userCouponB = UserCoupon::query()->whereBelongsTo($user)->whereBelongsTo($couponB)->firstOrFail();
+
+    $this->post(route('cart.items.store'), ['variant_id' => $variantA->id, 'quantity' => 1]);
+    $this->post(route('cart.items.store'), ['variant_id' => $variantB->id, 'quantity' => 1]);
+
+    $this->actingAs($user)
+        ->get(route('checkout.create'))
+        ->assertOk()
+        ->assertSee('name="coupon_items['.$variantA->id.']"', false)
+        ->assertSee('name="coupon_items['.$variantB->id.']"', false)
+        ->assertSee('WALLETA')
+        ->assertSee('WALLETB');
+
+    $this->actingAs($user)->post(route('checkout.store'), [
+        'contact_name' => '券包用户',
+        'contact_phone' => '13800000000',
+        'coupon_items' => [
+            $variantA->id => $userCouponA->id,
+            $variantB->id => $userCouponB->id,
+        ],
+    ])->assertRedirect();
+
+    $this->assertDatabaseHas('orders', [
+        'user_id' => $user->id,
+        'discount_cents' => 1500,
+        'total_cents' => 13500,
+    ]);
+    $this->assertDatabaseHas('order_items', [
+        'variant_sku' => 'WALLET-A',
+        'coupon_code' => 'WALLETA',
+        'discount_cents' => 1000,
+    ]);
+    $this->assertDatabaseHas('order_items', [
+        'variant_sku' => 'WALLET-B',
+        'coupon_code' => 'WALLETB',
+        'discount_cents' => 500,
+    ]);
+});
+
+it('does not show coupon controls during flash sale checkout', function (): void {
+    $this->seed();
+
+    $user = User::factory()->create(['role' => 'customer']);
+    $category = \App\Models\Category::query()->firstOrFail();
+    $product = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => '秒杀无优惠商品',
+        'slug' => 'flash-sale-no-coupon-product',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_ONLINE,
+    ]);
+    $variant = ProductVariant::query()->create([
+        'product_id' => $product->id,
+        'sku' => 'FLASH-NO-COUPON',
+        'price_cents' => 3000,
+        'stock' => 5,
+        'is_active' => true,
+    ]);
+    $flashSale = FlashSale::query()->create([
+        'product_id' => $product->id,
+        'name' => '无优惠秒杀',
+        'starts_at' => now()->subMinute(),
+        'ends_at' => now()->addHour(),
+        'sale_price_cents' => 1000,
+        'quantity_limit' => 2,
+        'is_active' => true,
+        'product_variant_ids' => [$variant->id],
+    ]);
+
+    $this->actingAs($user)
+        ->post(route('flash-sales.reserve', $flashSale), ['quantity' => 1])
+        ->assertRedirect();
+
+    $order = Order::query()->whereBelongsTo($user)->latest()->firstOrFail();
+
+    $this->actingAs($user)
+        ->get(route('flash-sales.checkout', $order))
+        ->assertOk()
+        ->assertDontSee('coupon_code', false)
+        ->assertDontSee('优惠码');
 });
 
 it('lets users manage addresses and preloads the default address during checkout', function (): void {

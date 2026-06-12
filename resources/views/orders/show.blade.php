@@ -44,6 +44,9 @@
                                             {{ $productStatuses[$item->incomingProduct?->status ?? $item->product_status] ?? ($item->incomingProduct?->status ?? $item->product_status) }} /
                                             {{ $statusPresenter->label($item->status) }}
                                         </p>
+                                        @if($item->coupon_code)
+                                            <p class="mt-1 text-xs text-emerald-700">优惠码 {{ $item->coupon_code }}：- @money($item->discount_cents)</p>
+                                        @endif
                                     </div>
                                     <p class="shrink-0 font-semibold">@money($item->line_total_cents)</p>
                                 </div>
@@ -74,6 +77,9 @@
                                         <td class="px-4 py-3 text-slate-600">
                                             {{ $item->variant_sku }} /
                                             {{ collect($item->variant_specs ?? [])->map(fn($v, $k) => "$k: $v")->implode(' / ') ?: '默认规格' }}
+                                            @if($item->coupon_code)
+                                                <p class="mt-1 text-xs text-emerald-700">优惠码 {{ $item->coupon_code }}：- @money($item->discount_cents)</p>
+                                            @endif
                                         </td>
                                         <td class="px-4 py-3 text-slate-600">
                                             <p>{{ $item->incomingProduct?->title ?? $item->product_title }}</p>

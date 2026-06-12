@@ -130,7 +130,7 @@
 
                 <div class="mt-4 rounded-sm border border-red-200 bg-red-50 px-4 py-3">
                     <p class="text-sm text-slate-600">{{ $product->isConcept() ? '预计价格' : '售价' }}</p>
-                    <p class="text-3xl font-semibold text-red-700" data-product-price>@money($product->starting_price_cents)</p>
+                    <p class="text-3xl font-semibold text-red-700" data-product-price>@money($firstVariant?->effectivePriceCents())</p>
                     @if($firstVariant?->hasActiveDiscount())
                         <p class="text-sm text-slate-500" data-product-compare-price>原价 <span class="line-through">@money($firstVariant->price_cents)</span></p>
                         <p class="mt-1 text-xs text-red-700" data-product-discount-note>限时折扣中</p>
@@ -458,7 +458,7 @@
                 mainMedia = next;
             };
 
-            const refreshVariantPrice = () => {
+            const refreshVariantPrice = (syncImage = true) => {
                 const option = select.selectedOptions[0];
 
                 if (!option) {
@@ -481,7 +481,9 @@
                     summary.textContent = `${option.textContent.split(' / ')[0].trim()} / ${option.dataset.stockLabel || ''}`.trim();
                 }
 
-                setMainMedia(option.dataset.imageUrl || '', 'image', option.dataset.imageAlt || '');
+                if (syncImage) {
+                    setMainMedia(option.dataset.imageUrl || '', 'image', option.dataset.imageAlt || '');
+                }
             };
 
             galleryItems.forEach((item) => {
@@ -490,8 +492,8 @@
                 });
             });
 
-            select.addEventListener('change', refreshVariantPrice);
-            refreshVariantPrice();
+            select.addEventListener('change', () => refreshVariantPrice(true));
+            refreshVariantPrice(false);
         })();
     </script>
 </x-layouts.app>

@@ -4,6 +4,7 @@ use App\Models\AdminActivityLog;
 use App\Models\AfterSalesRequest;
 use App\Models\Category;
 use App\Models\CostEntry;
+use App\Models\Coupon;
 use App\Models\InventoryMovement;
 use App\Models\Order;
 use App\Models\OrderItem;
@@ -16,6 +17,7 @@ use App\Models\Warehouse;
 use App\Models\WarehouseMovement;
 use App\Models\WarehouseStock;
 use App\Services\ProcurementService;
+use App\Services\CouponService;
 use App\Services\OrderService;
 use App\Services\WarehouseService;
 use App\Support\AdminAccess;
@@ -423,6 +425,54 @@ it('splits after sales refund requests from refund approval permissions', functi
         ->assertOk()
         ->assertSee('审批退款')
         ->assertSee('驳回退款');
+});
+
+it('adds after sales compensation coupons to the user coupon wallet', function (): void {
+    $support = User::factory()->create(['role' => 'support']);
+    $user = User::factory()->create(['role' => 'customer']);
+    $order = Order::query()->create([
+        'user_id' => $user->id,
+        'order_number' => 'AFTER-SALES-COUPON-1',
+        'status' => Order::STATUS_FULFILLED,
+        'payment_status' => Order::PAYMENT_CONFIRMED,
+        'subtotal_cents' => 1000,
+        'total_cents' => 1000,
+        'contact_name' => 'Buyer',
+        'contact_phone' => '1',
+    ]);
+    $request = AfterSalesRequest::query()->create([
+        'user_id' => $user->id,
+        'order_id' => $order->id,
+        'type' => 'support',
+        'status' => AfterSalesRequest::STATUS_OPEN,
+        'subject' => 'Coupon compensation',
+        'message' => 'Please compensate.',
+    ]);
+    $coupon = Coupon::query()->create([
+        'code' => 'AFTERSALE10',
+        'name' => '售后补偿券',
+        'type' => Coupon::TYPE_FIXED,
+        'value' => 1000,
+        'scope' => Coupon::SCOPE_GLOBAL,
+        'is_active' => true,
+    ]);
+
+    app(CouponService::class)->issueToUser(
+        $coupon,
+        $user,
+        \App\Models\UserCoupon::SOURCE_AFTER_SALES,
+        $support,
+        $request->id,
+        '售后补偿',
+    );
+
+    $this->assertDatabaseHas('user_coupons', [
+        'user_id' => $user->id,
+        'coupon_id' => $coupon->id,
+        'issued_by_user_id' => $support->id,
+        'after_sales_request_id' => $request->id,
+        'source' => \App\Models\UserCoupon::SOURCE_AFTER_SALES,
+    ]);
 });
 
 it('renders an order business timeline in the backoffice order form', function (): void {

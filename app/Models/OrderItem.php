@@ -25,6 +25,9 @@ class OrderItem extends Model
         'status',
         'incoming_product_id',
         'flash_sale_id',
+        'coupon_id',
+        'coupon_code',
+        'discount_cents',
     ];
 
     protected function casts(): array
@@ -57,6 +60,11 @@ class OrderItem extends Model
     public function flashSale(): BelongsTo
     {
         return $this->belongsTo(FlashSale::class);
+    }
+
+    public function coupon(): BelongsTo
+    {
+        return $this->belongsTo(Coupon::class);
     }
 
     public function procurementAllocations()

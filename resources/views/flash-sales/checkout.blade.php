@@ -48,13 +48,9 @@
                 </section>
 
                 <section class="rounded-sm border border-slate-300">
-                    <h2 class="border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold">优惠与备注</h2>
-                    <div class="grid gap-4 p-4 md:grid-cols-2">
+                    <h2 class="border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold">备注</h2>
+                    <div class="p-4">
                         <label class="block">
-                            <span class="text-sm font-medium">优惠码</span>
-                            <input class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm uppercase" name="coupon_code" value="{{ old('coupon_code') }}">
-                        </label>
-                        <label class="block md:col-span-2">
                             <span class="text-sm font-medium">备注</span>
                             <textarea class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" name="customer_note" rows="3">{{ old('customer_note') }}</textarea>
                         </label>

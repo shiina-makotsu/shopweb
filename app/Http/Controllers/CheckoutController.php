@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\CartService;
+use App\Services\CouponService;
 use App\Services\OrderService;
 use App\Services\ShippingQuoteService;
 use App\Support\ChinaRegions;
@@ -12,7 +13,7 @@ use Illuminate\View\View;
 
 class CheckoutController extends Controller
 {
-    public function create(Request $request, CartService $cart, ShippingQuoteService $shippingQuotes): View|RedirectResponse
+    public function create(Request $request, CartService $cart, ShippingQuoteService $shippingQuotes, CouponService $coupons): View|RedirectResponse
     {
         if ($cart->isEmpty()) {
             return redirect()->route('cart.show')->withErrors(['cart' => '购物车为空。']);
@@ -33,6 +34,7 @@ class CheckoutController extends Controller
             'provinceOptions' => ChinaRegions::provinceOptions(),
             'shippingProvince' => $shippingQuote['province'],
             'shippingQuote' => $shippingQuote,
+            'availableCouponsByVariant' => $coupons->availableForCart($request->user(), $cart->items()),
         ]);
     }
 
@@ -48,6 +50,8 @@ class CheckoutController extends Controller
             'shipping_province' => [$requiresShipping ? 'required' : 'nullable', 'string', 'max:50'],
             'customer_note' => ['nullable', 'string', 'max:1000'],
             'coupon_code' => ['nullable', 'string', 'max:100'],
+            'coupon_items' => ['nullable', 'array'],
+            'coupon_items.*' => ['nullable', 'integer', 'exists:user_coupons,id'],
         ]);
 
         $data['requires_shipping'] = $requiresShipping;

@@ -38,7 +38,12 @@ class OrderService
         return DB::transaction(function () use ($user, $data, $cartItems): Order {
             $subtotalCents = (int) $cartItems->sum('line_total_cents');
             $coupon = $this->coupons->resolve($data['coupon_code'] ?? null, $user, $subtotalCents, $cartItems);
-            $discountCents = $coupon?->discountFor($subtotalCents) ?? 0;
+            $couponAllocations = $coupon
+                ? []
+                : $this->coupons->resolveForCart($user, $cartItems, $data['coupon_items'] ?? []);
+            $discountCents = $coupon
+                ? $coupon->discountFor($subtotalCents)
+                : collect($couponAllocations)->sum('discount_cents');
             $shippingProvince = $data['shipping_province'] ?? ChinaRegions::guessProvinceFromAddress($data['shipping_address'] ?? null);
             $shippingQuote = $this->shippingQuotes->quote($cartItems, $shippingProvince);
             $shippingFeeCents = (int) $shippingQuote['shipping_fee_cents'];
@@ -66,6 +71,8 @@ class OrderService
                 'customer_note' => $data['customer_note'] ?? null,
             ]);
 
+            $orderItemsByVariantId = [];
+
             foreach ($cartItems as $cartItem) {
                 /** @var ProductVariant $variant */
                 $variant = ProductVariant::query()
@@ -81,7 +88,7 @@ class OrderService
                     ]);
                 }
 
-                $order->items()->create([
+                $orderItem = $order->items()->create([
                     'product_id' => $product->id,
                     'product_variant_id' => $variant->id,
                     'warehouse_id' => $shippingQuote['item_warehouse_map'][(int) $variant->id] ?? null,
@@ -93,7 +100,12 @@ class OrderService
                     'quantity' => $cartItem['quantity'],
                     'line_total_cents' => $variant->effectivePriceCents() * $cartItem['quantity'],
                     'status' => Order::STATUS_PENDING_PAYMENT,
+                    'coupon_id' => $couponAllocations[$variant->id]['coupon']->id ?? null,
+                    'coupon_code' => $couponAllocations[$variant->id]['coupon']->code ?? null,
+                    'discount_cents' => $couponAllocations[$variant->id]['discount_cents'] ?? 0,
                 ]);
+
+                $orderItemsByVariantId[(int) $variant->id] = $orderItem;
             }
 
             if ($coupon) {
@@ -103,6 +115,24 @@ class OrderService
                     'order_id' => $order->id,
                     'status' => CouponRedemption::STATUS_RESERVED,
                     'discount_cents' => $discountCents,
+                ]);
+            }
+
+            foreach ($couponAllocations as $variantId => $allocation) {
+                $orderItem = $orderItemsByVariantId[(int) $variantId] ?? null;
+
+                if (! $orderItem) {
+                    continue;
+                }
+
+                CouponRedemption::query()->create([
+                    'coupon_id' => $allocation['coupon']->id,
+                    'user_id' => $user->id,
+                    'order_id' => $order->id,
+                    'order_item_id' => $orderItem->id,
+                    'user_coupon_id' => $allocation['user_coupon']->id,
+                    'status' => CouponRedemption::STATUS_RESERVED,
+                    'discount_cents' => $allocation['discount_cents'],
                 ]);
             }
 
@@ -164,7 +194,7 @@ class OrderService
                 'paid_at' => now(),
             ]);
 
-            $order->couponRedemption?->update([
+            $order->couponRedemptions()->update([
                 'status' => CouponRedemption::STATUS_CONFIRMED,
             ]);
 
@@ -453,7 +483,7 @@ class OrderService
                 'admin_note' => $note ?: $order->admin_note,
             ]);
 
-            $order->couponRedemption?->update([
+            $order->couponRedemptions()->update([
                 'status' => CouponRedemption::STATUS_RELEASED,
             ]);
 

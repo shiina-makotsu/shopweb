@@ -7,7 +7,11 @@ use App\Filament\Resources\CouponResource\Pages\CreateCoupon;
 use App\Filament\Resources\CouponResource\Pages\EditCoupon;
 use App\Filament\Resources\CouponResource\Pages\ListCoupons;
 use App\Models\Coupon;
+use App\Models\User;
+use App\Models\UserCoupon;
+use App\Services\CouponService;
 use App\Support\MoneyInput;
+use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
@@ -47,14 +51,15 @@ class CouponResource extends Resource
                 Coupon::TYPE_PERCENT => '百分比',
             ])->default(Coupon::TYPE_FIXED)->live(),
             Select::make('scope')->label('适用范围')->required()->options(Coupon::scopeOptions())->default(Coupon::SCOPE_GLOBAL)->live(),
-            Select::make('product_id')
-                ->label('指定商品')
-                ->relationship('product', 'title')
+            Select::make('products')
+                ->label('可用商品')
+                ->relationship('products', 'title')
+                ->multiple()
                 ->searchable()
                 ->preload()
                 ->visible(fn (Get $get): bool => $get('scope') === Coupon::SCOPE_PRODUCT)
                 ->required(fn (Get $get): bool => $get('scope') === Coupon::SCOPE_PRODUCT)
-                ->dehydrateStateUsing(fn ($state, Get $get) => $get('scope') === Coupon::SCOPE_PRODUCT ? $state : null),
+                ->helperText('单商品优惠码可以选择多个适用商品，结算时这些商品都可使用。'),
             TextInput::make('value')
                 ->label(fn (Get $get): string => $get('type') === Coupon::TYPE_PERCENT ? '折扣百分比' : '优惠金额（元）')
                 ->numeric()
@@ -79,12 +84,38 @@ class CouponResource extends Resource
                 TextColumn::make('name')->label('名称'),
                 TextColumn::make('type')->label('类型'),
                 TextColumn::make('scope')->label('范围')->formatStateUsing(fn (?string $state): string => Coupon::scopeOptions()[$state ?? Coupon::SCOPE_GLOBAL] ?? (string) $state),
-                TextColumn::make('product.title')->label('指定商品')->toggleable(),
+                TextColumn::make('products.title')->label('可用商品')->listWithLineBreaks()->limitList(3)->toggleable(),
                 TextColumn::make('value')->label('值')->formatStateUsing(fn ($state, Coupon $record): string => $record->type === Coupon::TYPE_FIXED ? \App\Support\Money::format((int) $state) : ((int) $state).'%'),
                 IconColumn::make('is_active')->label('启用')->boolean(),
                 TextColumn::make('redemptions_count')->counts('redemptions')->label('使用记录'),
             ])
-            ->recordActions([EditAction::make(), DeleteAction::make()])
+            ->recordActions([
+                Action::make('issueToUser')
+                    ->label('发放给用户')
+                    ->icon(Heroicon::OutlinedUserPlus)
+                    ->form([
+                        Select::make('user_id')
+                            ->label('用户')
+                            ->options(fn (): array => User::query()->where('role', 'customer')->latest()->limit(100)->pluck('email', 'id')->all())
+                            ->searchable()
+                            ->required(),
+                        TextInput::make('note')->label('备注')->maxLength(255),
+                    ])
+                    ->action(function (Coupon $record, array $data): void {
+                        $user = User::query()->findOrFail($data['user_id']);
+
+                        app(CouponService::class)->issueToUser(
+                            $record,
+                            $user,
+                            UserCoupon::SOURCE_ADMIN,
+                            auth()->user(),
+                            null,
+                            $data['note'] ?? null,
+                        );
+                    }),
+                EditAction::make(),
+                DeleteAction::make(),
+            ])
             ->toolbarActions([DeleteBulkAction::make()]);
     }
 

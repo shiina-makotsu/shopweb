@@ -4,6 +4,7 @@
         'wishlists' => '愿望单',
         'favorites' => '收藏商品',
         'addresses' => '地址设置',
+        'coupons' => '优惠码',
         'privacy' => '隐私设置',
         'interface' => '界面设置',
         'membership' => '注册会员',
@@ -308,6 +309,66 @@
                             </article>
                         @empty
                             <p class="px-4 py-8 text-sm text-slate-600">暂无地址。</p>
+                        @endforelse
+                    </div>
+                </section>
+            </div>
+        @elseif($section === 'coupons')
+            <div class="space-y-5 px-4 py-5">
+                @if(session('status'))
+                    <div class="rounded-sm border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                        {{ session('status') }}
+                    </div>
+                @endif
+
+                <section class="rounded-sm border border-slate-300">
+                    <h2 class="border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold">添加优惠码</h2>
+                    <form class="grid gap-3 p-4 sm:grid-cols-[1fr_auto]" method="POST" action="{{ route('user.coupons.store') }}">
+                        @csrf
+                        <label class="block">
+                            <span class="sr-only">优惠码</span>
+                            <input class="w-full rounded-sm border border-slate-300 px-3 py-2 text-sm uppercase" name="coupon_code" value="{{ old('coupon_code') }}" placeholder="输入优惠码" required>
+                            @error('coupon_code')
+                                <span class="mt-1 block text-sm text-red-600">{{ $message }}</span>
+                            @enderror
+                        </label>
+                        <button class="rounded-sm border border-blue-700 bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800" type="submit">添加</button>
+                    </form>
+                </section>
+
+                <section class="rounded-sm border border-slate-300">
+                    <h2 class="border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold">我的优惠码</h2>
+                    <div class="divide-y divide-slate-100">
+                        @forelse($coupons as $userCoupon)
+                            @php($coupon = $userCoupon->coupon)
+                            @if($coupon)
+                                <article class="grid gap-3 px-4 py-4 text-sm md:grid-cols-[1fr_auto]">
+                                    <div>
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            <h3 class="font-semibold">{{ $coupon->name }}</h3>
+                                            <span class="rounded-sm border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs">{{ $userCoupon->statusLabel() }}</span>
+                                        </div>
+                                        <p class="mt-1 text-slate-600">代码：<code class="rounded-sm bg-slate-100 px-1.5 py-0.5">{{ $coupon->code }}</code></p>
+                                        <p class="mt-1 text-slate-600">范围：{{ $coupon->scopeLabel() }}</p>
+                                        <p class="mt-1 text-slate-600">
+                                            时间：
+                                            {{ $coupon->starts_at?->format('Y-m-d H:i') ?? '不限开始' }}
+                                            -
+                                            {{ $coupon->ends_at?->format('Y-m-d H:i') ?? '不限结束' }}
+                                        </p>
+                                    </div>
+                                    <div class="text-left md:text-right">
+                                        <p class="text-lg font-semibold text-red-700">{{ $coupon->discountLabel() }}</p>
+                                        @if($coupon->minimum_order_cents > 0)
+                                            <p class="mt-1 text-xs text-slate-500">满 @money($coupon->minimum_order_cents) 可用</p>
+                                        @else
+                                            <p class="mt-1 text-xs text-slate-500">无最低金额</p>
+                                        @endif
+                                    </div>
+                                </article>
+                            @endif
+                        @empty
+                            <p class="px-4 py-8 text-sm text-slate-600">暂无已添加的优惠码。</p>
                         @endforelse
                     </div>
                 </section>

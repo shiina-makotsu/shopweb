@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Str;
+use App\Support\Money;
 
 class Product extends Model
 {
@@ -126,6 +127,11 @@ class Product extends Model
     public function variants(): HasMany
     {
         return $this->hasMany(ProductVariant::class);
+    }
+
+    public function coupons(): BelongsToMany
+    {
+        return $this->belongsToMany(Coupon::class)->withTimestamps();
     }
 
     public function activeVariants(): HasMany
@@ -300,6 +306,33 @@ class Product extends Model
         }
 
         return $variants->map(fn (ProductVariant $variant): int => $variant->effectivePriceCents())->min();
+    }
+
+    public function getEndingPriceCentsAttribute(): ?int
+    {
+        $variants = $this->variants->where('is_active', true);
+
+        if ($variants->isEmpty()) {
+            return null;
+        }
+
+        return $variants->map(fn (ProductVariant $variant): int => $variant->effectivePriceCents())->max();
+    }
+
+    public function priceRangeLabel(): string
+    {
+        $min = $this->starting_price_cents;
+        $max = $this->ending_price_cents;
+
+        if ($min === null || $max === null) {
+            return Money::format(null);
+        }
+
+        if ((int) $min === (int) $max) {
+            return Money::format((int) $min);
+        }
+
+        return Money::format((int) $min).'~'.Money::format((int) $max);
     }
 
     public function hasActiveDiscount(): bool

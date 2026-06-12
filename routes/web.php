@@ -84,6 +84,7 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/flash-sales/checkout/{order}', [FlashSaleCheckoutController::class, 'store'])->name('flash-sales.store');
     Route::get('/user', [UserCenterController::class, 'show'])->name('user.center');
     Route::patch('/user/profile', [UserCenterController::class, 'updateProfile'])->name('user.profile.update');
+    Route::post('/user/coupons', [UserCenterController::class, 'storeCoupon'])->name('user.coupons.store');
     Route::post('/user/addresses', [UserCenterController::class, 'storeAddress'])->name('user.addresses.store');
     Route::patch('/user/addresses/{address}', [UserCenterController::class, 'updateAddress'])->name('user.addresses.update');
     Route::post('/user/addresses/{address}/default', [UserCenterController::class, 'setDefaultAddress'])->name('user.addresses.default');

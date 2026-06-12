@@ -7,6 +7,8 @@ use App\Filament\Resources\AfterSalesRequestResource\Pages\EditAfterSalesRequest
 use App\Filament\Resources\AfterSalesRequestResource\Pages\ListAfterSalesRequests;
 use App\Models\AfterSalesRequest;
 use App\Models\Coupon;
+use App\Models\UserCoupon;
+use App\Services\CouponService;
 use App\Support\AdminAccess;
 use App\Support\Money;
 use App\Support\RegexSearch;
@@ -215,6 +217,21 @@ class AfterSalesRequestResource extends Resource
                             'admin_note' => $data['admin_note'],
                             'resolved_at' => now(),
                         ]);
+
+                        if (($data['coupon_id'] ?? null) && $record->user) {
+                            $coupon = Coupon::query()->find($data['coupon_id']);
+
+                            if ($coupon) {
+                                app(CouponService::class)->issueToUser(
+                                    $coupon,
+                                    $record->user,
+                                    UserCoupon::SOURCE_AFTER_SALES,
+                                    auth()->user(),
+                                    $record->id,
+                                    '售后补偿',
+                                );
+                            }
+                        }
                     }),
             ]);
     }

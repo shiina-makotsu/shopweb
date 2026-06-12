@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Order;
 use App\Models\UserAddress;
+use App\Services\CouponService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -45,7 +46,7 @@ class UserCenterController extends Controller
         $user = $request->user();
         $user->ensurePublicId();
 
-        $allowed = ['profile', 'wishlists', 'favorites', 'addresses', 'privacy', 'interface', 'membership'];
+        $allowed = ['profile', 'wishlists', 'favorites', 'addresses', 'coupons', 'privacy', 'interface', 'membership'];
         abort_unless(in_array($section, $allowed, true), 404);
 
         return view('user.section', [
@@ -60,7 +61,21 @@ class UserCenterController extends Controller
             'addresses' => $section === 'addresses'
                 ? $user->addresses()->latest()->get()
                 : null,
+            'coupons' => $section === 'coupons'
+                ? $user->coupons()->with(['coupon.products', 'coupon.product'])->latest()->get()
+                : null,
         ]);
+    }
+
+    public function storeCoupon(Request $request, CouponService $coupons): RedirectResponse
+    {
+        $data = $request->validate([
+            'coupon_code' => ['required', 'string', 'max:100'],
+        ]);
+
+        $coupons->claimByCode($data['coupon_code'], $request->user());
+
+        return back()->with('status', '优惠码已添加。');
     }
 
     public function updateProfile(Request $request): RedirectResponse

@@ -61,7 +61,6 @@ class FlashSaleCheckoutController extends Controller
             'contact_email' => ['nullable', 'email', 'max:255'],
             'shipping_address' => [$requiresShipping ? 'required' : 'nullable', 'string', 'max:500'],
             'customer_note' => ['nullable', 'string', 'max:1000'],
-            'coupon_code' => ['nullable', 'string', 'max:100'],
         ]);
 
         $order = $service->completeOrderSelection($order, $data);
