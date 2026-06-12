@@ -1,6 +1,7 @@
 <x-layouts.app :title="$privacy->displayOrderNumber($order, auth()->user(), $settings)">
     @php($statusPresenter = app(\App\Support\OrderStatusPresenter::class))
     @php($pendingFlashSaleItem = $order->items->first(fn ($item) => $item->flash_sale_id && ! $item->product_variant_id))
+    @php($productStatuses = \App\Models\Product::statusOptions())
 
     <section class="mb-4 rounded-sm border border-slate-300 bg-white">
         <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-100 px-4 py-3">
@@ -38,6 +39,11 @@
                                             {{ $item->variant_sku }} /
                                             {{ collect($item->variant_specs ?? [])->map(fn($v, $k) => "$k: $v")->implode(' / ') ?: '默认规格' }}
                                         </p>
+                                        <p class="mt-1 text-xs text-slate-600">
+                                            当前商品：{{ $item->incomingProduct?->title ?? $item->product_title }} /
+                                            {{ $productStatuses[$item->incomingProduct?->status ?? $item->product_status] ?? ($item->incomingProduct?->status ?? $item->product_status) }} /
+                                            {{ $statusPresenter->label($item->status) }}
+                                        </p>
                                     </div>
                                     <p class="shrink-0 font-semibold">@money($item->line_total_cents)</p>
                                 </div>
@@ -50,11 +56,12 @@
                     </div>
 
                     <div class="hidden overflow-x-auto md:block">
-                        <table class="w-full min-w-[560px] text-sm">
+                        <table class="w-full min-w-[720px] text-sm">
                             <thead class="text-left text-slate-600">
                                 <tr>
                                     <th class="px-4 py-3 font-medium">商品</th>
                                     <th class="px-4 py-3 font-medium">规格/SKU</th>
+                                    <th class="px-4 py-3 font-medium">当前状态</th>
                                     <th class="px-4 py-3 text-right font-medium">单价</th>
                                     <th class="px-4 py-3 text-center font-medium">数量</th>
                                     <th class="px-4 py-3 text-right font-medium">小计</th>
@@ -67,6 +74,13 @@
                                         <td class="px-4 py-3 text-slate-600">
                                             {{ $item->variant_sku }} /
                                             {{ collect($item->variant_specs ?? [])->map(fn($v, $k) => "$k: $v")->implode(' / ') ?: '默认规格' }}
+                                        </td>
+                                        <td class="px-4 py-3 text-slate-600">
+                                            <p>{{ $item->incomingProduct?->title ?? $item->product_title }}</p>
+                                            <p class="mt-1 text-xs">
+                                                {{ $productStatuses[$item->incomingProduct?->status ?? $item->product_status] ?? ($item->incomingProduct?->status ?? $item->product_status) }}
+                                                / {{ $statusPresenter->label($item->status) }}
+                                            </p>
                                         </td>
                                         <td class="px-4 py-3 text-right">@money($item->unit_price_cents)</td>
                                         <td class="px-4 py-3 text-center">{{ $item->quantity }}</td>
@@ -192,7 +206,7 @@
                         @if($order->status === \App\Models\Order::STATUS_AWAITING_RECEIPT)
                             <form method="post" action="{{ route('orders.confirm-receipt', $order) }}">
                                 @csrf
-                                <button class="mt-2 w-full rounded-sm border border-emerald-700 bg-emerald-700 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-800" type="submit">确认签收</button>
+                                <button class="mt-2 w-full rounded-sm border border-emerald-700 bg-emerald-700 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-800" type="submit">确认收货</button>
                             </form>
                         @endif
                     </div>

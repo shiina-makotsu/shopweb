@@ -222,7 +222,7 @@ class OrderResource extends Resource
                     ->visible(fn (Order $record): bool => $record->status === Order::STATUS_PENDING_SHIPMENT && $record->items()->where('product_status', Product::STATUS_PRESALE)->exists())
                     ->action(fn (Order $record, array $data) => app(OrderService::class)->markIncoming($record, $data, auth()->user())),
                 Action::make('awaitingReceipt')
-                    ->label('标记待签收')
+                    ->label('标记待收货')
                     ->requiresConfirmation()
                     ->visible(fn (Order $record): bool => $record->status === Order::STATUS_SHIPPED)
                     ->action(fn (Order $record) => app(OrderService::class)->markAwaitingReceipt($record, auth()->user())),
@@ -248,7 +248,7 @@ class OrderResource extends Resource
                 Action::make('fulfill')
                     ->label('标记完成')
                     ->form([
-                        Textarea::make('admin_note')->label('特殊原因备注')->required()->rows(4)->helperText('后台直接完成会跳过用户确认签收，请填写用户可见的特殊原因。'),
+                        Textarea::make('admin_note')->label('特殊原因备注')->required()->rows(4)->helperText('后台直接完成会跳过用户确认收货，请填写用户可见的特殊原因。'),
                     ])
                     ->visible(fn (Order $record): bool => in_array($record->status, [Order::STATUS_PAID, Order::STATUS_AWAITING_RECEIPT], true))
                     ->action(fn (Order $record, array $data) => app(OrderService::class)->fulfill($record, auth()->user(), $data['admin_note'] ?? null)),

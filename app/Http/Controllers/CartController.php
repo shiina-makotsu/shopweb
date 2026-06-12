@@ -51,7 +51,7 @@ class CartController extends Controller
     public function update(Request $request, ProductVariant $variant, CartService $cart): RedirectResponse
     {
         $data = $request->validate([
-            'quantity' => ['required', 'integer', 'min:0', 'max:999'],
+            'quantity' => ['required', 'integer', 'min:0', 'max:'.CartService::MAX_ITEM_QUANTITY],
         ]);
 
         $cart->update($variant, (int) $data['quantity']);
@@ -73,7 +73,7 @@ class CartController extends Controller
     {
         return $request->validate([
             'variant_id' => ['required', 'exists:product_variants,id'],
-            'quantity' => ['required', 'integer', 'min:1', 'max:999'],
+            'quantity' => ['required', 'integer', 'min:1', 'max:'.CartService::MAX_ITEM_QUANTITY],
         ]);
     }
 

@@ -43,7 +43,7 @@ class OrderStatusSetting extends Model
             Order::STATUS_PENDING_SHIPMENT => '待发货',
             Order::STATUS_INCOMING => '进货中',
             Order::STATUS_SHIPPED => '正在运输',
-            Order::STATUS_AWAITING_RECEIPT => '待签收',
+            Order::STATUS_AWAITING_RECEIPT => '待收货',
             Order::STATUS_FULFILLED => '已完成',
             Order::STATUS_CANCELLED => '已取消',
         ];
@@ -77,7 +77,7 @@ class OrderStatusSetting extends Model
             ['code' => Order::STATUS_PENDING_SHIPMENT, 'label' => '待发货', 'icon' => 'heroicon-o-archive-box', 'color' => 'info', 'sort_order' => 30],
             ['code' => Order::STATUS_INCOMING, 'label' => '进货中', 'icon' => 'heroicon-o-arrow-path', 'color' => 'info', 'sort_order' => 40],
             ['code' => Order::STATUS_SHIPPED, 'label' => '正在运输', 'icon' => 'heroicon-o-truck', 'color' => 'primary', 'sort_order' => 50],
-            ['code' => Order::STATUS_AWAITING_RECEIPT, 'label' => '待签收', 'icon' => 'heroicon-o-clock', 'color' => 'warning', 'sort_order' => 60],
+            ['code' => Order::STATUS_AWAITING_RECEIPT, 'label' => '待收货', 'icon' => 'heroicon-o-clock', 'color' => 'warning', 'sort_order' => 60],
             ['code' => Order::STATUS_FULFILLED, 'label' => '已完成', 'icon' => 'heroicon-o-check-circle', 'color' => 'success', 'sort_order' => 70],
             ['code' => Order::STATUS_CANCELLED, 'label' => '已取消', 'icon' => 'heroicon-o-x-circle', 'color' => 'danger', 'sort_order' => 80],
         ];

@@ -322,26 +322,16 @@ class Product extends Model
                 return;
             }
 
-            if (blank($product->tracking_number)) {
-                return;
-            }
+            OrderItem::query()
+                ->where('incoming_product_id', $product->id)
+                ->where('status', Order::STATUS_INCOMING)
+                ->update(['status' => Order::STATUS_PENDING_SHIPMENT]);
 
-            $orders = Order::query()
-                ->whereHas('items', fn ($query) => $query->where('incoming_product_id', $product->id))
+            Order::query()
                 ->whereIn('status', [Order::STATUS_PENDING_SHIPMENT, Order::STATUS_INCOMING])
-                ->get();
-
-            foreach ($orders as $order) {
-                app(\App\Services\OrderService::class)->ship($order, [
-                    'shipping_carrier_id' => $product->shipping_carrier_id,
-                    'tracking_number' => $product->tracking_number,
-                    'tracking_url' => $product->tracking_url,
-                ]);
-
-                $order->items()
-                    ->where('incoming_product_id', $product->id)
-                    ->update(['status' => Order::STATUS_SHIPPED]);
-            }
+                ->whereHas('items', fn ($query) => $query->where('incoming_product_id', $product->id))
+                ->whereDoesntHave('items', fn ($query) => $query->where('status', Order::STATUS_INCOMING))
+                ->update(['status' => Order::STATUS_PENDING_SHIPMENT]);
         });
     }
 

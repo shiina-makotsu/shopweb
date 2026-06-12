@@ -168,10 +168,11 @@ it('allows presale checkout and concept crowdfunding without stock deduction', f
     expect($variant->fresh()->stock)->toBe($variant->stock);
 
     $product->update(['status' => Product::STATUS_PRESALE]);
+    $variant->update(['stock' => 0]);
 
     $this->post(route('cart.items.store'), [
         'variant_id' => $variant->id,
-        'quantity' => 1,
+        'quantity' => 25,
     ])->assertRedirect(route('cart.show'));
 
     $this->actingAs($user)->post(route('checkout.store'), [
@@ -183,8 +184,9 @@ it('allows presale checkout and concept crowdfunding without stock deduction', f
     $order = \App\Models\Order::query()->where('user_id', $user->id)->latest('id')->firstOrFail();
     app(OrderService::class)->confirmPayment($order);
 
-    expect($variant->fresh()->stock)->toBe($variant->stock)
-        ->and($order->fresh()->status)->toBe(\App\Models\Order::STATUS_PENDING_SHIPMENT);
+    expect($variant->fresh()->stock)->toBe(0)
+        ->and($order->fresh()->status)->toBe(\App\Models\Order::STATUS_PENDING_SHIPMENT)
+        ->and($order->items()->first()->quantity)->toBe(25);
 });
 
 it('marks in stock products sold out after confirmed payment consumes stock', function (): void {
@@ -448,6 +450,21 @@ it('orders home product sections and places store pages in the welcome header', 
         'fulfillment_type' => Product::FULFILLMENT_LOGISTICS,
     ]);
 
+    $presaleProduct = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => '预售测试商品',
+        'slug' => 'presale-home-product',
+        'status' => Product::STATUS_PRESALE,
+        'fulfillment_type' => Product::FULFILLMENT_LOGISTICS,
+    ]);
+    ProductVariant::query()->create([
+        'product_id' => $presaleProduct->id,
+        'sku' => 'HOME-PRESALE-1',
+        'price_cents' => 3000,
+        'stock' => 0,
+        'is_active' => true,
+    ]);
+
     $response = $this->get(route('home'))
         ->assertOk()
         ->assertSee('商店信息')
@@ -455,10 +472,12 @@ it('orders home product sections and places store pages in the welcome header', 
         ->assertSee('推荐商品')
         ->assertSee('最新商品')
         ->assertSee('折扣商品')
+        ->assertSee('预售商品')
         ->assertSee('概念商品')
         ->assertSee('客服会话')
         ->assertSee('客服工单')
         ->assertSee('折扣测试商品')
+        ->assertSee('预售测试商品')
         ->assertSee('概念测试商品')
         ->assertSee('购买')
         ->assertSee('加入购物车')
@@ -469,14 +488,15 @@ it('orders home product sections and places store pages in the welcome header', 
 
     expect(strpos($html, '推荐商品'))->toBeLessThan(strpos($html, '最新商品'))
         ->and(strpos($html, '最新商品'))->toBeLessThan(strpos($html, '折扣商品'))
-        ->and(strpos($html, '折扣商品'))->toBeLessThan(strpos($html, '概念商品'));
+        ->and(strpos($html, '折扣商品'))->toBeLessThan(strpos($html, '预售商品'))
+        ->and(strpos($html, '预售商品'))->toBeLessThan(strpos($html, '概念商品'));
 });
 
-it('always renders home discount and concept sections with empty states', function (): void {
+it('always renders home discount presale and concept sections with empty states', function (): void {
     $this->seed();
 
     Product::query()
-        ->where('status', Product::STATUS_CONCEPT)
+        ->whereIn('status', [Product::STATUS_CONCEPT, Product::STATUS_PRESALE])
         ->update(['status' => Product::STATUS_DRAFT]);
 
     ProductVariant::query()->update([
@@ -489,9 +509,12 @@ it('always renders home discount and concept sections with empty states', functi
         ->assertOk()
         ->assertSee('折扣商品')
         ->assertSee('暂无折扣商品')
+        ->assertSee('预售商品')
+        ->assertSee('暂无预售商品')
         ->assertSee('概念商品')
         ->assertSee('暂无概念商品')
         ->assertSee(Url::route('products.index', ['discount' => 1]), false)
+        ->assertSee(Url::route('products.index', ['status' => Product::STATUS_PRESALE]), false)
         ->assertSee(Url::route('products.index', ['status' => Product::STATUS_CONCEPT]), false);
 });
 
@@ -540,6 +563,21 @@ it('filters storefront product lists by featured discount and concept sections',
         'fulfillment_type' => Product::FULFILLMENT_ONLINE,
     ]);
 
+    $presaleProduct = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => '首页预售筛选商品',
+        'slug' => 'presale-filter-product',
+        'status' => Product::STATUS_PRESALE,
+        'fulfillment_type' => Product::FULFILLMENT_ONLINE,
+    ]);
+    ProductVariant::query()->create([
+        'product_id' => $presaleProduct->id,
+        'sku' => 'PRESALE-FILTER-1',
+        'price_cents' => 3000,
+        'stock' => 0,
+        'is_active' => true,
+    ]);
+
     $this->get(route('products.index', ['featured' => 1]))
         ->assertOk()
         ->assertSee('推荐商品')
@@ -551,6 +589,13 @@ it('filters storefront product lists by featured discount and concept sections',
         ->assertOk()
         ->assertSee('折扣商品')
         ->assertSee($discountProduct->title)
+        ->assertDontSee($conceptProduct->title);
+
+    $this->get(route('products.index', ['status' => Product::STATUS_PRESALE]))
+        ->assertOk()
+        ->assertSee('预售商品')
+        ->assertSee($presaleProduct->title)
+        ->assertDontSee($discountProduct->title)
         ->assertDontSee($conceptProduct->title);
 
     $this->get(route('products.index', ['status' => Product::STATUS_CONCEPT]))
@@ -707,6 +752,60 @@ it('shows storefront purchase actions on product details and sold out badges', f
         ->assertSee('该商品已售罄')
         ->assertSee('售罄')
         ->assertDontSee('立即购买');
+});
+
+it('prices orders by the selected sku variant', function (): void {
+    $this->seed();
+
+    $user = User::factory()->create(['role' => 'customer']);
+    $category = \App\Models\Category::query()->firstOrFail();
+    $product = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => '多规格价格商品',
+        'slug' => 'sku-price-product',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_ONLINE,
+    ]);
+    $variantA = ProductVariant::query()->create([
+        'product_id' => $product->id,
+        'sku' => 'SKU-PRICE-A',
+        'specs' => ['颜色' => '白色'],
+        'price_cents' => 1000,
+        'stock' => 5,
+        'is_active' => true,
+    ]);
+    $variantB = ProductVariant::query()->create([
+        'product_id' => $product->id,
+        'sku' => 'SKU-PRICE-B',
+        'specs' => ['颜色' => '黑色'],
+        'price_cents' => 2500,
+        'stock' => 5,
+        'is_active' => true,
+    ]);
+
+    $this->get(route('products.show', $product))
+        ->assertOk()
+        ->assertSee($variantA->specLabel())
+        ->assertSee($variantB->specLabel())
+        ->assertSee(\App\Support\Money::format($variantA->price_cents))
+        ->assertSee(\App\Support\Money::format($variantB->price_cents));
+
+    $this->post(route('cart.items.store'), [
+        'variant_id' => $variantB->id,
+        'quantity' => 2,
+    ])->assertRedirect(route('cart.show'));
+
+    $this->actingAs($user)->post(route('checkout.store'), [
+        'contact_name' => 'SKU 价格用户',
+        'contact_phone' => '13800000000',
+    ])->assertRedirect();
+
+    $order = Order::query()->where('user_id', $user->id)->latest('id')->firstOrFail();
+
+    expect($order->total_cents)->toBe(5000)
+        ->and($order->items()->first()->unit_price_cents)->toBe(2500)
+        ->and($order->items()->first()->line_total_cents)->toBe(5000)
+        ->and($order->items()->first()->variant_sku)->toBe('SKU-PRICE-B');
 });
 
 it('applies global coupons and restricts product coupons to a single matching cart item', function (): void {

@@ -15,10 +15,10 @@ use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
-use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\KeyValue;
 use Filament\Forms\Components\Repeater;
+use Filament\Forms\Components\Repeater\TableColumn;
 use Filament\Forms\Components\RichEditor;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -109,22 +109,27 @@ class ProductResource extends Resource
             ])->visible(fn (Get $get): bool => $get('status') === Product::STATUS_INCOMING)->columns(2)->columnSpanFull(),
 
             Section::make('SKU 与库存')->schema([
-                Repeater::make('variants')->label('规格')
+                Repeater::make('variants')->label('SKU 规格')
+                    ->addActionLabel('添加规格值')
                     ->relationship()
                     ->schema([
-                        TextInput::make('sku')->label('SKU')->required()->maxLength(255),
-                        KeyValue::make('specs')->label('规格值')->keyLabel('规格名')->valueLabel('规格值'),
-                        MoneyInput::cents(TextInput::make('price_cents')->label('价格（元）')->required()),
-                        MoneyInput::cents(TextInput::make('compare_at_price_cents')->label('划线价（元）'), true),
-                        MoneyInput::cents(TextInput::make('discount_price_cents')->label('折扣价（元）')->minValue(0), true),
-                        DateTimePicker::make('discount_starts_at')->label('折扣开始')->seconds(false),
-                        DateTimePicker::make('discount_ends_at')->label('折扣结束')->seconds(false),
-                        TextInput::make('stock')->label('库存')->numeric()->required()->default(0),
-                        TextInput::make('low_stock_threshold')->label('低库存阈值')->numeric()->default(5),
-                        Toggle::make('is_active')->label('启用')->default(true),
+                        TextInput::make('sku')->label('SKU')->hiddenLabel()->required()->maxLength(255),
+                        KeyValue::make('specs')->label('规格值')->hiddenLabel()->keyLabel('规格名')->valueLabel('规格值'),
+                        MoneyInput::cents(TextInput::make('price_cents')->label('价格（元）')->hiddenLabel()->required()),
+                        TextInput::make('stock')->label('库存')->hiddenLabel()->numeric()->required()->default(0),
+                        TextInput::make('low_stock_threshold')->label('低库存阈值')->hiddenLabel()->numeric()->default(5),
+                        Toggle::make('is_active')->label('启用')->hiddenLabel()->default(true),
                     ])
-                    ->columns(3)
+                    ->table([
+                        TableColumn::make('SKU')->markAsRequired()->width('160px'),
+                        TableColumn::make('规格值')->markAsRequired(),
+                        TableColumn::make('价格')->markAsRequired()->width('130px'),
+                        TableColumn::make('库存')->width('110px'),
+                        TableColumn::make('低库存')->width('110px'),
+                        TableColumn::make('启用')->width('80px'),
+                    ])
                     ->defaultItems(1)
+                    ->helperText('每一行就是一个可售 SKU：规格值、基础价格和库存分别维护；折扣价与折扣时间请到交易菜单的“商品折扣”页面设置。')
                     ->columnSpanFull(),
             ])->columnSpanFull(),
 

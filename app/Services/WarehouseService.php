@@ -42,6 +42,23 @@ class WarehouseService
                 'received_at' => now(),
                 'warehouse_note' => $note ?: $procurement->warehouse_note,
             ]);
+
+            $variant?->update(['is_active' => true]);
+
+            if ($product?->status === Product::STATUS_INCOMING) {
+                $product->update(['status' => Product::STATUS_PUBLISHED]);
+            }
+
+            OrderItem::query()
+                ->where('incoming_product_id', $product?->id)
+                ->where('status', Order::STATUS_INCOMING)
+                ->update(['status' => Order::STATUS_PENDING_SHIPMENT]);
+
+            Order::query()
+                ->whereIn('status', [Order::STATUS_INCOMING, Order::STATUS_PENDING_SHIPMENT])
+                ->whereHas('items', fn ($query) => $query->where('incoming_product_id', $product?->id))
+                ->whereDoesntHave('items', fn ($query) => $query->where('status', Order::STATUS_INCOMING))
+                ->update(['status' => Order::STATUS_PENDING_SHIPMENT]);
         });
     }
 

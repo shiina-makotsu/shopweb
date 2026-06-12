@@ -211,7 +211,10 @@ class OrderService
             ->where('product_status', Product::STATUS_PRESALE)
             ->update([
                 'status' => Order::STATUS_INCOMING,
-                'incoming_product_id' => $data['incoming_product_id'] ?? null,
+                'incoming_product_id' => $data['incoming_product_id'] ?? $order->items()
+                    ->where('product_status', Product::STATUS_PRESALE)
+                    ->whereNotNull('incoming_product_id')
+                    ->value('incoming_product_id'),
             ]);
 
         $this->activity->log('order_incoming', $order, $order->order_number, [
@@ -238,21 +241,27 @@ class OrderService
             $trackingUrl = (string) ($carrier->trackingUrl($trackingNumber) ?? '');
         }
 
-        $order->update([
-            'status' => Order::STATUS_SHIPPED,
-            'shipping_carrier_id' => $carrier?->id,
-            'tracking_number' => $trackingNumber !== '' ? $trackingNumber : null,
-            'tracking_url' => $trackingUrl !== '' ? $trackingUrl : null,
-            'shipped_at' => now(),
-        ]);
+        DB::transaction(function () use ($order, $carrier, $trackingNumber, $trackingUrl, $actor): void {
+            $order = Order::query()->whereKey($order->id)->lockForUpdate()->firstOrFail();
 
-        $this->activity->log('order_shipped', $order, $order->order_number, [
-            'status' => Order::STATUS_SHIPPED,
-            'shipping_carrier_id' => $carrier?->id,
-            'tracking_number' => $trackingNumber,
-        ], $actor);
+            $order->update([
+                'status' => Order::STATUS_AWAITING_RECEIPT,
+                'shipping_carrier_id' => $carrier?->id,
+                'tracking_number' => $trackingNumber !== '' ? $trackingNumber : null,
+                'tracking_url' => $trackingUrl !== '' ? $trackingUrl : null,
+                'shipped_at' => now(),
+            ]);
 
-        app(WarehouseService::class)->shipOrder($order, $actor, '订单发货自动出库');
+            $order->items()->update(['status' => Order::STATUS_AWAITING_RECEIPT]);
+
+            $this->activity->log('order_shipped', $order, $order->order_number, [
+                'status' => Order::STATUS_AWAITING_RECEIPT,
+                'shipping_carrier_id' => $carrier?->id,
+                'tracking_number' => $trackingNumber,
+            ], $actor);
+
+            app(WarehouseService::class)->shipOrder($order, $actor, '订单发货自动出库');
+        });
 
         $this->sendShippingMail($order->fresh(['shippingCarrier', 'user']) ?? $order);
     }
@@ -331,6 +340,8 @@ class OrderService
             'status' => Order::STATUS_AWAITING_RECEIPT,
         ]);
 
+        $order->items()->update(['status' => Order::STATUS_AWAITING_RECEIPT]);
+
         $this->activity->log('order_awaiting_receipt', $order, $order->order_number, [
             'status' => Order::STATUS_AWAITING_RECEIPT,
         ], $actor);
@@ -347,6 +358,8 @@ class OrderService
             'delivered_at' => now(),
             'fulfilled_at' => now(),
         ]);
+
+        $order->items()->update(['status' => Order::STATUS_FULFILLED]);
 
         $this->activity->log('order_receipt_confirmed_by_customer', $order, $order->order_number, [
             'status' => Order::STATUS_FULFILLED,

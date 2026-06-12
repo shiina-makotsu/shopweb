@@ -189,7 +189,7 @@ it('keeps awaiting receipt orders open until the customer confirms receipt', fun
     $this->actingAs($user)
         ->get(route('orders.show', $order))
         ->assertOk()
-        ->assertSee('确认签收');
+        ->assertSee('确认收货');
 
     $this->actingAs($user)
         ->post(route('orders.confirm-receipt', $order))
@@ -260,7 +260,7 @@ it('shows forced fulfillment reasons to customers', function (): void {
         ->assertSee('线下已完成交付，按特殊原因直接完成。');
 });
 
-it('moves linked presale orders to shipped when an incoming product becomes in stock with tracking', function (): void {
+it('moves linked presale orders to pending shipment when an incoming product becomes in stock', function (): void {
     Mail::fake();
 
     $user = User::factory()->create(['role' => 'customer']);
@@ -325,9 +325,18 @@ it('moves linked presale orders to shipped when an incoming product becomes in s
 
     $incoming->update(['status' => Product::STATUS_PUBLISHED]);
 
-    expect($order->fresh()->status)->toBe(Order::STATUS_SHIPPED)
-        ->and($order->fresh()->tracking_number)->toBe('TRACK-1')
-        ->and($order->items()->first()->status)->toBe(Order::STATUS_SHIPPED);
+    expect($order->fresh()->status)->toBe(Order::STATUS_PENDING_SHIPMENT)
+        ->and($order->fresh()->tracking_number)->toBeNull()
+        ->and($order->items()->first()->status)->toBe(Order::STATUS_PENDING_SHIPMENT);
+
+    app(OrderService::class)->ship($order->fresh(), [
+        'shipping_carrier_id' => $carrier->id,
+        'tracking_number' => 'TRACK-USER-1',
+    ]);
+
+    expect($order->fresh()->status)->toBe(Order::STATUS_AWAITING_RECEIPT)
+        ->and($order->fresh()->tracking_number)->toBe('TRACK-USER-1')
+        ->and($order->items()->first()->status)->toBe(Order::STATUS_AWAITING_RECEIPT);
 });
 
 it('lets customers create support tickets and admins view them in backoffice', function (): void {

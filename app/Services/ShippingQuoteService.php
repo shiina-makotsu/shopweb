@@ -191,6 +191,10 @@ class ShippingQuoteService
     private function warehouseCoversAllItems(Warehouse $warehouse, Collection $items, array $stockMatrix): bool
     {
         foreach ($items as $item) {
+            if (in_array($item['product']->status, [Product::STATUS_CONCEPT, Product::STATUS_PRESALE], true)) {
+                continue;
+            }
+
             $available = $stockMatrix[(int) $warehouse->id][(int) $item['variant']->id] ?? 0;
 
             if ($available < (int) $item['quantity']) {
@@ -209,6 +213,10 @@ class ShippingQuoteService
     private function bestWarehouseForItem(Collection $warehouses, array $item, array $stockMatrix): ?Warehouse
     {
         return $warehouses->first(function (Warehouse $warehouse) use ($item, $stockMatrix): bool {
+            if (in_array($item['product']->status, [Product::STATUS_CONCEPT, Product::STATUS_PRESALE], true)) {
+                return true;
+            }
+
             $available = $stockMatrix[(int) $warehouse->id][(int) $item['variant']->id] ?? 0;
 
             return $available >= (int) $item['quantity'];

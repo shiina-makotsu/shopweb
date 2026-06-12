@@ -66,6 +66,7 @@ class ProcurementService
     {
         DB::transaction(function () use ($procurement, $rows): void {
             $procurement = $this->syncProcurement($procurement);
+            $incoming = $procurement->fresh('incomingProduct')->incomingProduct;
 
             foreach ($rows as $row) {
                 $quantity = max(0, (int) ($row['allocated_quantity'] ?? 0));
@@ -81,6 +82,9 @@ class ProcurementService
                     ->firstOrFail();
 
                 $quantity = min($quantity, (int) $item->quantity);
+                $itemStatus = $incoming?->status === Product::STATUS_PUBLISHED
+                    ? Order::STATUS_PENDING_SHIPMENT
+                    : Order::STATUS_INCOMING;
 
                 $procurement->allocations()->updateOrCreate(
                     ['order_item_id' => $item->id],
@@ -95,14 +99,12 @@ class ProcurementService
                 $item->update([
                     'incoming_product_id' => $procurement->incoming_product_id,
                     'warehouse_id' => $procurement->warehouse_id,
-                    'status' => Order::STATUS_INCOMING,
+                    'status' => $itemStatus,
                 ]);
 
-                if ($item->order->status === Order::STATUS_PENDING_SHIPMENT) {
+                if (in_array($item->order->status, [Order::STATUS_PENDING_SHIPMENT, Order::STATUS_INCOMING], true)) {
                     $item->order->update([
-                        'status' => Order::STATUS_INCOMING,
-                        'tracking_number' => $procurement->international_tracking_number ?: $item->order->tracking_number,
-                        'tracking_url' => $procurement->tracking_url ?: $item->order->tracking_url,
+                        'status' => $itemStatus,
                     ]);
                 }
             }

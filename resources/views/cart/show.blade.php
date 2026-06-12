@@ -34,7 +34,7 @@
                             <form method="post" action="{{ route('cart.items.update', $item['variant']) }}" class="grid grid-cols-[1fr_auto] gap-2">
                                 @csrf
                                 @method('patch')
-                                <input class="min-h-10 w-full rounded-sm border border-slate-300 px-2 py-2 text-center" type="number" name="quantity" min="0" max="999" value="{{ $item['quantity'] }}">
+                                <input class="min-h-10 w-full rounded-sm border border-slate-300 px-2 py-2 text-center" type="number" name="quantity" min="0" max="{{ \App\Services\CartService::MAX_ITEM_QUANTITY }}" value="{{ $item['quantity'] }}">
                                 <button class="min-h-10 rounded-sm border border-slate-300 bg-white px-3 py-2 text-sm hover:bg-slate-50" type="submit">更新</button>
                             </form>
                             <form method="post" action="{{ route('cart.items.destroy', $item['variant']) }}">
@@ -81,7 +81,7 @@
                                     <form method="post" action="{{ route('cart.items.update', $item['variant']) }}" class="flex justify-center gap-2">
                                         @csrf
                                         @method('patch')
-                                        <input class="w-20 rounded-sm border border-slate-300 px-2 py-1 text-center" type="number" name="quantity" min="0" max="999" value="{{ $item['quantity'] }}">
+                                        <input class="w-20 rounded-sm border border-slate-300 px-2 py-1 text-center" type="number" name="quantity" min="0" max="{{ \App\Services\CartService::MAX_ITEM_QUANTITY }}" value="{{ $item['quantity'] }}">
                                         <button class="rounded-sm border border-slate-300 bg-white px-3 py-1 hover:bg-slate-50" type="submit">更新</button>
                                     </form>
                                 </td>

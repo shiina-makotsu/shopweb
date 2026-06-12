@@ -105,19 +105,39 @@
 
                 <div class="mt-4 rounded-sm border border-red-200 bg-red-50 px-4 py-3">
                     <p class="text-sm text-slate-600">{{ $product->isConcept() ? '预计价格' : '售价' }}</p>
-                    <p class="text-3xl font-semibold text-red-700">@money($product->starting_price_cents)</p>
+                    <p class="text-3xl font-semibold text-red-700" data-product-price>@money($product->starting_price_cents)</p>
                     @if($firstVariant?->hasActiveDiscount())
-                        <p class="text-sm text-slate-500">原价 <span class="line-through">@money($firstVariant->price_cents)</span></p>
-                        <p class="mt-1 text-xs text-red-700">限时折扣中</p>
+                        <p class="text-sm text-slate-500" data-product-compare-price>原价 <span class="line-through">@money($firstVariant->price_cents)</span></p>
+                        <p class="mt-1 text-xs text-red-700" data-product-discount-note>限时折扣中</p>
                     @elseif($firstVariant?->compare_at_price_cents)
-                        <p class="text-sm text-slate-500">原价 <span class="line-through">@money($firstVariant->compare_at_price_cents)</span></p>
+                        <p class="text-sm text-slate-500" data-product-compare-price>原价 <span class="line-through">@money($firstVariant->compare_at_price_cents)</span></p>
+                        <p class="mt-1 hidden text-xs text-red-700" data-product-discount-note>限时折扣中</p>
+                    @else
+                        <p class="hidden text-sm text-slate-500" data-product-compare-price>原价 <span class="line-through"></span></p>
+                        <p class="mt-1 hidden text-xs text-red-700" data-product-discount-note>限时折扣中</p>
                     @endif
                 </div>
 
                 <dl class="mt-4 grid gap-2 text-sm sm:grid-cols-2">
                     <div class="flex justify-between border-b border-slate-100 py-2">
-                        <dt class="text-slate-500">{{ $product->isIncoming() ? '进货数量' : '库存' }}</dt>
-                        <dd class="font-medium">{{ $product->isIncoming() ? $product->incoming_quantity : $totalStock }}</dd>
+                        <dt class="text-slate-500">
+                            @if($product->isPresale())
+                                预售可订
+                            @elseif($product->isIncoming())
+                                进货数量
+                            @else
+                                库存
+                            @endif
+                        </dt>
+                        <dd class="font-medium">
+                            @if($product->isPresale())
+                                不限库存
+                            @elseif($product->isIncoming())
+                                {{ $product->incoming_quantity }}
+                            @else
+                                {{ $totalStock }}
+                            @endif
+                        </dd>
                     </div>
                     <div class="flex justify-between border-b border-slate-100 py-2">
                         <dt class="text-slate-500">交付</dt>
@@ -143,7 +163,7 @@
                             <input type="hidden" name="variant_id" value="{{ $firstVariant->id }}">
                             <label class="block">
                                 <span class="text-sm font-medium">筹款数量</span>
-                                <input class="mt-1 w-28 rounded-sm border border-slate-300 bg-white px-3 py-2 text-sm" type="number" min="1" max="999" name="quantity" value="1" required>
+                                <input class="mt-1 w-28 rounded-sm border border-slate-300 bg-white px-3 py-2 text-sm" type="number" min="1" max="{{ \App\Services\CartService::MAX_ITEM_QUANTITY }}" name="quantity" value="1" required>
                             </label>
                             <button class="mt-3 rounded-sm border border-pink-600 bg-pink-600 px-5 py-2 text-sm font-medium text-white hover:bg-pink-700" type="submit">参与筹款</button>
                         </form>
@@ -171,14 +191,23 @@
                             <span class="text-sm font-medium">规格</span>
                             <select id="product-detail-variant" class="mt-1 w-full rounded-sm border border-slate-300 bg-white px-3 py-2 text-sm" required>
                                 @foreach($product->variants as $variant)
-                                    <option value="{{ $variant->id }}">{{ $variant->specLabel() }} / @money($variant->effectivePriceCents()) / {{ $product->isPresale() ? '预售' : '库存 '.$variant->stock }}</option>
+                                    <option
+                                        value="{{ $variant->id }}"
+                                        data-price="{{ \App\Support\Money::format($variant->effectivePriceCents()) }}"
+                                        data-compare-price="{{ $variant->hasActiveDiscount() ? \App\Support\Money::format($variant->price_cents) : ($variant->compare_at_price_cents ? \App\Support\Money::format($variant->compare_at_price_cents) : '') }}"
+                                        data-has-discount="{{ $variant->hasActiveDiscount() ? '1' : '0' }}"
+                                        data-stock-label="{{ $product->isPresale() ? '预售不限库存' : '库存 '.$variant->stock }}"
+                                    >
+                                        {{ $variant->specLabel() }} / @money($variant->effectivePriceCents()) / {{ $product->isPresale() ? '预售不限库存' : '库存 '.$variant->stock }}
+                                    </option>
                                 @endforeach
                             </select>
+                            <p class="mt-1 text-xs text-slate-500" data-product-variant-summary>{{ $firstVariant?->specLabel() }} / {{ $product->isPresale() ? '预售不限库存' : '库存 '.($firstVariant?->stock ?? 0) }}</p>
                         </label>
                         <div class="mt-3 flex flex-wrap items-end gap-3">
                             <label class="block">
                                 <span class="text-sm font-medium">数量</span>
-                                <input id="product-detail-quantity" class="mt-1 w-28 rounded-sm border border-slate-300 bg-white px-3 py-2 text-sm" type="number" min="1" max="999" value="1" required>
+                                <input id="product-detail-quantity" class="mt-1 w-28 rounded-sm border border-slate-300 bg-white px-3 py-2 text-sm" type="number" min="1" max="{{ \App\Services\CartService::MAX_ITEM_QUANTITY }}" value="1" required>
                             </label>
                             <form method="post" action="{{ route('cart.items.store') }}" data-cart-add-form data-product-title="{{ $product->title }}" onsubmit="this.variant_id.value = document.getElementById('product-detail-variant').value; this.quantity.value = document.getElementById('product-detail-quantity').value;">
                                 @csrf
@@ -361,4 +390,45 @@
             <p class="px-4 py-8 text-sm text-slate-600">该商品暂未开启评论。</p>
         @endif
     </section>
+    <script>
+        (() => {
+            const select = document.getElementById('product-detail-variant');
+            const price = document.querySelector('[data-product-price]');
+            const comparePrice = document.querySelector('[data-product-compare-price]');
+            const comparePriceValue = comparePrice?.querySelector('span');
+            const discountNote = document.querySelector('[data-product-discount-note]');
+            const summary = document.querySelector('[data-product-variant-summary]');
+
+            if (!select || !price) {
+                return;
+            }
+
+            const refreshVariantPrice = () => {
+                const option = select.selectedOptions[0];
+
+                if (!option) {
+                    return;
+                }
+
+                price.textContent = option.dataset.price || price.textContent;
+
+                if (comparePrice && comparePriceValue) {
+                    const value = option.dataset.comparePrice || '';
+                    comparePriceValue.textContent = value;
+                    comparePrice.classList.toggle('hidden', value === '');
+                }
+
+                if (discountNote) {
+                    discountNote.classList.toggle('hidden', option.dataset.hasDiscount !== '1');
+                }
+
+                if (summary) {
+                    summary.textContent = `${option.textContent.split(' / ')[0].trim()} / ${option.dataset.stockLabel || ''}`.trim();
+                }
+            };
+
+            select.addEventListener('change', refreshVariantPrice);
+            refreshVariantPrice();
+        })();
+    </script>
 </x-layouts.app>

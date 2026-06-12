@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Session;
 class CartService
 {
     private const SESSION_KEY = 'cart.items';
+    public const MAX_ITEM_QUANTITY = 9999;
 
     /**
      * @return array<int, int>
@@ -21,7 +22,7 @@ class CartService
     public function add(ProductVariant $variant, int $quantity): void
     {
         $items = $this->rawItems();
-        $items[$variant->id] = min(999, ($items[$variant->id] ?? 0) + max(1, $quantity));
+        $items[$variant->id] = min(self::MAX_ITEM_QUANTITY, ($items[$variant->id] ?? 0) + max(1, $quantity));
 
         Session::put(self::SESSION_KEY, $items);
     }
@@ -29,7 +30,7 @@ class CartService
     public function replace(ProductVariant $variant, int $quantity): void
     {
         Session::put(self::SESSION_KEY, [
-            $variant->id => min(999, max(1, $quantity)),
+            $variant->id => min(self::MAX_ITEM_QUANTITY, max(1, $quantity)),
         ]);
     }
 
@@ -40,7 +41,7 @@ class CartService
         if ($quantity <= 0) {
             unset($items[$variant->id]);
         } else {
-            $items[$variant->id] = min(999, $quantity);
+            $items[$variant->id] = min(self::MAX_ITEM_QUANTITY, $quantity);
         }
 
         Session::put(self::SESSION_KEY, $items);

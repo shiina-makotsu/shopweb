@@ -521,12 +521,18 @@ it('receives procurement into warehouse stock and ships allocated orders out of 
 
     $incomingVariant = $procurement->fresh('incomingProduct.variants')->incomingProduct->variants()->firstOrFail();
 
-    expect($incomingVariant->stock)->toBe(5)
+    expect($procurement->fresh('incomingProduct')->incomingProduct->status)->toBe(Product::STATUS_PUBLISHED)
+        ->and($incomingVariant->stock)->toBe(5)
+        ->and($incomingVariant->is_active)->toBeTrue()
+        ->and($item->fresh()->status)->toBe(Order::STATUS_PENDING_SHIPMENT)
+        ->and($order->fresh()->status)->toBe(Order::STATUS_PENDING_SHIPMENT)
         ->and(InventoryMovement::query()->where('product_variant_id', $incomingVariant->id)->where('reason', 'warehouse_received')->exists())->toBeTrue();
 
     app(OrderService::class)->ship($order->fresh(), ['tracking_number' => 'CN-1'], $admin);
 
     expect(WarehouseStock::query()->sum('quantity'))->toBe(3)
+        ->and($order->fresh()->status)->toBe(Order::STATUS_AWAITING_RECEIPT)
+        ->and($order->fresh()->tracking_number)->toBe('CN-1')
         ->and($incomingVariant->fresh()->stock)->toBe(3)
         ->and(WarehouseMovement::query()->where('type', WarehouseMovement::TYPE_SHIPPED)->where('delta', -2)->exists())->toBeTrue()
         ->and(InventoryMovement::query()->where('product_variant_id', $incomingVariant->id)->where('reason', 'warehouse_shipped')->exists())->toBeTrue();

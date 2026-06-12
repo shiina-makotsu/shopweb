@@ -39,7 +39,7 @@ class OrderController extends Controller
         }
 
         return view('orders.show', [
-            'order' => $order->load(['items', 'shippingCarrier']),
+            'order' => $order->load(['items.incomingProduct', 'items.product', 'shippingCarrier']),
             'settings' => $settings,
             'privacy' => $privacy,
         ]);
@@ -71,7 +71,7 @@ class OrderController extends Controller
 
         $orders->confirmReceipt($order, $request->user());
 
-        return back()->with('status', '已确认签收，订单已完成。');
+        return back()->with('status', '已确认收货，订单已完成。');
     }
 
     public function markDigitalCopied(Request $request, Order $order, OrderService $orders): RedirectResponse

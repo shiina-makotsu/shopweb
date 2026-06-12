@@ -4,6 +4,10 @@
         $discountOnly ?? false => '折扣商品',
         $featuredOnly ?? false => '推荐商品',
         ($currentStatus ?? null) === \App\Models\Product::STATUS_CONCEPT => '概念商品',
+        ($currentStatus ?? null) === \App\Models\Product::STATUS_PRESALE => '预售商品',
+        ($currentStatus ?? null) === \App\Models\Product::STATUS_INCOMING => '进货中商品',
+        ($currentStatus ?? null) === \App\Models\Product::STATUS_PUBLISHED => '现货商品',
+        ($currentStatus ?? null) === \App\Models\Product::STATUS_SOLD_OUT => '售罄商品',
         default => '商品列表',
     };
 @endphp
@@ -59,6 +63,8 @@
                 <a class="rounded-sm border px-3 py-2 text-sm {{ ($currentCategory ?? null) || ($featuredOnly ?? false) || ($discountOnly ?? false) || ($currentStatus ?? null) ? 'border-slate-300 bg-white hover:bg-blue-50' : 'border-blue-700 bg-blue-700 text-white' }}" href="{{ route('products.index', $keyword ? ['q' => $keyword] : []) }}">全部</a>
                 <a class="rounded-sm border px-3 py-2 text-sm {{ ($featuredOnly ?? false) ? 'border-blue-700 bg-blue-700 text-white' : 'border-slate-300 bg-white hover:bg-blue-50' }}" href="{{ route('products.index', array_filter(['featured' => 1, 'q' => $keyword])) }}">推荐商品</a>
                 <a class="rounded-sm border px-3 py-2 text-sm {{ ($discountOnly ?? false) ? 'border-blue-700 bg-blue-700 text-white' : 'border-slate-300 bg-white hover:bg-blue-50' }}" href="{{ route('products.index', array_filter(['discount' => 1, 'q' => $keyword])) }}">折扣商品</a>
+                <a class="rounded-sm border px-3 py-2 text-sm {{ ($currentStatus ?? null) === \App\Models\Product::STATUS_PRESALE ? 'border-blue-700 bg-blue-700 text-white' : 'border-slate-300 bg-white hover:bg-blue-50' }}" href="{{ route('products.index', array_filter(['status' => \App\Models\Product::STATUS_PRESALE, 'q' => $keyword])) }}">预售商品</a>
+                <a class="rounded-sm border px-3 py-2 text-sm {{ ($currentStatus ?? null) === \App\Models\Product::STATUS_INCOMING ? 'border-blue-700 bg-blue-700 text-white' : 'border-slate-300 bg-white hover:bg-blue-50' }}" href="{{ route('products.index', array_filter(['status' => \App\Models\Product::STATUS_INCOMING, 'q' => $keyword])) }}">进货中商品</a>
                 <a class="rounded-sm border px-3 py-2 text-sm {{ ($currentStatus ?? null) === \App\Models\Product::STATUS_CONCEPT ? 'border-blue-700 bg-blue-700 text-white' : 'border-slate-300 bg-white hover:bg-blue-50' }}" href="{{ route('products.index', array_filter(['status' => \App\Models\Product::STATUS_CONCEPT, 'q' => $keyword])) }}">概念商品</a>
                 @foreach($categories as $category)
                     <a class="rounded-sm border px-3 py-2 text-sm {{ $currentCategory?->id === $category->id ? 'border-blue-700 bg-blue-700 text-white' : 'border-slate-300 bg-white hover:bg-blue-50' }}" href="{{ route('products.index', array_filter(['category' => $category->slug, 'q' => $keyword])) }}">{{ $category->name }}</a>
