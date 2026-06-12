@@ -97,7 +97,7 @@
                     @method('PATCH')
                     <h2 class="text-sm font-semibold">管理帖子</h2>
                     <input class="w-full rounded-sm border border-slate-300 px-3 py-2" name="title" maxlength="120" value="{{ old('title', $thread->title) }}" required>
-                    <textarea class="min-h-28 w-full rounded-sm border border-slate-300 px-3 py-2" name="body" maxlength="12000" required>{{ old('body', $thread->body) }}</textarea>
+                    <textarea class="w-full rounded-sm border border-slate-300 px-3 py-3 leading-6" name="body" maxlength="12000" rows="18" data-auto-grow-textarea data-min-height="416" style="min-height: 26rem; overflow-y: hidden; resize: vertical;" required>{{ old('body', $thread->body) }}</textarea>
                     <button class="rounded-sm border border-blue-700 bg-blue-700 px-4 py-2 font-medium text-white hover:bg-blue-800" type="submit">保存帖子</button>
                 </form>
             @endif
@@ -216,4 +216,25 @@
             </div>
         @endauth
     </section>
+
+    <script>
+        (() => {
+            const textareas = document.querySelectorAll('[data-auto-grow-textarea]');
+
+            textareas.forEach((textarea) => {
+                const minHeight = Number.parseInt(textarea.dataset.minHeight || '416', 10);
+                const resize = () => {
+                    const nextHeight = Math.max(textarea.scrollHeight + 2, minHeight);
+
+                    if (nextHeight > textarea.offsetHeight) {
+                        textarea.style.height = `${nextHeight}px`;
+                    }
+                };
+
+                textarea.addEventListener('input', resize);
+                window.addEventListener('resize', resize);
+                requestAnimationFrame(resize);
+            });
+        })();
+    </script>
 </x-layouts.app>

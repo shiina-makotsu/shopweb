@@ -52,7 +52,7 @@
 
                 <label class="block">
                     <span class="text-xs font-medium text-slate-600">正文</span>
-                    <textarea class="mt-1 min-h-64 w-full rounded-sm border border-slate-300 px-3 py-2" name="body" maxlength="12000" data-thread-body required>{{ old('body', $templateBodies[$selectedTemplate] ?? '') }}</textarea>
+                    <textarea class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-3 leading-6" name="body" maxlength="12000" rows="24" data-thread-body data-auto-grow-textarea data-min-height="544" style="min-height: 34rem; overflow-y: hidden; resize: vertical;" required>{{ old('body', $templateBodies[$selectedTemplate] ?? '') }}</textarea>
                 </label>
 
                 <label class="block">
@@ -83,6 +83,18 @@
 
             const knownTitles = Object.values(titles);
             const knownBodies = Object.values(bodies);
+            const minBodyHeight = Number.parseInt(bodyInput.dataset.minHeight || '544', 10);
+            const resizeBody = () => {
+                const nextHeight = Math.max(bodyInput.scrollHeight + 2, minBodyHeight);
+
+                if (nextHeight > bodyInput.offsetHeight) {
+                    bodyInput.style.height = `${nextHeight}px`;
+                }
+            };
+
+            bodyInput.addEventListener('input', resizeBody);
+            window.addEventListener('resize', resizeBody);
+            requestAnimationFrame(resizeBody);
 
             templateSelect.addEventListener('change', () => {
                 const key = templateSelect.value;
@@ -93,6 +105,7 @@
 
                 if (bodyInput.value.trim() === '' || knownBodies.includes(bodyInput.value)) {
                     bodyInput.value = bodies[key] || '';
+                    requestAnimationFrame(resizeBody);
                 }
             });
         })();

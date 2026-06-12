@@ -162,6 +162,43 @@ it('lets users create typed forum threads with rich template attachments', funct
     ]);
 });
 
+it('renders large auto growing forum thread editors for templates and edits', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+    $section = ForumSection::query()->create([
+        'name' => 'Long Form Posts',
+        'slug' => 'long-form-posts',
+        'is_active' => true,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('forum.sections.threads.create', [
+            'section' => $section,
+            'template' => ForumThreadTemplate::MATCHMAKING,
+        ]))
+        ->assertOk()
+        ->assertSee('data-thread-body', false)
+        ->assertSee('data-auto-grow-textarea', false)
+        ->assertSee('rows="24"', false)
+        ->assertSee('data-min-height="544"', false);
+
+    $this->actingAs($user)
+        ->post(route('forum.threads.store', $section), [
+            'title' => 'Long editor thread',
+            'template' => ForumThreadTemplate::MATCHMAKING,
+            'body' => ForumThreadTemplate::defaultBody(ForumThreadTemplate::MATCHMAKING),
+        ])
+        ->assertRedirect();
+
+    $thread = $section->threads()->firstOrFail();
+
+    $this->actingAs($user)
+        ->get(route('forum.threads.show', [$section, $thread]))
+        ->assertOk()
+        ->assertSee('data-auto-grow-textarea', false)
+        ->assertSee('rows="18"', false)
+        ->assertSee('data-min-height="416"', false);
+});
+
 it('renders forum thread pages for users created before public ids existed', function (): void {
     $user = User::factory()->create(['role' => 'customer', 'public_id' => null]);
     $section = ForumSection::query()->create([
