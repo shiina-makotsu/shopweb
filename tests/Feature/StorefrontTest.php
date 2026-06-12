@@ -466,6 +466,21 @@ it('orders home product sections and places store pages in the welcome header', 
         'stock' => 0,
         'is_active' => true,
     ]);
+    $incomingProduct = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => '进货中测试商品',
+        'slug' => 'incoming-home-product',
+        'status' => Product::STATUS_INCOMING,
+        'fulfillment_type' => Product::FULFILLMENT_LOGISTICS,
+        'incoming_quantity' => 12,
+    ]);
+    ProductVariant::query()->create([
+        'product_id' => $incomingProduct->id,
+        'sku' => 'HOME-INCOMING-1',
+        'price_cents' => 3500,
+        'stock' => 0,
+        'is_active' => true,
+    ]);
 
     $response = $this->get(route('home'))
         ->assertOk()
@@ -474,31 +489,34 @@ it('orders home product sections and places store pages in the welcome header', 
         ->assertSee('推荐商品')
         ->assertSee('最新商品')
         ->assertSee('折扣商品')
-        ->assertSee('预售商品')
         ->assertSee('概念商品')
         ->assertSee('客服会话')
         ->assertSee('客服工单')
         ->assertSee('折扣测试商品')
         ->assertSee('预售测试商品')
+        ->assertSee('进货中测试商品')
         ->assertSee('概念测试商品')
+        ->assertSee('right-4 top-4', false)
+        ->assertSee('进货中')
         ->assertSee('购买')
         ->assertSee('加入购物车')
         ->assertSee('投票')
-        ->assertSee('筹款');
+        ->assertSee('筹款')
+        ->assertDontSee('<h2 class="text-base font-semibold">预售商品</h2>', false)
+        ->assertDontSee('<h2 class="text-base font-semibold">进货中商品</h2>', false);
 
     $html = $response->getContent();
 
     expect(strpos($html, '推荐商品'))->toBeLessThan(strpos($html, '最新商品'))
         ->and(strpos($html, '最新商品'))->toBeLessThan(strpos($html, '折扣商品'))
-        ->and(strpos($html, '折扣商品'))->toBeLessThan(strpos($html, '预售商品'))
-        ->and(strpos($html, '预售商品'))->toBeLessThan(strpos($html, '概念商品'));
+        ->and(strpos($html, '折扣商品'))->toBeLessThan(strpos($html, '概念商品'));
 });
 
-it('always renders home discount presale and concept sections with empty states', function (): void {
+it('always renders home discount and concept sections with empty states', function (): void {
     $this->seed();
 
     Product::query()
-        ->whereIn('status', [Product::STATUS_CONCEPT, Product::STATUS_PRESALE])
+        ->where('status', Product::STATUS_CONCEPT)
         ->update(['status' => Product::STATUS_DRAFT]);
 
     ProductVariant::query()->update([
@@ -511,13 +529,12 @@ it('always renders home discount presale and concept sections with empty states'
         ->assertOk()
         ->assertSee('折扣商品')
         ->assertSee('暂无折扣商品')
-        ->assertSee('预售商品')
-        ->assertSee('暂无预售商品')
         ->assertSee('概念商品')
         ->assertSee('暂无概念商品')
         ->assertSee(Url::route('products.index', ['discount' => 1]), false)
-        ->assertSee(Url::route('products.index', ['status' => Product::STATUS_PRESALE]), false)
-        ->assertSee(Url::route('products.index', ['status' => Product::STATUS_CONCEPT]), false);
+        ->assertSee(Url::route('products.index', ['status' => Product::STATUS_CONCEPT]), false)
+        ->assertDontSee('<h2 class="text-base font-semibold">预售商品</h2>', false)
+        ->assertDontSee('<h2 class="text-base font-semibold">进货中商品</h2>', false);
 });
 
 it('filters storefront product lists by featured discount and concept sections', function (): void {
@@ -579,6 +596,21 @@ it('filters storefront product lists by featured discount and concept sections',
         'stock' => 0,
         'is_active' => true,
     ]);
+    $incomingProduct = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => '首页进货中筛选商品',
+        'slug' => 'incoming-filter-product',
+        'status' => Product::STATUS_INCOMING,
+        'fulfillment_type' => Product::FULFILLMENT_ONLINE,
+        'incoming_quantity' => 5,
+    ]);
+    ProductVariant::query()->create([
+        'product_id' => $incomingProduct->id,
+        'sku' => 'INCOMING-FILTER-1',
+        'price_cents' => 3500,
+        'stock' => 0,
+        'is_active' => true,
+    ]);
 
     $this->get(route('products.index', ['featured' => 1]))
         ->assertOk()
@@ -597,6 +629,13 @@ it('filters storefront product lists by featured discount and concept sections',
         ->assertOk()
         ->assertSee('预售商品')
         ->assertSee($presaleProduct->title)
+        ->assertDontSee($discountProduct->title)
+        ->assertDontSee($conceptProduct->title);
+
+    $this->get(route('products.index', ['status' => Product::STATUS_INCOMING]))
+        ->assertOk()
+        ->assertSee('进货中商品')
+        ->assertSee($incomingProduct->title)
         ->assertDontSee($discountProduct->title)
         ->assertDontSee($conceptProduct->title);
 
@@ -727,6 +766,28 @@ it('shows storefront purchase actions on product details and sold out badges', f
         ->assertSee('立即购买')
         ->assertSee('data-cart-add-form', false)
         ->assertSee(Url::route('cart.buy-now'), false);
+
+    $presale = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => '详情预售商品',
+        'slug' => 'detail-presale-product',
+        'status' => Product::STATUS_PRESALE,
+        'fulfillment_type' => Product::FULFILLMENT_ONLINE,
+    ]);
+    ProductVariant::query()->create([
+        'product_id' => $presale->id,
+        'sku' => 'DETAIL-PRESALE-1',
+        'price_cents' => 2200,
+        'stock' => 0,
+        'is_active' => true,
+    ]);
+
+    $this->get(route('products.show', $presale))
+        ->assertOk()
+        ->assertSee('right-4 top-4', false)
+        ->assertSee('预售')
+        ->assertSee('加入预售购物车')
+        ->assertSee('预售下单');
 
     $soldOut = Product::query()->create([
         'category_id' => $category->id,

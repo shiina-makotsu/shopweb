@@ -4,6 +4,18 @@
     $variant = $product->variants->where('is_active', true)->sortBy(fn ($variant) => $variant->effectivePriceCents())->first();
     $stock = $product->variants->where('is_active', true)->sum('stock');
     $isSoldOut = $product->isSoldOut() || ($product->status === \App\Models\Product::STATUS_PUBLISHED && $stock <= 0);
+    $statusBadge = match ($product->status) {
+        \App\Models\Product::STATUS_CONCEPT => '概念',
+        \App\Models\Product::STATUS_PRESALE => '预售',
+        \App\Models\Product::STATUS_INCOMING => '进货中',
+        default => null,
+    };
+    $statusBadgeClass = match ($product->status) {
+        \App\Models\Product::STATUS_CONCEPT => 'border-pink-200 bg-pink-50 text-pink-700',
+        \App\Models\Product::STATUS_PRESALE => 'border-blue-200 bg-blue-50 text-blue-700',
+        \App\Models\Product::STATUS_INCOMING => 'border-amber-200 bg-amber-50 text-amber-700',
+        default => '',
+    };
     $statusNote = match ($product->status) {
         \App\Models\Product::STATUS_CONCEPT => '概念投票',
         \App\Models\Product::STATUS_PRESALE => '预售',
@@ -31,6 +43,9 @@
     <a href="{{ route('products.show', $product) }}" class="relative block border-b border-slate-100 bg-white p-3">
         @if($isSoldOut)
             <span class="absolute left-4 top-4 z-10 rounded-sm bg-slate-950/85 px-2 py-1 text-xs font-semibold text-white shadow">售罄</span>
+        @endif
+        @if($statusBadge)
+            <span class="absolute right-4 top-4 z-10 rounded-sm border px-1.5 py-0.5 text-[11px] font-medium shadow-sm {{ $statusBadgeClass }}">{{ $statusBadge }}</span>
         @endif
         @if($product->coverMedia)
             @if($product->coverMedia->isVideo())

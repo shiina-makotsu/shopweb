@@ -6,6 +6,18 @@
         $firstVariant = $product->variants->first();
         $totalStock = $product->variants->sum('stock');
         $isSoldOut = $product->isSoldOut() || ($product->status === \App\Models\Product::STATUS_PUBLISHED && $totalStock <= 0);
+        $statusBadge = match ($product->status) {
+            \App\Models\Product::STATUS_CONCEPT => '概念',
+            \App\Models\Product::STATUS_PRESALE => '预售',
+            \App\Models\Product::STATUS_INCOMING => '进货中',
+            default => null,
+        };
+        $statusBadgeClass = match ($product->status) {
+            \App\Models\Product::STATUS_CONCEPT => 'border-pink-200 bg-pink-50 text-pink-700',
+            \App\Models\Product::STATUS_PRESALE => 'border-blue-200 bg-blue-50 text-blue-700',
+            \App\Models\Product::STATUS_INCOMING => 'border-amber-200 bg-amber-50 text-amber-700',
+            default => '',
+        };
         $isPurchasable = $product->isDirectlyPurchasable();
         $allowsVoting = $product->allowsVoting();
         $allowsCrowdfunding = $product->allowsCrowdfunding() && $firstVariant;
@@ -33,6 +45,9 @@
                 <div class="relative border border-slate-200 bg-white p-2">
                     @if($isSoldOut)
                         <span class="absolute left-4 top-4 z-10 rounded-sm bg-slate-950/85 px-3 py-1 text-sm font-semibold text-white shadow">售罄</span>
+                    @endif
+                    @if($statusBadge)
+                        <span class="absolute right-4 top-4 z-10 rounded-sm border px-2 py-1 text-xs font-medium shadow-sm {{ $statusBadgeClass }}">{{ $statusBadge }}</span>
                     @endif
                     @if($mainMedia)
                         @if($mainMedia->isVideo())
