@@ -1,6 +1,8 @@
 <x-layouts.app :title="$product->title">
     @php
         $mainMedia = $product->media->first();
+        $firstVariantImage = $product->variants->first(fn ($variant) => filled($variant->image_path));
+        $mainImageUrl = $mainMedia ? null : $firstVariantImage?->imageUrl();
         $firstVariant = $product->variants->first();
         $totalStock = $product->variants->sum('stock');
         $isSoldOut = $product->isSoldOut() || ($product->status === \App\Models\Product::STATUS_PUBLISHED && $totalStock <= 0);
@@ -34,25 +36,33 @@
                     @endif
                     @if($mainMedia)
                         @if($mainMedia->isVideo())
-                            <video src="{{ $mainMedia->url() }}" class="aspect-square w-full bg-black object-contain {{ $isSoldOut ? 'grayscale' : '' }}" controls preload="metadata"></video>
+                            <video src="{{ $mainMedia->url() }}" class="aspect-square w-full bg-black object-contain {{ $isSoldOut ? 'grayscale' : '' }}" controls preload="metadata" data-product-main-media data-media-type="video"></video>
                         @else
-                            <img src="{{ $mainMedia->url() }}" alt="{{ $mainMedia->alt ?? $product->title }}" class="aspect-square w-full object-cover {{ $isSoldOut ? 'grayscale' : '' }}">
+                            <img src="{{ $mainMedia->url() }}" alt="{{ $mainMedia->alt ?? $product->title }}" class="aspect-square w-full object-cover {{ $isSoldOut ? 'grayscale' : '' }}" data-product-main-media data-media-type="image">
                         @endif
+                    @elseif($mainImageUrl)
+                        <img src="{{ $mainImageUrl }}" alt="{{ $firstVariantImage?->specLabel() ?? $product->title }}" class="aspect-square w-full object-cover {{ $isSoldOut ? 'grayscale' : '' }}" data-product-main-media data-media-type="image">
                     @else
                         <div class="flex aspect-square items-center justify-center bg-slate-100 text-sm text-slate-500">暂无图片</div>
                     @endif
                 </div>
 
-                @if($product->media->count() > 1)
+                @if($product->media->count() > 1 || $product->variants->contains(fn ($variant) => filled($variant->image_path)))
                     <div class="mt-3 grid grid-cols-4 gap-2">
                         @foreach($product->media as $media)
-                            <figure class="border border-slate-200 bg-white p-1">
+                            <figure class="border border-slate-200 bg-white p-1" data-gallery-item data-media-url="{{ $media->url() }}" data-media-type="{{ $media->isVideo() ? 'video' : 'image' }}" data-media-alt="{{ $media->alt ?? $product->title }}">
                                 @if($media->isVideo())
                                     <video src="{{ $media->url() }}" class="aspect-square w-full bg-black object-contain" muted preload="metadata"></video>
                                 @else
                                     <img src="{{ $media->url() }}" alt="{{ $media->alt ?? $product->title }}" class="aspect-square w-full object-cover">
                                 @endif
                                 <figcaption class="truncate pt-1 text-center text-[11px] text-slate-500">{{ $media->type === 'concept' ? '概念' : '预览' }}{{ $media->isVideo() ? '视频' : '图' }}</figcaption>
+                            </figure>
+                        @endforeach
+                        @foreach($product->variants->filter(fn ($variant) => filled($variant->image_path)) as $variant)
+                            <figure class="border border-slate-200 bg-white p-1" data-gallery-item data-media-url="{{ $variant->imageUrl() }}" data-media-type="image" data-media-alt="{{ $variant->specLabel() }}">
+                                <img src="{{ $variant->imageUrl() }}" alt="{{ $variant->specLabel() }}" class="aspect-square w-full object-cover">
+                                <figcaption class="truncate pt-1 text-center text-[11px] text-slate-500">SKU 图</figcaption>
                             </figure>
                         @endforeach
                     </div>
@@ -197,6 +207,8 @@
                                         data-compare-price="{{ $variant->hasActiveDiscount() ? \App\Support\Money::format($variant->price_cents) : ($variant->compare_at_price_cents ? \App\Support\Money::format($variant->compare_at_price_cents) : '') }}"
                                         data-has-discount="{{ $variant->hasActiveDiscount() ? '1' : '0' }}"
                                         data-stock-label="{{ $product->isPresale() ? '预售不限库存' : '库存 '.$variant->stock }}"
+                                        data-image-url="{{ $variant->imageUrl() }}"
+                                        data-image-alt="{{ $variant->specLabel() }}"
                                     >
                                         {{ $variant->specLabel() }} / @money($variant->effectivePriceCents()) / {{ $product->isPresale() ? '预售不限库存' : '库存 '.$variant->stock }}
                                     </option>
@@ -398,10 +410,38 @@
             const comparePriceValue = comparePrice?.querySelector('span');
             const discountNote = document.querySelector('[data-product-discount-note]');
             const summary = document.querySelector('[data-product-variant-summary]');
+            let mainMedia = document.querySelector('[data-product-main-media]');
+            const galleryItems = document.querySelectorAll('[data-gallery-item]');
 
             if (!select || !price) {
                 return;
             }
+
+            const setMainMedia = (url, type = 'image', alt = '') => {
+                if (!mainMedia || !url) {
+                    return;
+                }
+
+                const isGrayscale = mainMedia.classList.contains('grayscale');
+                const next = document.createElement(type === 'video' ? 'video' : 'img');
+
+                next.dataset.productMainMedia = '';
+                next.dataset.mediaType = type === 'video' ? 'video' : 'image';
+                next.className = type === 'video'
+                    ? `aspect-square w-full bg-black object-contain${isGrayscale ? ' grayscale' : ''}`
+                    : `aspect-square w-full object-cover${isGrayscale ? ' grayscale' : ''}`;
+                next.setAttribute('src', url);
+
+                if (type === 'video') {
+                    next.setAttribute('controls', '');
+                    next.setAttribute('preload', 'metadata');
+                } else {
+                    next.setAttribute('alt', alt || mainMedia.getAttribute('alt') || '');
+                }
+
+                mainMedia.replaceWith(next);
+                mainMedia = next;
+            };
 
             const refreshVariantPrice = () => {
                 const option = select.selectedOptions[0];
@@ -425,7 +465,15 @@
                 if (summary) {
                     summary.textContent = `${option.textContent.split(' / ')[0].trim()} / ${option.dataset.stockLabel || ''}`.trim();
                 }
+
+                setMainMedia(option.dataset.imageUrl || '', 'image', option.dataset.imageAlt || '');
             };
+
+            galleryItems.forEach((item) => {
+                item.addEventListener('click', () => {
+                    setMainMedia(item.dataset.mediaUrl || '', item.dataset.mediaType || 'image', item.dataset.mediaAlt || '');
+                });
+            });
 
             select.addEventListener('change', refreshVariantPrice);
             refreshVariantPrice();

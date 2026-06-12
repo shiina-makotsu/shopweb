@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\MediaPath;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -16,6 +17,7 @@ class ProductVariant extends Model
         'product_id',
         'sku',
         'specs',
+        'image_path',
         'price_cents',
         'compare_at_price_cents',
         'discount_price_cents',
@@ -65,6 +67,11 @@ class ProductVariant extends Model
         }
 
         return collect($specs)->map(fn ($value, $key) => "{$key}: {$value}")->implode(' / ');
+    }
+
+    public function imageUrl(): ?string
+    {
+        return MediaPath::url($this->image_path);
     }
 
     public function effectivePriceCents(): int

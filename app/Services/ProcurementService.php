@@ -153,6 +153,7 @@ class ProcurementService
             $incoming->variants()->create([
                 'sku' => $variant->sku.'-PO-'.$procurement->id,
                 'specs' => $variant->specs,
+                'image_path' => $variant->image_path,
                 'price_cents' => $variant->price_cents,
                 'compare_at_price_cents' => $variant->compare_at_price_cents,
                 'discount_price_cents' => $variant->discount_price_cents,

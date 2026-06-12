@@ -44,6 +44,7 @@ class CsvImportService
                     'product_id' => $product->id,
                     'sku' => $sku,
                     'specs' => $this->specs($row, $variant?->specs ?? []),
+                    'image_path' => $this->has($row, 'image_path') ? $this->nullableString($row, 'image_path') : $variant?->image_path,
                     'price_cents' => $this->requiredInt($row, 'price_cents', $variant?->price_cents),
                     'compare_at_price_cents' => $compareAtPriceCents === null ? null : max(0, $compareAtPriceCents),
                     'stock' => $newStock,
@@ -282,6 +283,7 @@ class CsvImportService
                 '交付类型', 'fulfillment_type', 'delivery_type' => 'fulfillment_type',
                 'SKU', 'sku' => 'sku',
                 '规格', 'specs', 'options' => 'specs',
+                'SKU图片', 'SKU 图片', 'sku_image', 'sku_image_path', 'image_path', 'image' => 'image_path',
                 '售价(分)', '价格(分)', 'price_cents', 'price' => 'price_cents',
                 '划线价(分)', 'compare_at_price_cents', 'compare_at_price' => 'compare_at_price_cents',
                 '库存', 'stock' => 'stock',
@@ -329,6 +331,13 @@ class CsvImportService
     private function string(array $row, string $key): string
     {
         return $this->clean((string) ($row[$key] ?? ''));
+    }
+
+    private function nullableString(array $row, string $key): ?string
+    {
+        $value = $this->string($row, $key);
+
+        return $value === '' ? null : $value;
     }
 
     private function nullableInt(array $row, string $key): ?int

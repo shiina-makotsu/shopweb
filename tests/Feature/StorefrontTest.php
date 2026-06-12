@@ -17,6 +17,8 @@ use App\Models\WarehouseShippingRate;
 use App\Models\WarehouseStock;
 use App\Services\OrderService;
 use App\Support\Url;
+use App\Filament\Resources\ProductResource\Pages\EditProduct;
+use Livewire\Livewire;
 
 it('allows a customer to add a sku to cart and create an order', function (): void {
     $this->seed();
@@ -806,6 +808,102 @@ it('prices orders by the selected sku variant', function (): void {
         ->and($order->items()->first()->unit_price_cents)->toBe(2500)
         ->and($order->items()->first()->line_total_cents)->toBe(5000)
         ->and($order->items()->first()->variant_sku)->toBe('SKU-PRICE-B');
+});
+
+it('saves multiple sku rows with independent image links from the admin product form', function (): void {
+    $this->seed();
+
+    $admin = User::factory()->create(['role' => 'admin']);
+    $category = \App\Models\Category::query()->firstOrFail();
+    $product = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => '后台多 SKU 商品',
+        'slug' => 'admin-multi-sku-product',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_ONLINE,
+    ]);
+
+    $this->actingAs($admin);
+
+    Livewire::test(EditProduct::class, ['record' => $product->id])
+        ->fillForm([
+            'variants' => [
+                [
+                    'sku' => 'ADMIN-SKU-WHITE-M',
+                    'specs' => ['颜色' => '白色', '尺码' => 'M'],
+                    'image_path' => 'https://cdn.example.com/white-m.jpg',
+                    'price_cents' => '19.90',
+                    'stock' => 8,
+                    'low_stock_threshold' => 2,
+                    'is_active' => true,
+                ],
+                [
+                    'sku' => 'ADMIN-SKU-BLACK-L',
+                    'specs' => ['颜色' => '黑色', '尺码' => 'L'],
+                    'image_path' => '/uploads/products/black-l.webp',
+                    'price_cents' => '29.90',
+                    'stock' => 6,
+                    'low_stock_threshold' => 2,
+                    'is_active' => true,
+                ],
+            ],
+            'media' => [
+                [
+                    'type' => ProductMedia::TYPE_PREVIEW,
+                    'media_kind' => ProductMedia::KIND_IMAGE,
+                    'path' => 'https://cdn.example.com/product-main.jpg',
+                    'alt' => '商品主图',
+                    'sort_order' => 0,
+                ],
+            ],
+        ])
+        ->call('save')
+        ->assertHasNoFormErrors();
+
+    expect($product->variants()->count())->toBe(2)
+        ->and(ProductVariant::query()->where('sku', 'ADMIN-SKU-WHITE-M')->first()?->image_path)->toBe('https://cdn.example.com/white-m.jpg')
+        ->and(ProductVariant::query()->where('sku', 'ADMIN-SKU-WHITE-M')->first()?->price_cents)->toBe(1990)
+        ->and(ProductVariant::query()->where('sku', 'ADMIN-SKU-BLACK-L')->first()?->specs)->toBe(['颜色' => '黑色', '尺码' => 'L'])
+        ->and($product->media()->first()?->path)->toBe('https://cdn.example.com/product-main.jpg');
+});
+
+it('uses sku images as product detail fallback and gallery entries', function (): void {
+    $this->seed();
+
+    $category = \App\Models\Category::query()->firstOrFail();
+    $product = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => 'SKU 图片商品',
+        'slug' => 'sku-image-product',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_ONLINE,
+    ]);
+    ProductVariant::query()->create([
+        'product_id' => $product->id,
+        'sku' => 'SKU-IMAGE-WHITE',
+        'specs' => ['颜色' => '白色'],
+        'image_path' => 'products/sku-white.jpg',
+        'price_cents' => 1000,
+        'stock' => 5,
+        'is_active' => true,
+    ]);
+    ProductVariant::query()->create([
+        'product_id' => $product->id,
+        'sku' => 'SKU-IMAGE-BLACK',
+        'specs' => ['颜色' => '黑色'],
+        'image_path' => 'https://cdn.example.com/sku-black.webp',
+        'price_cents' => 1200,
+        'stock' => 5,
+        'is_active' => true,
+    ]);
+
+    $this->get(route('products.show', $product))
+        ->assertOk()
+        ->assertSee('data-product-main-media', false)
+        ->assertSee('src="/uploads/products/sku-white.jpg"', false)
+        ->assertSee('data-image-url="/uploads/products/sku-white.jpg"', false)
+        ->assertSee('data-image-url="https://cdn.example.com/sku-black.webp"', false)
+        ->assertSee('SKU 图');
 });
 
 it('applies global coupons and restricts product coupons to a single matching cart item', function (): void {

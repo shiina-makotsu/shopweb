@@ -12,8 +12,8 @@ it('imports product sku rows and records stock movements', function (): void {
 
     File::ensureDirectoryExists(dirname($path));
     writeCsv($path, [
-        ['商品标题', '分类', '商品状态', '交付类型', 'SKU', '规格', '售价(分)', '划线价(分)', '库存', '低库存阈值', 'SKU启用'],
-        ['导入商品', '导入分类', 'published', 'contact_only', 'IMP-001', '颜色: 红 / 尺寸: L', '12345', '15000', '8', '2', '是'],
+        ['商品标题', '分类', '商品状态', '交付类型', 'SKU', '规格', 'SKU图片', '售价(分)', '划线价(分)', '库存', '低库存阈值', 'SKU启用'],
+        ['导入商品', '导入分类', 'published', 'contact_only', 'IMP-001', '颜色: 红 / 尺寸: L', 'https://cdn.example.com/import-red.jpg', '12345', '15000', '8', '2', '是'],
     ]);
 
     $result = app(CsvImportService::class)->importProducts($path);
@@ -34,6 +34,7 @@ it('imports product sku rows and records stock movements', function (): void {
         ->and($variant->stock)->toBe(8)
         ->and($variant->low_stock_threshold)->toBe(2)
         ->and($variant->is_active)->toBeTrue()
+        ->and($variant->image_path)->toBe('https://cdn.example.com/import-red.jpg')
         ->and($variant->specs)->toBe(['颜色' => '红', '尺寸' => 'L']);
 
     $this->assertDatabaseHas('inventory_movements', [
@@ -44,8 +45,8 @@ it('imports product sku rows and records stock movements', function (): void {
     ]);
 
     writeCsv($path, [
-        ['title', 'category', 'status', 'fulfillment_type', 'sku', 'specs', 'price_cents', 'stock'],
-        ['导入商品更新', '导入分类', 'draft', 'shipping_required', 'IMP-001', '{"版本":"2026"}', '13000', '5'],
+        ['title', 'category', 'status', 'fulfillment_type', 'sku', 'specs', 'image_path', 'price_cents', 'stock'],
+        ['导入商品更新', '导入分类', 'draft', 'shipping_required', 'IMP-001', '{"版本":"2026"}', 'products/import-2026.webp', '13000', '5'],
     ]);
 
     $updateResult = app(CsvImportService::class)->importProducts($path);
@@ -59,6 +60,7 @@ it('imports product sku rows and records stock movements', function (): void {
         ->and($variant->product->fulfillment_type)->toBe(Product::FULFILLMENT_SHIPPING)
         ->and($variant->price_cents)->toBe(13000)
         ->and($variant->stock)->toBe(5)
+        ->and($variant->image_path)->toBe('products/import-2026.webp')
         ->and($variant->specs)->toBe(['版本' => '2026']);
 
     $this->assertDatabaseHas('inventory_movements', [

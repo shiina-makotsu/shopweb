@@ -9,16 +9,16 @@ use App\Filament\Resources\ProductResource\Pages\ListProducts;
 use App\Models\Product;
 use App\Models\ProductMedia;
 use App\Models\ProductVariant;
+use App\Support\MediaPath;
 use App\Support\MoneyInput;
 use App\Support\RegexSearch;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
-use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\KeyValue;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Repeater;
-use Filament\Forms\Components\Repeater\TableColumn;
 use Filament\Forms\Components\RichEditor;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -34,6 +34,7 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
 
 class ProductResource extends Resource
@@ -113,28 +114,39 @@ class ProductResource extends Resource
                     ->addActionLabel('添加规格值')
                     ->relationship()
                     ->schema([
-                        TextInput::make('sku')->label('SKU')->hiddenLabel()->required()->maxLength(255),
-                        KeyValue::make('specs')->label('规格值')->hiddenLabel()->keyLabel('规格名')->valueLabel('规格值'),
-                        MoneyInput::cents(TextInput::make('price_cents')->label('价格（元）')->hiddenLabel()->required()),
-                        TextInput::make('stock')->label('库存')->hiddenLabel()->numeric()->required()->default(0),
-                        TextInput::make('low_stock_threshold')->label('低库存阈值')->hiddenLabel()->numeric()->default(5),
-                        Toggle::make('is_active')->label('启用')->hiddenLabel()->default(true),
+                        TextInput::make('sku')->label('SKU')->required()->maxLength(255),
+                        KeyValue::make('specs')
+                            ->label('规格值')
+                            ->keyLabel('规格名')
+                            ->valueLabel('规格值')
+                            ->addActionLabel('添加规格名/值')
+                            ->columnSpanFull(),
+                        TextInput::make('image_path')
+                            ->label('SKU 图片链接或路径')
+                            ->placeholder('https://example.com/sku.jpg 或 products/sku.jpg')
+                            ->helperText('可粘贴外部图片 URL、/uploads/... 路径或 public/uploads 下的相对路径。')
+                            ->live(debounce: 500)
+                            ->maxLength(2048)
+                            ->dehydrateStateUsing(fn (?string $state): ?string => blank($state) ? null : trim($state)),
+                        Placeholder::make('image_preview')
+                            ->label('SKU 图片预览')
+                            ->content(fn (Get $get): HtmlString => static::imagePreviewHtml($get('image_path')))
+                            ->html(),
+                        MoneyInput::cents(TextInput::make('price_cents')->label('价格（元）')->required()),
+                        TextInput::make('stock')->label('库存')->numeric()->required()->default(0),
+                        TextInput::make('low_stock_threshold')->label('低库存阈值')->numeric()->default(5),
+                        Toggle::make('is_active')->label('启用')->default(true),
                     ])
-                    ->table([
-                        TableColumn::make('SKU')->markAsRequired()->width('160px'),
-                        TableColumn::make('规格值')->markAsRequired(),
-                        TableColumn::make('价格')->markAsRequired()->width('130px'),
-                        TableColumn::make('库存')->width('110px'),
-                        TableColumn::make('低库存')->width('110px'),
-                        TableColumn::make('启用')->width('80px'),
-                    ])
+                    ->columns(3)
                     ->defaultItems(1)
-                    ->helperText('每一行就是一个可售 SKU：规格值、基础价格和库存分别维护；折扣价与折扣时间请到交易菜单的“商品折扣”页面设置。')
+                    ->itemLabel(fn (array $state): ?string => filled($state['sku'] ?? null) ? (string) $state['sku'] : null)
+                    ->helperText('每一项就是一个可售 SKU，可维护多个规格名/规格值、独立基础价格、库存和 SKU 图片；折扣价与折扣时间请到交易菜单的“商品折扣”页面设置。')
                     ->columnSpanFull(),
             ])->columnSpanFull(),
 
             Section::make('商品媒体')->schema([
                 Repeater::make('media')->label('图片 / 视频')
+                    ->addActionLabel('添加图片 / 视频')
                     ->relationship()
                     ->schema([
                         Select::make('type')->label('类型')->options([
@@ -145,21 +157,18 @@ class ProductResource extends Resource
                             ProductMedia::KIND_IMAGE => '图片',
                             ProductMedia::KIND_VIDEO => '视频',
                         ])->default(ProductMedia::KIND_IMAGE)->required()->live(),
-                        FileUpload::make('path')
-                            ->label('文件')
-                            ->disk('public_uploads')
-                            ->directory('products')
-                            ->acceptedFileTypes([
-                                'image/jpeg',
-                                'image/png',
-                                'image/gif',
-                                'image/webp',
-                                'video/mp4',
-                                'video/webm',
-                                'video/ogg',
-                            ])
-                            ->maxSize(51200)
+                        TextInput::make('path')
+                            ->label('图片/视频链接或路径')
+                            ->placeholder('https://example.com/image.jpg 或 products/demo.jpg')
+                            ->helperText('点击“添加图片 / 视频”新增一行；也可以直接粘贴外部 URL、/uploads/... 路径或 public/uploads 下的相对路径。')
+                            ->live(debounce: 500)
+                            ->maxLength(2048)
+                            ->dehydrateStateUsing(fn (?string $state): ?string => blank($state) ? null : trim($state))
                             ->required(),
+                        Placeholder::make('media_preview')
+                            ->label('预览')
+                            ->content(fn (Get $get): HtmlString => static::mediaPreviewHtml($get('path'), $get('media_kind'), $get('alt')))
+                            ->html(),
                         TextInput::make('mime_type')->label('MIME')->maxLength(100),
                         TextInput::make('alt')->label('Alt 文案'),
                         TextInput::make('sort_order')->label('排序')->numeric()->default(0),
@@ -185,6 +194,43 @@ class ProductResource extends Resource
                     ->columnSpanFull(),
             ])->visible(fn (Get $get): bool => $get('status') === Product::STATUS_CONCEPT)->columnSpanFull(),
         ]);
+    }
+
+    private static function imagePreviewHtml(?string $path): HtmlString
+    {
+        $url = MediaPath::url($path);
+
+        if (! $url) {
+            return new HtmlString('<p style="margin:0;color:#64748b;font-size:12px;">粘贴图片链接或路径后显示预览。</p>');
+        }
+
+        $escapedUrl = e($url);
+
+        return new HtmlString(<<<HTML
+<img src="{$escapedUrl}" alt="图片预览" style="width:72px;height:72px;object-fit:cover;border:1px solid #cbd5e1;border-radius:4px;background:#f8fafc;">
+HTML);
+    }
+
+    private static function mediaPreviewHtml(?string $path, ?string $kind = ProductMedia::KIND_IMAGE, ?string $alt = null): HtmlString
+    {
+        $url = MediaPath::url($path);
+
+        if (! $url) {
+            return new HtmlString('<p style="margin:0;color:#64748b;font-size:12px;">粘贴图片/视频链接或路径后显示预览。</p>');
+        }
+
+        $escapedUrl = e($url);
+        $escapedAlt = e($alt ?: '媒体预览');
+
+        if ($kind === ProductMedia::KIND_VIDEO) {
+            return new HtmlString(<<<HTML
+<video src="{$escapedUrl}" style="width:120px;height:72px;object-fit:contain;border:1px solid #cbd5e1;border-radius:4px;background:#020617;" muted controls preload="metadata"></video>
+HTML);
+        }
+
+        return new HtmlString(<<<HTML
+<img src="{$escapedUrl}" alt="{$escapedAlt}" style="width:72px;height:72px;object-fit:cover;border:1px solid #cbd5e1;border-radius:4px;background:#f8fafc;">
+HTML);
     }
 
     public static function table(Table $table): Table
@@ -250,6 +296,7 @@ class ProductResource extends Resource
                             $incoming->variants()->create([
                                 'sku' => $variant->sku.'-IN-'.now()->format('His'),
                                 'specs' => $variant->specs,
+                                'image_path' => $variant->image_path,
                                 'price_cents' => $variant->price_cents,
                                 'compare_at_price_cents' => $variant->compare_at_price_cents,
                                 'stock' => 0,
