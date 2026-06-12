@@ -929,6 +929,46 @@ it('saves multiple sku rows with independent image links from the admin product 
         ->and($product->media()->first()?->path)->toBe('https://cdn.example.com/product-main.jpg');
 });
 
+it('shows media library upload pickers beside product image inputs', function (): void {
+    $this->seed();
+
+    $admin = User::factory()->create(['role' => 'admin']);
+    $category = \App\Models\Category::query()->firstOrFail();
+    $product = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => '后台图片选择商品',
+        'slug' => 'admin-image-picker-product',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_ONLINE,
+    ]);
+
+    ProductVariant::query()->create([
+        'product_id' => $product->id,
+        'sku' => 'ADMIN-PICKER-SKU',
+        'specs' => ['颜色' => '蓝色'],
+        'image_path' => 'products/skus/blue.jpg',
+        'price_cents' => 1990,
+        'stock' => 3,
+        'is_active' => true,
+    ]);
+
+    ProductMedia::query()->create([
+        'product_id' => $product->id,
+        'type' => ProductMedia::TYPE_PREVIEW,
+        'media_kind' => ProductMedia::KIND_IMAGE,
+        'path' => 'products/media/main.jpg',
+        'alt' => '商品图',
+    ]);
+
+    $this->actingAs($admin);
+
+    Livewire::test(EditProduct::class, ['record' => $product->id])
+        ->assertSee('SKU 图片链接或路径')
+        ->assertSee('资源库 / 上传图片')
+        ->assertSee('图片/视频链接或路径')
+        ->assertSee('资源库 / 上传文件');
+});
+
 it('uses sku images as product detail fallback and gallery entries', function (): void {
     $this->seed();
 

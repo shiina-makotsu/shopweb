@@ -6,6 +6,7 @@ use App\Filament\Concerns\ChecksAdminAccess;
 use App\Filament\Resources\ProductResource\Pages\CreateProduct;
 use App\Filament\Resources\ProductResource\Pages\EditProduct;
 use App\Filament\Resources\ProductResource\Pages\ListProducts;
+use App\Models\MediaAsset;
 use App\Models\Product;
 use App\Models\ProductMedia;
 use App\Models\ProductVariant;
@@ -16,6 +17,7 @@ use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\KeyValue;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Repeater;
@@ -42,12 +44,19 @@ class ProductResource extends Resource
     use ChecksAdminAccess;
 
     protected static ?string $model = Product::class;
+
     protected static string $permissionArea = 'catalog';
+
     protected static ?string $navigationLabel = '商品管理';
+
     protected static ?string $modelLabel = '商品';
+
     protected static ?string $pluralModelLabel = '商品管理';
+
     protected static string|\UnitEnum|null $navigationGroup = '商品';
+
     protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedShoppingBag;
+
     protected static ?int $navigationSort = 20;
 
     public static function resolveRecordRouteBinding(int|string $key, ?\Closure $modifyQuery = null): ?Model
@@ -124,10 +133,12 @@ class ProductResource extends Resource
                         TextInput::make('image_path')
                             ->label('SKU 图片链接或路径')
                             ->placeholder('https://example.com/sku.jpg 或 products/sku.jpg')
-                            ->helperText('可粘贴外部图片 URL、/uploads/... 路径或 public/uploads 下的相对路径。')
+                            ->helperText('可粘贴外部图片 URL、/uploads/... 路径或 public/uploads 下的相对路径；也可以在旁边从资源库选择或点击 + 上传。')
                             ->live(debounce: 500)
                             ->maxLength(2048)
-                            ->dehydrateStateUsing(fn (?string $state): ?string => blank($state) ? null : trim($state)),
+                            ->dehydrateStateUsing(fn (?string $state): ?string => blank($state) ? null : trim($state))
+                            ->columnSpan(2),
+                        static::imageAssetPicker('image_path', '资源库 / 上传图片'),
                         Placeholder::make('image_preview')
                             ->label('SKU 图片预览')
                             ->content(fn (Get $get): HtmlString => static::imagePreviewHtml($get('image_path')))
@@ -160,11 +171,12 @@ class ProductResource extends Resource
                         TextInput::make('path')
                             ->label('图片/视频链接或路径')
                             ->placeholder('https://example.com/image.jpg 或 products/demo.jpg')
-                            ->helperText('点击“添加图片 / 视频”新增一行；也可以直接粘贴外部 URL、/uploads/... 路径或 public/uploads 下的相对路径。')
+                            ->helperText('点击“添加图片 / 视频”新增一行；可直接粘贴外部 URL、/uploads/... 路径或 public/uploads 下的相对路径，也可在旁边从资源库选择或点击 + 上传。')
                             ->live(debounce: 500)
                             ->maxLength(2048)
                             ->dehydrateStateUsing(fn (?string $state): ?string => blank($state) ? null : trim($state))
                             ->required(),
+                        static::mediaAssetPicker('path'),
                         Placeholder::make('media_preview')
                             ->label('预览')
                             ->content(fn (Get $get): HtmlString => static::mediaPreviewHtml($get('path'), $get('media_kind'), $get('alt')))
@@ -194,6 +206,230 @@ class ProductResource extends Resource
                     ->columnSpanFull(),
             ])->visible(fn (Get $get): bool => $get('status') === Product::STATUS_CONCEPT)->columnSpanFull(),
         ]);
+    }
+
+    private static function imageAssetPicker(string $targetField, string $label): Select
+    {
+        return Select::make($targetField.'_asset_picker')
+            ->label($label)
+            ->placeholder('选择已有图片，或点击 + 上传')
+            ->helperText('选择后会自动填入左侧图片路径输入框。')
+            ->searchable()
+            ->preload()
+            ->live()
+            ->dehydrated(false)
+            ->options(fn (): array => static::imageOptions())
+            ->getSearchResultsUsing(fn (string $search): array => static::imageOptions($search))
+            ->getOptionLabelUsing(fn ($value): ?string => static::assetOptionLabel($value))
+            ->afterStateUpdated(function (?string $state, callable $set) use ($targetField): void {
+                if (filled($state)) {
+                    $set($targetField, $state);
+                }
+            })
+            ->createOptionForm([
+                FileUpload::make('path')
+                    ->label('上传图片')
+                    ->helperText('上传图片，或填写下方外部图片 URL。')
+                    ->disk('public_uploads')
+                    ->directory('products/skus')
+                    ->image()
+                    ->maxSize(5120),
+                TextInput::make('external_url')
+                    ->label('外部图片 URL')
+                    ->url()
+                    ->maxLength(2048),
+                TextInput::make('name')->label('名称')->maxLength(255),
+                TextInput::make('alt')->label('Alt 文案')->maxLength(255),
+            ])
+            ->createOptionUsing(function (array $data): string {
+                $asset = MediaAsset::createImageFromUploadOrUrl($data, MediaAsset::USAGE_PRODUCT);
+
+                return $asset->path;
+            });
+    }
+
+    private static function mediaAssetPicker(string $targetField): Select
+    {
+        return Select::make($targetField.'_asset_picker')
+            ->label('资源库 / 上传文件')
+            ->placeholder('选择已有图片/视频，或点击 + 上传')
+            ->helperText('选择后会自动填入左侧媒体路径输入框。')
+            ->searchable()
+            ->preload()
+            ->live()
+            ->dehydrated(false)
+            ->options(fn (): array => static::mediaOptions())
+            ->getSearchResultsUsing(fn (string $search): array => static::mediaOptions($search))
+            ->getOptionLabelUsing(fn ($value): ?string => static::assetOptionLabel($value))
+            ->afterStateUpdated(function (?string $state, callable $set) use ($targetField): void {
+                if (blank($state)) {
+                    return;
+                }
+
+                $set($targetField, $state);
+
+                $asset = MediaAsset::query()->where('path', $state)->first();
+
+                if (! $asset) {
+                    return;
+                }
+
+                if ($asset->isVideo()) {
+                    $set('media_kind', ProductMedia::KIND_VIDEO);
+                } elseif ($asset->isImage()) {
+                    $set('media_kind', ProductMedia::KIND_IMAGE);
+                }
+
+                if (filled($asset->mime_type)) {
+                    $set('mime_type', $asset->mime_type);
+                }
+
+                if (filled($asset->alt)) {
+                    $set('alt', $asset->alt);
+                }
+            })
+            ->createOptionForm([
+                FileUpload::make('path')
+                    ->label('上传图片/视频')
+                    ->helperText('上传商品图片或视频，或填写下方外部 URL。')
+                    ->disk('public_uploads')
+                    ->directory('products/media')
+                    ->acceptedFileTypes(static::productMediaAcceptedFileTypes())
+                    ->maxSize(51200),
+                TextInput::make('external_url')
+                    ->label('外部图片/视频 URL')
+                    ->url()
+                    ->maxLength(2048),
+                Select::make('media_kind')
+                    ->label('媒体类型')
+                    ->options([
+                        ProductMedia::KIND_IMAGE => '图片',
+                        ProductMedia::KIND_VIDEO => '视频',
+                    ])
+                    ->default(ProductMedia::KIND_IMAGE)
+                    ->required(),
+                TextInput::make('name')->label('名称')->maxLength(255),
+                TextInput::make('alt')->label('Alt 文案')->maxLength(255),
+            ])
+            ->createOptionUsing(function (array $data): string {
+                $asset = static::createProductMediaAssetFromUploadOrUrl($data);
+
+                return $asset->path;
+            });
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private static function imageOptions(?string $search = null): array
+    {
+        return static::assetOptionQuery($search)
+            ->where(function (Builder $query): void {
+                $query->where('mime_type', 'like', 'image/%')
+                    ->orWhereNull('mime_type');
+            })
+            ->get()
+            ->mapWithKeys(fn (MediaAsset $asset): array => [$asset->path => static::assetOptionText($asset)])
+            ->all();
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private static function mediaOptions(?string $search = null): array
+    {
+        return static::assetOptionQuery($search)
+            ->where(function (Builder $query): void {
+                $query->where('mime_type', 'like', 'image/%')
+                    ->orWhere('mime_type', 'like', 'video/%')
+                    ->orWhereNull('mime_type');
+            })
+            ->get()
+            ->mapWithKeys(fn (MediaAsset $asset): array => [$asset->path => static::assetOptionText($asset)])
+            ->all();
+    }
+
+    private static function assetOptionQuery(?string $search = null): Builder
+    {
+        return MediaAsset::query()
+            ->when($search, fn (Builder $query) => $query->where(function (Builder $query) use ($search): void {
+                $query
+                    ->where('name', 'like', "%{$search}%")
+                    ->orWhere('path', 'like', "%{$search}%")
+                    ->orWhere('alt', 'like', "%{$search}%");
+            }))
+            ->latest()
+            ->limit(50);
+    }
+
+    private static function assetOptionLabel($value): ?string
+    {
+        if (blank($value)) {
+            return null;
+        }
+
+        $asset = MediaAsset::query()->where('path', $value)->first();
+
+        return $asset ? static::assetOptionText($asset) : (string) $value;
+    }
+
+    private static function assetOptionText(MediaAsset $asset): string
+    {
+        $name = $asset->name ?: basename((string) $asset->path);
+
+        return $asset->path ? "{$name} · {$asset->path}" : $name;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private static function createProductMediaAssetFromUploadOrUrl(array $data): MediaAsset
+    {
+        $path = $data['path'] ?? null;
+        $path = is_array($path) ? reset($path) : $path;
+
+        if (! is_string($path) || blank($path)) {
+            $path = MediaAsset::pathFromUploadOrUrl($data);
+        }
+
+        $isExternal = MediaAsset::isExternalUrl($path);
+
+        return MediaAsset::query()->create([
+            'name' => $data['name'] ?? MediaAsset::nameFromPath($path),
+            'path' => $path,
+            'disk' => $isExternal ? 'external' : 'public_uploads',
+            'mime_type' => $isExternal ? static::externalProductMediaMimeType($path, $data['media_kind'] ?? null) : ($data['mime_type'] ?? null),
+            'alt' => $data['alt'] ?? null,
+            'usage' => MediaAsset::USAGE_PRODUCT,
+        ]);
+    }
+
+    private static function externalProductMediaMimeType(string $path, ?string $kind = null): string
+    {
+        $extension = Str::lower(pathinfo((string) parse_url($path, PHP_URL_PATH), PATHINFO_EXTENSION));
+
+        if ($kind === ProductMedia::KIND_VIDEO || in_array($extension, ['mp4', 'webm', 'mov', 'm4v', 'avi'], true)) {
+            return 'video/external';
+        }
+
+        return 'image/external';
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private static function productMediaAcceptedFileTypes(): array
+    {
+        return [
+            'image/jpeg',
+            'image/png',
+            'image/gif',
+            'image/webp',
+            'image/svg+xml',
+            'video/mp4',
+            'video/webm',
+            'video/quicktime',
+        ];
     }
 
     private static function imagePreviewHtml(?string $path): HtmlString
