@@ -10,7 +10,6 @@ use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Section;
-use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Contracts\HasSchemas;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
@@ -68,18 +67,17 @@ class SupportAiSettingsPage extends Page implements HasSchemas
                             ->default(10),
                         TextInput::make('support_ai_endpoint')
                             ->label('客服 AI 接口地址')
-                            ->maxLength(500)
-                            ->visible(fn (Get $get): bool => (bool) $get('support_ai_enabled')),
+                            ->helperText('例如 OpenAI 兼容接口的完整 URL，保存后由客服 AI 调用逻辑读取。')
+                            ->maxLength(500),
                         TextInput::make('support_ai_api_key')
                             ->label('客服 AI API Key')
                             ->password()
                             ->revealable()
-                            ->maxLength(255)
-                            ->visible(fn (Get $get): bool => (bool) $get('support_ai_enabled')),
+                            ->maxLength(255),
                         TextInput::make('support_ai_model')
                             ->label('客服 AI 模型标识')
-                            ->maxLength(255)
-                            ->visible(fn (Get $get): bool => (bool) $get('support_ai_enabled')),
+                            ->helperText('例如 gpt-4.1-mini、deepseek-chat 或其他兼容模型名。')
+                            ->maxLength(255),
                         Textarea::make('support_ai_system_prompt')
                             ->label('客服 AI 预设内容')
                             ->helperText('用于长时间没有客服接待时，对客户进行安抚或基础引导。')

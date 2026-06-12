@@ -30,3 +30,16 @@ it('rewrites local redirect locations to relative paths', function (): void {
         ->get('/__relative-redirect')
         ->assertRedirect('/admin');
 });
+
+it('rewrites auto injected livewire admin assets to relative paths', function (): void {
+    config(['app.url' => 'http://origin.internal']);
+
+    $this
+        ->get('http://shop.example.test/admin/login')
+        ->assertOk()
+        ->assertSee('src="/livewire-', false)
+        ->assertSee('data-module-url="/livewire-', false)
+        ->assertSee('data-update-uri="/livewire-', false)
+        ->assertDontSee('http://shop.example.test/livewire-', false)
+        ->assertDontSee('http://origin.internal/livewire-', false);
+});

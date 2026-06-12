@@ -9,8 +9,10 @@ use App\Models\Page;
 use App\Models\SiteSetting;
 use App\Services\AdminLoginLogger;
 use App\Services\CartService;
+use App\Support\RelativeUrlRewriter;
 use Illuminate\Auth\Events\Failed;
 use Illuminate\Auth\Events\Login;
+use Illuminate\Foundation\Http\Events\RequestHandled;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\View;
@@ -35,6 +37,10 @@ class AppServiceProvider extends ServiceProvider
 
         Event::listen(Failed::class, function (Failed $event): void {
             app(AdminLoginLogger::class)->failed($event->credentials['email'] ?? null, request());
+        });
+
+        Event::listen(RequestHandled::class, function (RequestHandled $event): void {
+            app(RelativeUrlRewriter::class)->rewriteResponse($event->response, $event->request);
         });
 
         View::composer('*', function ($view): void {

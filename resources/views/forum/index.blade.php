@@ -1,3 +1,7 @@
+@php
+    $userName = fn ($user): string => $user?->displayName() ?? '已注销用户';
+@endphp
+
 <x-layouts.app title="论坛">
     <section class="mb-4 rounded-sm border border-slate-300 bg-white">
         <div class="border-b border-slate-200 bg-slate-100 px-4 py-3">
@@ -64,7 +68,7 @@
                         <span class="font-medium">{{ $thread->title }}</span>
                     </div>
                     <p class="mt-1 text-xs text-slate-500">
-                        {{ $thread->section->name }} / {{ $thread->user->displayName() }} /
+                        {{ $thread->section?->name ?? '未知版块' }} / {{ $userName($thread->user) }} /
                         {{ $thread->comments_count }} 回复 / {{ $thread->likes_count }} 点赞 / {{ $thread->views_count }} 访问 /
                         {{ $thread->created_at->format('Y-m-d H:i') }}
                     </p>

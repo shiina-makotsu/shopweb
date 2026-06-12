@@ -2,6 +2,8 @@
     $assetUrl = fn (string $path): string => \Illuminate\Support\Facades\Storage::disk('public_uploads')->url($path);
     $isImage = fn (string $path): bool => preg_match('/\.(jpe?g|png|gif|webp)$/i', $path) === 1;
     $isVideo = fn (string $path): bool => preg_match('/\.(mp4|webm|mov)$/i', $path) === 1;
+    $userName = fn ($user): string => $user?->displayName() ?? '已注销用户';
+    $profileUrl = fn ($user): ?string => $user ? \App\Support\Url::route('users.show', $user) : null;
 @endphp
 
 <x-layouts.app :title="$thread->title">
@@ -26,7 +28,11 @@
             </div>
             <p class="mt-2 text-xs text-slate-500">
                 贴主
-                <a class="hover:text-blue-800" href="{{ route('users.show', $thread->user) }}">{{ $thread->user->displayName() }}</a>
+                @if($profileUrl($thread->user))
+                    <a class="hover:text-blue-800" href="{{ $profileUrl($thread->user) }}">{{ $userName($thread->user) }}</a>
+                @else
+                    <span>{{ $userName($thread->user) }}</span>
+                @endif
                 / {{ $thread->created_at->format('Y-m-d H:i') }}
                 / {{ $thread->views_count }} 访问
                 / {{ $thread->comments->count() }} 回复
@@ -106,13 +112,17 @@
             @forelse($thread->comments as $comment)
                 <article class="px-4 py-4 text-sm">
                     <div class="flex flex-wrap items-center gap-2">
-                        <a class="font-medium hover:text-blue-800" href="{{ route('users.show', $comment->user) }}">{{ $comment->user->displayName() }}</a>
+                        @if($profileUrl($comment->user))
+                            <a class="font-medium hover:text-blue-800" href="{{ $profileUrl($comment->user) }}">{{ $userName($comment->user) }}</a>
+                        @else
+                            <span class="font-medium">{{ $userName($comment->user) }}</span>
+                        @endif
                         <span class="text-xs text-slate-500">{{ $comment->created_at->format('Y-m-d H:i') }}</span>
                         @if($comment->edited_at)
                             <span class="text-xs text-slate-400">已编辑</span>
                         @endif
                         @auth
-                            @if(auth()->id() !== $comment->user_id)
+                            @if($comment->user && auth()->id() !== $comment->user_id)
                                 <a class="text-xs text-blue-700 hover:text-blue-900" href="{{ route('messages.thread', $comment->user) }}">私聊</a>
                             @endif
                         @endauth
@@ -171,7 +181,11 @@
                     @foreach($comment->replies as $reply)
                         <div class="mt-3 rounded-sm border border-slate-200 bg-slate-50 px-3 py-2">
                             <p class="text-xs text-slate-500">
-                                <a class="font-medium text-slate-700 hover:text-blue-800" href="{{ route('users.show', $reply->user) }}">{{ $reply->user->displayName() }}</a>
+                                @if($profileUrl($reply->user))
+                                    <a class="font-medium text-slate-700 hover:text-blue-800" href="{{ $profileUrl($reply->user) }}">{{ $userName($reply->user) }}</a>
+                                @else
+                                    <span class="font-medium text-slate-700">{{ $userName($reply->user) }}</span>
+                                @endif
                                 / {{ $reply->created_at->format('Y-m-d H:i') }}
                             </p>
                             <p class="mt-1 whitespace-pre-line">{{ $reply->body }}</p>

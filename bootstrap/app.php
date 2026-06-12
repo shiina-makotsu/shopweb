@@ -17,10 +17,15 @@ return Application::configure(basePath: dirname(__DIR__))
         App\Console\Commands\ShopInstallCommand::class,
     ])
     ->withMiddleware(function (Middleware $middleware): void {
-        $trustedProxies = env('TRUSTED_PROXIES');
+        $trustedProxies = trim((string) env('TRUSTED_PROXIES', '*'));
+        $trustedProxyList = match (true) {
+            strcasecmp($trustedProxies, 'none') === 0 => null,
+            $trustedProxies === '' || $trustedProxies === '*' => '*',
+            default => array_map('trim', explode(',', $trustedProxies)),
+        };
 
         $middleware->trustProxies(
-            at: $trustedProxies ? array_map('trim', explode(',', $trustedProxies)) : null,
+            at: $trustedProxyList,
             headers: Request::HEADER_X_FORWARDED_FOR
                 | Request::HEADER_X_FORWARDED_HOST
                 | Request::HEADER_X_FORWARDED_PORT

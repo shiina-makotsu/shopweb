@@ -13,6 +13,7 @@ use App\Filament\Pages\CacheManagementPage;
 use App\Filament\Pages\Dashboard;
 use App\Filament\Pages\HomeContentPage;
 use App\Filament\Pages\MailSettingsPage;
+use App\Filament\Pages\NotFoundContentPage;
 use App\Filament\Pages\PaymentSettingsPage;
 use App\Filament\Pages\ProfitOverviewPage;
 use App\Filament\Pages\ProductDiscountPage;
@@ -53,7 +54,10 @@ class AdminPanelProvider extends PanelProvider
             ->id('admin')
             ->path('admin')
             ->viteTheme('resources/css/filament/admin/theme.css')
-            ->brandName('ShopWeb')
+            ->brandName(fn (): string => $this->adminBrandName())
+            ->brandLogo(fn (): ?string => $this->adminLogoUrl())
+            ->brandLogoHeight('2rem')
+            ->favicon(fn (): ?string => $this->adminFaviconUrl())
             ->login()
             ->userMenu(position: UserMenuPosition::Topbar)
             ->sidebarWidth('220px')
@@ -85,6 +89,7 @@ class AdminPanelProvider extends PanelProvider
                 CacheManagementPage::class,
                 HomeContentPage::class,
                 MailSettingsPage::class,
+                NotFoundContentPage::class,
                 PaymentSettingsPage::class,
                 ProfitOverviewPage::class,
                 ProductDiscountPage::class,
@@ -282,6 +287,34 @@ class AdminPanelProvider extends PanelProvider
                 }
             </style>
             HTML;
+    }
+
+    private function adminBrandName(): string
+    {
+        return $this->siteSettings()?->site_name ?: 'ShopWeb';
+    }
+
+    private function adminLogoUrl(): ?string
+    {
+        return $this->siteSettings()?->logoUrl();
+    }
+
+    private function adminFaviconUrl(): ?string
+    {
+        return $this->siteSettings()?->faviconUrl();
+    }
+
+    private function siteSettings(): ?SiteSetting
+    {
+        try {
+            if (Schema::hasTable('site_settings')) {
+                return SiteSetting::query()->first();
+            }
+        } catch (Throwable) {
+            return null;
+        }
+
+        return null;
     }
 
     private function validColor(?string $color, string $fallback, bool $allowLight = false): string

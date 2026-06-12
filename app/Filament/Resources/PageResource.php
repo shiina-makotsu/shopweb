@@ -156,7 +156,7 @@ class PageResource extends Resource
         ];
     }
 
-    private static function imageAssetOptions(?string $search = null): array
+    public static function imageAssetOptions(?string $search = null): array
     {
         return MediaAsset::query()
             ->where(function ($query): void {

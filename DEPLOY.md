@@ -148,3 +148,38 @@ After changing permissions or PHP/Nginx settings, clear Laravel caches:
 ```bash
 php artisan optimize:clear
 ```
+
+## Domain and proxy troubleshooting
+
+After pulling an update on an existing server, run migrations and clear caches:
+
+```bash
+php artisan migrate --force
+php artisan optimize:clear
+```
+
+When the site is behind Cloudflare, another CDN, or a reverse proxy, configure
+the proxy headers so Laravel can detect the original host and HTTPS scheme.
+For a single-server deployment, `TRUSTED_PROXIES=*` is usually the simplest
+setting. If you know the exact proxy IP ranges, you can set those instead.
+
+For HTTPS domains, use:
+
+```ini
+SESSION_SECURE_COOKIE=true
+```
+
+Leave `SESSION_DOMAIN` empty unless you need to share login state across
+multiple subdomains. A wrong `SESSION_DOMAIN` can make `/admin/login` appear to
+submit successfully while the browser never keeps the session cookie.
+
+The application rewrites same-site absolute URLs to relative paths, including
+Filament and Livewire update endpoints such as `/livewire-*/update`. If admin
+buttons or save actions still look unresponsive on a domain, open the browser
+Network panel and check whether the `/livewire-*/update` request returns 200,
+302 back to login, 419, or is blocked by mixed-content/CORS rules. After
+changing `.env` or proxy settings, always run:
+
+```bash
+php artisan optimize:clear
+```

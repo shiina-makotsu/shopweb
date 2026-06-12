@@ -1,3 +1,7 @@
+@php
+    $userName = fn ($user): string => $user?->displayName() ?? '已注销用户';
+@endphp
+
 <x-layouts.app :title="$section->name">
     <section class="mb-4 rounded-sm border border-slate-300 bg-white">
         <div class="border-b border-slate-200 bg-slate-100 px-4 py-2 text-sm text-slate-600">
@@ -30,7 +34,7 @@
                 @foreach($pinnedThreads as $thread)
                     <a class="block px-4 py-3 text-sm hover:bg-pink-50" href="{{ route('forum.threads.show', [$section, $thread]) }}">
                         <p class="font-medium">{{ $thread->title }}</p>
-                        <p class="mt-1 text-xs text-slate-500">{{ $thread->user->displayName() }} / {{ $thread->comments_count }} 回复 / {{ $thread->likes_count }} 点赞 / {{ $thread->views_count }} 访问</p>
+                        <p class="mt-1 text-xs text-slate-500">{{ $userName($thread->user) }} / {{ $thread->comments_count }} 回复 / {{ $thread->likes_count }} 点赞 / {{ $thread->views_count }} 访问</p>
                     </a>
                 @endforeach
             </div>
@@ -71,7 +75,7 @@
                         <span class="font-medium">{{ $thread->title }}</span>
                     </div>
                     <p class="mt-1 text-xs text-slate-500">
-                        贴主 {{ $thread->user->displayName() }} / {{ $thread->comments_count }} 回复 /
+                        贴主 {{ $userName($thread->user) }} / {{ $thread->comments_count }} 回复 /
                         {{ $thread->likes_count }} 点赞 / {{ $thread->views_count }} 访问 /
                         {{ $thread->created_at->format('Y-m-d H:i') }}
                     </p>

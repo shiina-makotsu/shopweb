@@ -218,6 +218,28 @@ it('renders store information, cache management, and order status settings for a
         ->and(SiteSetting::query()->first()->store_currency)->toBe('CNY');
 });
 
+it('renders support ai connection fields for admins', function (): void {
+    $admin = User::factory()->create(['role' => 'admin']);
+
+    $this->actingAs($admin)
+        ->get('/admin/support-ai-settings')
+        ->assertOk()
+        ->assertSee('support_ai_endpoint', false)
+        ->assertSee('support_ai_api_key', false)
+        ->assertSee('support_ai_model', false);
+});
+
+it('renders the dedicated not found content settings page for admins', function (): void {
+    $admin = User::factory()->create(['role' => 'admin']);
+
+    $this->actingAs($admin)
+        ->get('/admin/not-found-content')
+        ->assertOk()
+        ->assertSee('cover_upload', false)
+        ->assertSee('cover_external_url', false)
+        ->assertSee('slug=404', false);
+});
+
 it('renders report center for admins', function (): void {
     $this->seed();
 
