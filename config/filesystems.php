@@ -35,6 +35,12 @@ return [
             'visibility' => 'private',
             'throw' => false,
         ],
+        'private_attachments' => [
+            'driver' => 'local',
+            'root' => storage_path('app/private/private-attachments'),
+            'visibility' => 'private',
+            'throw' => false,
+        ],
         'digital_deliveries' => [
             'driver' => 'local',
             'root' => storage_path('app/private/digital-deliveries'),

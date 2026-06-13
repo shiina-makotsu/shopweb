@@ -782,6 +782,8 @@ it('shows storefront purchase actions on product details and sold out badges', f
         ->assertSee('加入购物车')
         ->assertSee('立即购买')
         ->assertSee('data-cart-add-form', false)
+        ->assertSee('data-cart-count', false)
+        ->assertSee('data-cart-subtotal', false)
         ->assertSee(Url::route('cart.buy-now'), false);
 
     $presale = Product::query()->create([
@@ -903,6 +905,39 @@ it('prices orders by the selected sku variant', function (): void {
         ->and($order->items()->first()->unit_price_cents)->toBe(2500)
         ->and($order->items()->first()->line_total_cents)->toBe(5000)
         ->and($order->items()->first()->variant_sku)->toBe('SKU-PRICE-B');
+});
+
+it('keeps long sku option labels inside the product detail boundary', function (): void {
+    $this->seed();
+
+    $category = Category::query()->firstOrFail();
+    $product = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => '长规格商品',
+        'slug' => 'long-sku-label-product',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_LOGISTICS,
+    ]);
+
+    ProductVariant::query()->create([
+        'product_id' => $product->id,
+        'sku' => 'LONG-SKU-LABEL',
+        'spec_name' => '11片戊酸雌二醇片2mg * 10片戊酸雌二醇2mg/醋酸环丙孕酮1mg 复合',
+        'specs' => [
+            '戊酸雌二醇片2mg' => '11片',
+            '戊酸雌二醇2mg/醋酸环丙孕酮1mg 复合' => '10片',
+        ],
+        'price_cents' => 8000,
+        'stock' => 10,
+        'is_active' => true,
+    ]);
+
+    $this->get(route('products.show', $product))
+        ->assertOk()
+        ->assertSee('data-product-variant-options', false)
+        ->assertSee('max-w-full', false)
+        ->assertSee('break-words', false)
+        ->assertSee('grid-cols-[minmax(0,1fr)_auto]', false);
 });
 
 it('saves multiple sku rows with independent image links from the admin product form', function (): void {

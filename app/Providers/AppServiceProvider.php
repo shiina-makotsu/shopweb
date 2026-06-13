@@ -6,6 +6,7 @@ use App\Models\Category;
 use App\Models\Announcement;
 use App\Models\NavigationMenuItem;
 use App\Models\Page;
+use App\Models\PrivateMessage;
 use App\Models\SiteSetting;
 use App\Services\AdminLoginLogger;
 use App\Services\CartService;
@@ -71,11 +72,28 @@ class AppServiceProvider extends ServiceProvider
                 'unreadAnnouncementCount' => auth()->check()
                     ? Announcement::query()->published()->whereDoesntHave('reads', fn ($query) => $query->where('user_id', auth()->id()))->count()
                     : 0,
+                'privateUnreadMessageCount' => $this->privateUnreadMessageCount(),
                 'popupAnnouncement' => auth()->check()
                     ? Announcement::query()->published()->where('popup_when_unread', true)->whereDoesntHave('reads', fn ($query) => $query->where('user_id', auth()->id()))->orderByDesc('is_pinned')->latest('published_at')->first()
                     : null,
             ]);
         });
+    }
+
+    private function privateUnreadMessageCount(): int
+    {
+        try {
+            if (! auth()->check() || ! \Schema::hasTable('private_messages')) {
+                return 0;
+            }
+
+            return PrivateMessage::query()
+                ->where('recipient_id', auth()->id())
+                ->whereNull('read_at')
+                ->count();
+        } catch (Throwable) {
+            return 0;
+        }
     }
 
     private function canReadSettings(): bool

@@ -19,10 +19,11 @@ class AiUsageService
     }
 
     /**
-     * @return array{endpoint:string,api_key:?string,source:string,config_name:string,tracked:bool}
+     * @return array{endpoint:string,api_key:?string,source:string,config_name:string,tracked:bool,feature:string}
      */
-    public function resolveConfig(?User $user, array $data): array
+    public function resolveConfig(?User $user, array $data, string $feature = 'image'): array
     {
+        $feature = $feature === 'chat' ? 'chat' : 'image';
         $mode = (string) ($data['config_mode'] ?? 'default');
         $endpoint = trim((string) ($data['endpoint'] ?? ''));
         $apiKey = trim((string) ($data['api_key'] ?? ''));
@@ -41,32 +42,75 @@ class AiUsageService
                 'source' => 'front_custom',
                 'config_name' => $configName !== '' ? $configName : '自定义配置',
                 'tracked' => false,
+                'feature' => $feature,
             ];
         }
 
         if (! $user) {
             throw ValidationException::withMessages([
-                'endpoint' => '默认配置需要先登录，或切换为自定义配置填写 API URL。',
+                'endpoint' => 'AI 功能需要先登录后使用。',
             ]);
         }
 
         $settings = $this->settings();
-        $managedEndpoint = trim((string) ($user->ai_endpoint ?: $settings->ai_default_endpoint));
-        $managedApiKey = trim((string) ($user->ai_api_key ?: $settings->ai_default_api_key));
+        $managedEndpoint = trim((string) $this->managedEndpoint($user, $settings, $feature));
+        $managedApiKey = trim((string) $this->managedApiKey($user, $settings, $feature));
 
         if ($managedEndpoint === '') {
             throw ValidationException::withMessages([
-                'endpoint' => '后台尚未配置默认 AI API URL，请联系管理员或使用自定义配置。',
+                'endpoint' => $feature === 'chat'
+                    ? '后台尚未配置默认 AI 聊天 API URL，请联系管理员或使用自定义配置。'
+                    : '后台尚未配置默认 AI 生图 API URL，请联系管理员或使用自定义配置。',
             ]);
         }
 
         return [
             'endpoint' => $managedEndpoint,
             'api_key' => $managedApiKey !== '' ? $managedApiKey : null,
-            'source' => $user->ai_endpoint ? 'user_managed' : 'site_default',
+            'source' => $this->hasUserManagedConfig($user, $feature) ? 'user_managed' : 'site_default',
             'config_name' => $configName !== '' ? $configName : '默认配置',
             'tracked' => true,
+            'feature' => $feature,
         ];
+    }
+
+    private function managedEndpoint(User $user, SiteSetting $settings, string $feature): ?string
+    {
+        if ($feature === 'chat') {
+            return $user->ai_chat_endpoint
+                ?: $user->ai_endpoint
+                ?: $settings->ai_default_chat_endpoint
+                ?: $settings->ai_default_endpoint;
+        }
+
+        return $user->ai_image_endpoint
+            ?: $user->ai_endpoint
+            ?: $settings->ai_default_image_endpoint
+            ?: $settings->ai_default_endpoint;
+    }
+
+    private function managedApiKey(User $user, SiteSetting $settings, string $feature): ?string
+    {
+        if ($feature === 'chat') {
+            return $user->ai_chat_api_key
+                ?: $user->ai_api_key
+                ?: $settings->ai_default_chat_api_key
+                ?: $settings->ai_default_api_key;
+        }
+
+        return $user->ai_image_api_key
+            ?: $user->ai_api_key
+            ?: $settings->ai_default_image_api_key
+            ?: $settings->ai_default_api_key;
+    }
+
+    private function hasUserManagedConfig(User $user, string $feature): bool
+    {
+        if ($feature === 'chat') {
+            return filled($user->ai_chat_endpoint) || filled($user->ai_chat_api_key) || filled($user->ai_endpoint) || filled($user->ai_api_key);
+        }
+
+        return filled($user->ai_image_endpoint) || filled($user->ai_image_api_key) || filled($user->ai_endpoint) || filled($user->ai_api_key);
     }
 
     public function quotaLimitK(User $user): int

@@ -212,7 +212,7 @@
                         @if($product->isPresale())
                             <p class="mb-3 rounded-sm border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-slate-700">该商品为预售品，付款确认后会进入待发货；实际进货后后台会更新为进货中。</p>
                         @endif
-                        <div class="block">
+                        <div class="block min-w-0">
                             <span class="text-sm font-medium">规格</span>
                             <select id="product-detail-variant" class="hidden" required>
                                 @foreach($product->variants as $variant)
@@ -231,16 +231,16 @@
                                     </option>
                                 @endforeach
                             </select>
-                            <div class="mt-2 grid gap-2" data-product-variant-options>
+                            <div class="mt-2 grid min-w-0 gap-2 overflow-hidden" data-product-variant-options>
                                 @foreach($product->variants as $variant)
                                     <button
                                         type="button"
-                                        class="flex w-full items-center justify-between gap-3 rounded-sm border px-3 py-2 text-sm transition hover:border-blue-400 hover:bg-blue-50 {{ $loop->first ? 'border-blue-700 bg-blue-50 text-blue-900' : 'border-slate-300 bg-white text-slate-700' }}"
+                                        class="grid w-full min-w-0 max-w-full grid-cols-[minmax(0,1fr)_auto] items-start gap-3 overflow-hidden rounded-sm border px-3 py-2 text-sm transition hover:border-blue-400 hover:bg-blue-50 {{ $loop->first ? 'border-blue-700 bg-blue-50 text-blue-900' : 'border-slate-300 bg-white text-slate-700' }}"
                                         data-product-variant-option
                                         data-variant-id="{{ $variant->id }}"
                                         aria-pressed="{{ $loop->first ? 'true' : 'false' }}"
                                     >
-                                        <span class="min-w-0 truncate text-left font-medium">{{ $variant->displayName() }}</span>
+                                        <span class="min-w-0 overflow-hidden break-words text-left font-medium leading-5">{{ $variant->displayName() }}</span>
                                         <span class="shrink-0 text-right font-semibold text-red-700">@money($variant->effectivePriceCents())</span>
                                     </button>
                                 @endforeach
@@ -251,21 +251,21 @@
                                 <p class="text-sm font-medium text-slate-700">规格明细</p>
                                 <p class="text-xs text-slate-500">当前 SKU</p>
                             </div>
-                            <div class="mt-2 overflow-hidden rounded-sm border border-slate-200" data-product-spec-list>
+                            <div class="mt-2 min-w-0 overflow-hidden rounded-sm border border-slate-200" data-product-spec-list>
                                 @forelse($firstVariant?->specItems() ?? [] as $spec)
-                                    <div class="grid grid-cols-[minmax(88px,0.34fr)_1fr] border-b border-slate-100 last:border-b-0">
-                                        <div class="bg-slate-50 px-3 py-2 text-sm font-medium text-slate-600">{{ $spec['name'] }}</div>
-                                        <div class="px-3 py-2 text-sm font-medium text-slate-900">{{ $spec['value'] }}</div>
+                                    <div class="grid min-w-0 grid-cols-[minmax(88px,0.34fr)_minmax(0,1fr)] border-b border-slate-100 last:border-b-0">
+                                        <div class="min-w-0 break-words bg-slate-50 px-3 py-2 text-sm font-medium text-slate-600">{{ $spec['name'] }}</div>
+                                        <div class="min-w-0 break-words px-3 py-2 text-sm font-medium text-slate-900">{{ $spec['value'] }}</div>
                                     </div>
                                 @empty
-                                    <div class="grid grid-cols-[minmax(88px,0.34fr)_1fr] border-b border-slate-100">
+                                    <div class="grid min-w-0 grid-cols-[minmax(88px,0.34fr)_minmax(0,1fr)] border-b border-slate-100">
                                         <div class="bg-slate-50 px-3 py-2 text-sm font-medium text-slate-600">规格</div>
-                                        <div class="px-3 py-2 text-sm font-medium text-slate-900">默认规格</div>
+                                        <div class="min-w-0 break-words px-3 py-2 text-sm font-medium text-slate-900">默认规格</div>
                                     </div>
                                 @endforelse
-                                <div class="grid grid-cols-[minmax(88px,0.34fr)_1fr]">
+                                <div class="grid min-w-0 grid-cols-[minmax(88px,0.34fr)_minmax(0,1fr)]">
                                     <div class="bg-slate-50 px-3 py-2 text-sm font-medium text-slate-600">库存</div>
-                                    <div class="px-3 py-2 text-sm font-medium text-slate-900" data-product-stock>{{ $product->isPresale() ? '预售不限库存' : ($firstVariant?->stock ?? 0) }}</div>
+                                    <div class="min-w-0 break-words px-3 py-2 text-sm font-medium text-slate-900" data-product-stock>{{ $product->isPresale() ? '预售不限库存' : ($firstVariant?->stock ?? 0) }}</div>
                                 </div>
                             </div>
                         </div>
@@ -568,7 +568,7 @@
             }
 
             function specRow(name, value, valueAttributes = '') {
-                return `<div class="grid grid-cols-[minmax(88px,0.34fr)_1fr] border-b border-slate-100 last:border-b-0"><div class="bg-slate-50 px-3 py-2 text-sm font-medium text-slate-600">${escapeHtml(name)}</div><div class="px-3 py-2 text-sm font-medium text-slate-900"${valueAttributes}>${escapeHtml(value)}</div></div>`;
+                return `<div class="grid min-w-0 grid-cols-[minmax(88px,0.34fr)_minmax(0,1fr)] border-b border-slate-100 last:border-b-0"><div class="min-w-0 break-words bg-slate-50 px-3 py-2 text-sm font-medium text-slate-600">${escapeHtml(name)}</div><div class="min-w-0 break-words px-3 py-2 text-sm font-medium text-slate-900"${valueAttributes}>${escapeHtml(value)}</div></div>`;
             }
         })();
     </script>

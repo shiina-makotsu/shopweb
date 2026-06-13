@@ -42,6 +42,10 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
         'ai_quota_k',
         'ai_endpoint',
         'ai_api_key',
+        'ai_image_endpoint',
+        'ai_image_api_key',
+        'ai_chat_endpoint',
+        'ai_chat_api_key',
     ];
 
     protected $hidden = [

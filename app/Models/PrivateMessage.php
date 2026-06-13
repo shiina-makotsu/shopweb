@@ -10,7 +10,12 @@ class PrivateMessage extends Model
     protected $fillable = [
         'sender_id',
         'recipient_id',
+        'quoted_message_id',
         'body',
+        'attachment_path',
+        'attachment_original_name',
+        'attachment_mime_type',
+        'attachment_size',
         'read_at',
     ];
 
@@ -29,5 +34,15 @@ class PrivateMessage extends Model
     public function recipient(): BelongsTo
     {
         return $this->belongsTo(User::class, 'recipient_id');
+    }
+
+    public function hasAttachment(): bool
+    {
+        return filled($this->attachment_path);
+    }
+
+    public function isImage(): bool
+    {
+        return str_starts_with((string) $this->attachment_mime_type, 'image/');
     }
 }

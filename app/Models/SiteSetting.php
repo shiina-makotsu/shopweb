@@ -76,6 +76,10 @@ class SiteSetting extends Model
         'support_ai_idle_minutes',
         'ai_default_endpoint',
         'ai_default_api_key',
+        'ai_default_image_endpoint',
+        'ai_default_image_api_key',
+        'ai_default_chat_endpoint',
+        'ai_default_chat_api_key',
         'ai_default_user_quota_k',
     ];
 

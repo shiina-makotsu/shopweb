@@ -99,7 +99,7 @@
                     <a id="site-cart-target" class="inline-flex items-center gap-1 font-medium text-blue-800 hover:text-blue-900" href="{{ $path('cart.show') }}" aria-label="购物车 {{ $cartCount }} 件">
                         <svg class="h-4 w-4" viewBox="0 0 20 20" aria-hidden="true" fill="currentColor"><path d="M2.5 3a.75.75 0 0 0 0 1.5h1.06l1.45 7.24A2.25 2.25 0 0 0 7.22 13.5h6.86a2.25 2.25 0 0 0 2.16-1.62l1.08-3.79A1.75 1.75 0 0 0 15.64 5.85H5.3l-.35-1.76A1.75 1.75 0 0 0 3.24 3H2.5Zm4.25 13.5a1.25 1.25 0 1 0 0-2.5 1.25 1.25 0 0 0 0 2.5Zm7.5 0a1.25 1.25 0 1 0 0-2.5 1.25 1.25 0 0 0 0 2.5Z"/></svg>
                         <span data-cart-count>{{ $cartCount }}</span>
-                        <span class="hidden sm:inline">件 / @money($cartSubtotal)</span>
+                        <span class="hidden sm:inline">件 / <span data-cart-subtotal>@money($cartSubtotal)</span></span>
                     </a>
                 </nav>
             </div>
@@ -214,8 +214,8 @@
                     <section class="rounded-sm border border-slate-300 bg-white">
                         <h2 class="border-b border-slate-200 bg-slate-100 px-3 py-2 text-sm font-semibold">购物车</h2>
                         <div class="space-y-2 px-3 py-3 text-sm">
-                            <p>{{ $cartCount }} 件商品</p>
-                            <p class="font-semibold">小计 @money($cartSubtotal)</p>
+                            <p><span data-cart-count>{{ $cartCount }}</span> 件商品</p>
+                            <p class="font-semibold">小计 <span data-cart-subtotal>@money($cartSubtotal)</span></p>
                             <a class="inline-flex w-full justify-center rounded-sm border border-emerald-700 bg-emerald-700 px-3 py-2 font-medium text-white hover:bg-emerald-800" href="{{ $path('cart.show') }}">结算购物车</a>
                         </div>
                     </section>
@@ -226,6 +226,12 @@
                             @auth
                                 <a class="block px-3 py-2 hover:bg-blue-50 hover:text-blue-800" href="{{ $path('user.center') }}">个人信息</a>
                                 <a class="block px-3 py-2 hover:bg-blue-50 hover:text-blue-800" href="{{ $path('orders.index') }}">我的订单</a>
+                                <a class="relative block px-3 py-2 pr-12 hover:bg-blue-50 hover:text-blue-800" href="{{ $path('user.section', 'chat') }}">
+                                    聊天
+                                    @if(($privateUnreadMessageCount ?? 0) > 0)
+                                        <span class="absolute right-3 top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-semibold leading-none text-white">{{ (int) $privateUnreadMessageCount > 99 ? '99+' : (int) $privateUnreadMessageCount }}</span>
+                                    @endif
+                                </a>
                                 <a class="block px-3 py-2 hover:bg-blue-50 hover:text-blue-800" href="{{ $path('support.index') }}">客服会话</a>
                                 <a class="block px-3 py-2 hover:bg-blue-50 hover:text-blue-800" href="{{ $path('support.demands') }}">客服工单</a>
                             @else

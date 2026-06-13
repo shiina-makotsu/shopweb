@@ -240,6 +240,15 @@ class AdminPanelProvider extends PanelProvider
                     </script>
                     HTML),
             )
+            ->renderHook(
+                PanelsRenderHook::GLOBAL_SEARCH_AFTER,
+                fn (): HtmlString => new HtmlString(
+                    '<a class="shop-admin-front-link" href="'.e(\App\Support\Url::route('home')).'" title="返回前台" aria-label="返回前台">'.
+                    \Filament\Support\generate_icon_html(Heroicon::OutlinedArrowTopRightOnSquare)?->toHtml().
+                    '<span>返回前台</span>'.
+                    '</a>'
+                ),
+            )
             ->middleware([
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,

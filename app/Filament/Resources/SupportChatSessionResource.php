@@ -5,11 +5,9 @@ namespace App\Filament\Resources;
 use App\Filament\Concerns\ChecksAdminAccess;
 use App\Filament\Resources\SupportChatSessionResource\Pages\EditSupportChatSession;
 use App\Filament\Resources\SupportChatSessionResource\Pages\ListSupportChatSessions;
-use App\Models\SupportChatMessage;
 use App\Models\SupportChatSession;
 use App\Services\SupportChatService;
 use App\Support\RegexSearch;
-use App\Support\Url;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\Placeholder;
@@ -22,7 +20,6 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\HtmlString;
 
 class SupportChatSessionResource extends Resource
 {
@@ -49,7 +46,21 @@ class SupportChatSessionResource extends Resource
 
     public static function getEloquentQuery(): Builder
     {
-        return parent::getEloquentQuery()->whereNotNull('user_id');
+        return parent::getEloquentQuery()
+            ->whereNotNull('user_id')
+            ->whereHas('messages');
+    }
+
+    public static function getNavigationBadge(): ?string
+    {
+        $count = static::pendingReceptionQuery()->count();
+
+        return $count > 0 ? (string) $count : null;
+    }
+
+    public static function getNavigationBadgeColor(): string|array|null
+    {
+        return 'danger';
     }
 
     public static function form(Schema $schema): Schema
@@ -61,12 +72,6 @@ class SupportChatSessionResource extends Resource
                 Placeholder::make('order_number')->label('关联订单')->content(fn (?SupportChatSession $record): string => $record?->order?->order_number ?? '-'),
                 Placeholder::make('status_label')->label('状态')->content(fn (?SupportChatSession $record): string => static::statusLabel($record?->status)),
             ])->columns(2)->columnSpanFull(),
-            Section::make('聊天记录')->schema([
-                Placeholder::make('messages')
-                    ->hiddenLabel()
-                    ->content(fn (?SupportChatSession $record): HtmlString => new HtmlString(static::messagesHtml($record)))
-                    ->columnSpanFull(),
-            ])->columnSpanFull(),
         ]);
     }
 
@@ -130,44 +135,12 @@ class SupportChatSessionResource extends Resource
         };
     }
 
-    private static function messagesHtml(?SupportChatSession $record): string
+    protected static function pendingReceptionQuery(): Builder
     {
-        if (! $record) {
-            return '<p style="color:#64748b;">暂无聊天记录。</p>';
-        }
-
-        $record->loadMissing(['messages.sender']);
-
-        if ($record->messages->isEmpty()) {
-            return '<p style="color:#64748b;">暂无聊天记录。</p>';
-        }
-
-        $html = '<div style="display:flex; flex-direction:column; gap:12px;">';
-        $lastAdminId = null;
-
-        foreach ($record->messages as $message) {
-            if ($message->sender_type === SupportChatMessage::SENDER_ADMIN && $lastAdminId !== $message->sender_user_id) {
-                $name = e($message->sender?->displayName() ?? '后台用户');
-                $html .= '<div style="display:flex; align-items:center; gap:10px; color:#64748b; font-size:12px;"><span style="height:1px; background:#cbd5e1; flex:1;"></span><span>客服 '.$name.' 为您服务</span><span style="height:1px; background:#cbd5e1; flex:1;"></span></div>';
-                $lastAdminId = $message->sender_user_id;
-            }
-
-            $isAdmin = $message->sender_type === SupportChatMessage::SENDER_ADMIN;
-            $name = $isAdmin ? ($message->sender?->displayName() ?? '客服') : ($record->user?->displayName() ?? $record->guest_id ?? '客户');
-            $body = nl2br(e((string) $message->body));
-            $attachment = '';
-
-            if ($message->attachment_path) {
-                $url = Url::route('support.messages.attachment', $message);
-                $label = e($message->attachment_original_name ?: '附件');
-                $attachment = '<p style="margin-top:8px;"><a href="'.e($url).'" target="_blank" rel="noopener">查看附件：'.$label.'</a></p>';
-            }
-
-            $html .= '<div style="max-width:76%; align-self:'.($isAdmin ? 'flex-start' : 'flex-end').'; border:1px solid '.($isAdmin ? '#cbd5e1' : '#bfdbfe').'; background:'.($isAdmin ? '#f8fafc' : '#eff6ff').'; padding:8px 10px; border-radius:2px;">';
-            $html .= '<p style="margin:0 0 4px; color:#64748b; font-size:12px;">'.e($name).' / '.$message->created_at->format('Y-m-d H:i').'</p>';
-            $html .= '<div>'.$body.'</div>'.$attachment.'</div>';
-        }
-
-        return $html.'</div>';
+        return SupportChatSession::query()
+            ->whereNotNull('user_id')
+            ->where('status', SupportChatSession::STATUS_OPEN)
+            ->whereNull('assigned_admin_id')
+            ->whereHas('messages', fn (Builder $query): Builder => $query->whereIn('sender_type', ['customer', 'guest']));
     }
 }

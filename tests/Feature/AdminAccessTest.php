@@ -69,6 +69,8 @@ it('renders admin sidebar navigation for admins', function (): void {
         ->assertSee('shop-sidebar-collapse-btn', false)
         ->assertSee('shop-admin-user-menu-trigger', false)
         ->assertSee('shop-admin-user-menu-panel', false)
+        ->assertSee('shop-admin-front-link', false)
+        ->assertSee('返回前台')
         ->assertSee('主页')
         ->assertSee('商品管理')
         ->assertSee('订单管理')

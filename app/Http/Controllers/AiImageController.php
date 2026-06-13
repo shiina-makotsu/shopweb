@@ -31,13 +31,15 @@ class AiImageController extends Controller
     public function models(Request $request): JsonResponse
     {
         $data = $request->validate([
+            'feature' => ['nullable', 'in:image,chat'],
             'config_mode' => ['nullable', 'in:default,custom'],
             'config_name' => ['nullable', 'string', 'max:100'],
             'endpoint' => ['nullable', 'url:http,https', 'max:2048'],
             'api_key' => ['nullable', 'string', 'max:4096'],
         ]);
+        $feature = ($data['feature'] ?? 'image') === 'chat' ? 'chat' : 'image';
 
-        $config = $this->usage->resolveConfig($request->user(), $data);
+        $config = $this->usage->resolveConfig($request->user(), $data, $feature);
         $baseUrl = $this->apiBaseUrl((string) $config['endpoint']);
         try {
             $response = Http::timeout(30)
@@ -54,10 +56,11 @@ class AiImageController extends Controller
             return $this->providerErrorResponse((array) $response->json(), $response->status(), '模型列表获取失败。');
         }
 
-        $models = $this->extractModels((array) $response->json());
+        $models = $this->extractModels((array) $response->json(), $feature);
 
         return response()->json([
             'models' => $models,
+            'feature' => $feature,
             'base_url' => $baseUrl,
             'config_name' => $config['config_name'],
             'provider_source' => $config['source'],
@@ -67,7 +70,7 @@ class AiImageController extends Controller
     public function generate(Request $request): JsonResponse
     {
         $data = $this->validatedGenerationData($request);
-        $config = $this->usage->resolveConfig($request->user(), $data);
+        $config = $this->usage->resolveConfig($request->user(), $data, 'image');
 
         if (($config['tracked'] ?? false) && $request->user()) {
             $this->usage->assertWithinQuota($request->user());
@@ -147,7 +150,7 @@ class AiImageController extends Controller
         $data = $this->validatedGenerationData($request);
         $data['count'] = 1;
         $data['stream'] = true;
-        $config = $this->usage->resolveConfig($request->user(), $data);
+        $config = $this->usage->resolveConfig($request->user(), $data, 'image');
 
         if (($config['tracked'] ?? false) && $request->user()) {
             $this->usage->assertWithinQuota($request->user());
@@ -206,6 +209,67 @@ class AiImageController extends Controller
         ]);
     }
 
+    public function chat(Request $request): JsonResponse
+    {
+        $data = $this->validatedChatData($request);
+        $config = $this->usage->resolveConfig($request->user(), $data, 'chat');
+
+        if (($config['tracked'] ?? false) && $request->user()) {
+            $this->usage->assertWithinQuota($request->user());
+        }
+
+        $baseUrl = $this->apiBaseUrl((string) $config['endpoint']);
+        $payload = $this->chatPayload($data, $request->file('chat_files', []));
+
+        $startedAt = microtime(true);
+        try {
+            $response = Http::timeout((int) ($data['timeout_seconds'] ?? 600))
+                ->acceptJson()
+                ->withHeaders($this->apiHeaders($config['api_key'] ?? null))
+                ->post($baseUrl.'/chat/completions', $payload);
+        } catch (ConnectionException $exception) {
+            return response()->json([
+                'message' => 'AI 聊天请求失败：'.$exception->getMessage(),
+            ], 502);
+        }
+
+        $requestMs = (int) round((microtime(true) - $startedAt) * 1000);
+        $providerPayload = (array) $response->json();
+
+        if ($response->failed()) {
+            return $this->providerErrorResponse($providerPayload, $response->status(), 'AI 聊天请求失败。');
+        }
+
+        $message = $this->extractChatText($providerPayload);
+
+        if ($message === '') {
+            return response()->json([
+                'message' => '服务商没有返回可识别的聊天内容。',
+            ], 502);
+        }
+
+        $this->usage->record($request->user(), [
+            ...$data,
+            'count' => 1,
+        ], $config, $providerPayload, $requestMs, metadata: [
+            'feature' => 'chat',
+            'reasoning_mode' => $data['reasoning_mode'],
+            'attachment_count' => count($request->file('chat_files', [])),
+        ]);
+
+        return response()->json([
+            'message' => $message,
+            'meta' => [
+                'source' => parse_url($baseUrl, PHP_URL_HOST) ?: $baseUrl,
+                'config_name' => (string) ($config['config_name'] ?? ''),
+                'provider_source' => (string) ($config['source'] ?? ''),
+                'model' => trim((string) $data['model']),
+                'reasoning_mode' => $data['reasoning_mode'],
+                'request_ms' => $requestMs,
+            ],
+        ]);
+    }
+
     private function apiBaseUrl(string $endpoint): string
     {
         $url = $this->assertSafeEndpoint($endpoint);
@@ -256,6 +320,25 @@ class AiImageController extends Controller
         }
 
         return $data;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function validatedChatData(Request $request): array
+    {
+        return $request->validate([
+            'config_mode' => ['nullable', 'in:default,custom'],
+            'config_name' => ['nullable', 'string', 'max:100'],
+            'endpoint' => ['nullable', 'url:http,https', 'max:2048'],
+            'api_key' => ['nullable', 'string', 'max:4096'],
+            'model' => ['required', 'string', 'max:255'],
+            'prompt' => ['required', 'string', 'max:5000'],
+            'reasoning_mode' => ['nullable', 'in:low,medium,high,ultra'],
+            'timeout_seconds' => ['nullable', 'integer', 'min:30', 'max:1200'],
+            'chat_files' => ['nullable', 'array', 'max:6'],
+            'chat_files.*' => ['file', 'max:20480'],
+        ]);
     }
 
     private function assertSafeEndpoint(string $endpoint): string
@@ -387,7 +470,7 @@ class AiImageController extends Controller
      * @param  array<string, mixed>  $payload
      * @return array<int, array{id: string, name: string}>
      */
-    private function extractModels(array $payload): array
+    private function extractModels(array $payload, string $feature = 'image'): array
     {
         $items = $payload['data'] ?? $payload['models'] ?? [];
 
@@ -410,6 +493,14 @@ class AiImageController extends Controller
             })
             ->filter()
             ->values();
+
+        if ($feature === 'chat') {
+            $chatModels = $models
+                ->reject(fn (array $model): bool => $this->looksLikeImageModel($model['id'].' '.$model['name']))
+                ->values();
+
+            return ($chatModels->isNotEmpty() ? $chatModels : $models)->all();
+        }
 
         $imageModels = $models
             ->filter(fn (array $model): bool => $this->looksLikeImageModel($model['id'].' '.$model['name']))
@@ -530,6 +621,79 @@ class AiImageController extends Controller
     }
 
     /**
+     * @param  array<string, mixed>  $data
+     * @param  array<int, UploadedFile>|UploadedFile|null  $files
+     * @return array<string, mixed>
+     */
+    private function chatPayload(array $data, array|UploadedFile|null $files): array
+    {
+        if ($files instanceof UploadedFile) {
+            $files = [$files];
+        }
+
+        $content = [[
+            'type' => 'text',
+            'text' => trim((string) $data['prompt']),
+        ]];
+
+        foreach (array_values($files ?? []) as $index => $file) {
+            if (! $file instanceof UploadedFile) {
+                continue;
+            }
+
+            if (str_starts_with((string) $file->getMimeType(), 'image/')) {
+                $content[] = [
+                    'type' => 'image_url',
+                    'image_url' => [
+                        'url' => $this->dataUrl(
+                            base64_encode(file_get_contents($file->getRealPath()) ?: ''),
+                            $file->getMimeType() ?: 'image/png',
+                        ),
+                    ],
+                ];
+
+                continue;
+            }
+
+            $content[] = [
+                'type' => 'text',
+                'text' => '附件 '.($index + 1).'：'.$file->getClientOriginalName().'（'.$file->getMimeType().'，'.$file->getSize().' bytes）',
+            ];
+        }
+
+        return [
+            'model' => trim((string) $data['model']),
+            'messages' => [
+                [
+                    'role' => 'user',
+                    'content' => $content,
+                ],
+            ],
+            'metadata' => [
+                'reasoning_mode' => (string) ($data['reasoning_mode'] ?? 'low'),
+            ],
+        ];
+    }
+
+    private function extractChatText(array $payload): string
+    {
+        $message = data_get($payload, 'choices.0.message.content')
+            ?? data_get($payload, 'output.0.content.0.text')
+            ?? data_get($payload, 'output_text')
+            ?? data_get($payload, 'message')
+            ?? data_get($payload, 'text');
+
+        if (is_array($message)) {
+            $message = collect($message)
+                ->map(fn (mixed $item): string => is_array($item) ? (string) ($item['text'] ?? '') : (string) $item)
+                ->filter()
+                ->implode("\n");
+        }
+
+        return trim(is_string($message) ? $message : '');
+    }
+
+    /**
      * @param  array<int, UploadedFile>|UploadedFile|null  $files
      * @return array<int, array{name: string, content: string}>
      */
@@ -646,6 +810,7 @@ class AiImageController extends Controller
         }
 
         $buffer = '';
+        $rawResponse = '';
         $images = [];
 
         try {
@@ -656,7 +821,8 @@ class AiImageController extends Controller
                 CURLOPT_POSTFIELDS => $body,
                 CURLOPT_RETURNTRANSFER => false,
                 CURLOPT_TIMEOUT => $timeout,
-                CURLOPT_WRITEFUNCTION => function ($curl, string $chunk) use (&$buffer, &$images, $emit): int {
+                CURLOPT_WRITEFUNCTION => function ($curl, string $chunk) use (&$buffer, &$rawResponse, &$images, $emit): int {
+                    $rawResponse .= $chunk;
                     $buffer .= $chunk;
 
                     while (preg_match("/\R\R/", $buffer, $match, PREG_OFFSET_CAPTURE)) {
@@ -686,7 +852,12 @@ class AiImageController extends Controller
             }
 
             if ($status >= 400) {
-                throw new RuntimeException('图片流式生成失败，服务商返回 HTTP '.$status.'。');
+                $payload = json_decode($rawResponse, true);
+                throw new RuntimeException($this->providerErrorMessage(
+                    is_array($payload) ? $payload : null,
+                    $status,
+                    '图片流式生成失败。',
+                ));
             }
         } finally {
             curl_close($curl);
@@ -763,12 +934,68 @@ class AiImageController extends Controller
      */
     private function providerErrorResponse(?array $payload, int $status, string $fallback): JsonResponse
     {
-        $message = data_get($payload, 'error.message')
-            ?? data_get($payload, 'message')
-            ?? $fallback;
+        $message = $this->providerErrorMessage($payload, $status, $fallback);
 
         return response()->json([
-            'message' => is_string($message) ? $message : $fallback,
+            'message' => $message,
         ], $status >= 400 && $status < 600 ? $status : 502);
+    }
+
+    private function providerErrorMessage(?array $payload, int $status, string $fallback): string
+    {
+        $candidates = [
+            data_get($payload, 'error.message'),
+            data_get($payload, 'error.detail'),
+            data_get($payload, 'error.type'),
+            data_get($payload, 'message'),
+            data_get($payload, 'detail'),
+            data_get($payload, 'msg'),
+        ];
+
+        $fieldErrors = collect(data_get($payload, 'errors', []))
+            ->map(function (mixed $value, mixed $key): string {
+                if (is_array($value)) {
+                    $value = implode('；', array_map('strval', $value));
+                }
+
+                return is_string($key) ? $key.'：'.$value : (string) $value;
+            })
+            ->filter()
+            ->implode('；');
+
+        if ($fieldErrors !== '') {
+            $candidates[] = $fieldErrors;
+        }
+
+        $detail = collect($candidates)
+            ->filter(fn (mixed $value): bool => is_string($value) && trim($value) !== '')
+            ->map(fn (string $value): string => trim($value))
+            ->unique()
+            ->implode('；');
+
+        $friendlyStatus = match ($status) {
+            400 => '请求参数有误，请检查模型、尺寸、格式、参考图或透明背景等参数。',
+            401 => '认证失败，请检查 API Key 是否正确或是否有权限。',
+            402 => '服务商账户余额不足或需要开通计费。',
+            403 => '服务商拒绝请求，可能是该分组没有启用图片/聊天功能、模型无权限或 Key 权限不足。',
+            404 => '接口或模型不存在，请检查 API URL 和模型名。',
+            408 => '服务商请求超时，可以提高超时时间或降低生成数量。',
+            409 => '服务商返回任务冲突，请稍后重试。',
+            413 => '上传内容过大，请压缩参考图或减少附件。',
+            415 => '服务商不支持当前文件或返回格式。',
+            422 => '服务商参数校验失败，请检查尺寸、数量、质量、格式或参考图参数。',
+            429 => '请求过于频繁或额度耗尽，请稍后重试。',
+            500 => '服务商内部错误，请稍后重试。',
+            502, 503, 504 => '服务商暂不可用、网关超时或该分组未启用对应功能。',
+            default => '',
+        };
+
+        if ($detail !== '') {
+            return $friendlyStatus !== ''
+                ? $friendlyStatus.' 服务商返回：'.$detail
+                : $detail;
+        }
+
+        return $friendlyStatus !== '' ? $friendlyStatus : $fallback.' HTTP '.$status;
     }
 }

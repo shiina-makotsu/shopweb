@@ -13,6 +13,7 @@ use App\Support\Money;
 use App\Support\OrderStatusPresenter;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Collection;
@@ -90,7 +91,7 @@ class SupportTicketController extends Controller
         $order = $this->selectedOrder($request, $data['order_id'] ?? null);
         $body = $this->messageBody($data['message'] ?? null, $order, (bool) ($data['include_order'] ?? false));
 
-        abort_if(blank($body) && ! $request->hasFile('attachment'), 422);
+        abort_if($body === null && ! $request->hasFile('attachment'), 422);
 
         $session = $this->sessionForMessage($request, $data['support_chat_session_id'] ?? null, $order);
         $wasEnded = $session->endIfIdle() || $session->isEnded();
@@ -135,6 +136,29 @@ class SupportTicketController extends Controller
         return redirect()
             ->route('support.sessions.show', $session)
             ->with('status', '消息已发送。');
+    }
+
+    public function messages(Request $request, SupportChatSession $session): JsonResponse
+    {
+        $this->authorizeSession($request, $session);
+        abort_if($session->isClosed(), 404);
+
+        $session->endIfIdle();
+        app(SupportChatService::class)->comfortIfIdle($session);
+        $this->markAdminMessagesRead($request, $session);
+        $session->refresh()->load(['messages.sender', 'assignedAdmin', 'order', 'user']);
+
+        return response()->json([
+            'html' => view('support.partials.messages', [
+                'session' => $session,
+                'mineMode' => 'customer',
+                'emptyText' => '暂无消息。点击底部加号可以附带订单、图片或文件。',
+            ])->render(),
+            'last_message_id' => $session->messages->max('id') ?? 0,
+            'status' => $session->status,
+            'status_label' => $this->statusLabel($session->status),
+            'assigned_admin' => $session->assignedAdmin?->displayName() ?? '尚未接入',
+        ]);
     }
 
     public function destroySession(Request $request, SupportChatSession $session, SupportChatService $chat): RedirectResponse
@@ -406,6 +430,16 @@ TEXT);
 链接：{$url}
 {$summary}
 TEXT);
+    }
+
+    private function statusLabel(?string $status): string
+    {
+        return match ($status) {
+            SupportChatSession::STATUS_ACTIVE => '接待中',
+            SupportChatSession::STATUS_ENDED => '已结束',
+            SupportChatSession::STATUS_CLOSED => '用户已关闭',
+            default => '等待接入',
+        };
     }
 
     private function markAdminMessagesRead(Request $request, SupportChatSession $session): void

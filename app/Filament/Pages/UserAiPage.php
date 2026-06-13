@@ -43,8 +43,10 @@ class UserAiPage extends Page implements HasSchemas
         $settings = $usage->settings();
 
         $this->defaultsForm->fill($settings->only([
-            'ai_default_endpoint',
-            'ai_default_api_key',
+            'ai_default_image_endpoint',
+            'ai_default_image_api_key',
+            'ai_default_chat_endpoint',
+            'ai_default_chat_api_key',
             'ai_default_user_quota_k',
         ]));
 
@@ -68,14 +70,23 @@ class UserAiPage extends Page implements HasSchemas
         return $schema
             ->statePath('defaults')
             ->components([
-                Section::make('默认总 Key')
+                Section::make('默认总配置')
                     ->schema([
-                        TextInput::make('ai_default_endpoint')
-                            ->label('默认 API URL')
+                        TextInput::make('ai_default_image_endpoint')
+                            ->label('生图 API URL')
                             ->url()
                             ->maxLength(2048),
-                        TextInput::make('ai_default_api_key')
-                            ->label('默认 API Key')
+                        TextInput::make('ai_default_image_api_key')
+                            ->label('生图 API Key')
+                            ->password()
+                            ->revealable()
+                            ->maxLength(4096),
+                        TextInput::make('ai_default_chat_endpoint')
+                            ->label('聊天 API URL')
+                            ->url()
+                            ->maxLength(2048),
+                        TextInput::make('ai_default_chat_api_key')
+                            ->label('聊天 API Key')
                             ->password()
                             ->revealable()
                             ->maxLength(4096),
@@ -101,12 +112,21 @@ class UserAiPage extends Page implements HasSchemas
                             ->numeric()
                             ->minValue(0)
                             ->helperText('留空时使用默认单用户上限。'),
-                        TextInput::make('ai_endpoint')
-                            ->label('用户默认 API URL')
+                        TextInput::make('ai_image_endpoint')
+                            ->label('用户生图 API URL')
                             ->url()
                             ->maxLength(2048),
-                        TextInput::make('ai_api_key')
-                            ->label('用户默认 API Key')
+                        TextInput::make('ai_image_api_key')
+                            ->label('用户生图 API Key')
+                            ->password()
+                            ->revealable()
+                            ->maxLength(4096),
+                        TextInput::make('ai_chat_endpoint')
+                            ->label('用户聊天 API URL')
+                            ->url()
+                            ->maxLength(2048),
+                        TextInput::make('ai_chat_api_key')
+                            ->label('用户聊天 API Key')
                             ->password()
                             ->revealable()
                             ->maxLength(4096),
@@ -130,8 +150,10 @@ class UserAiPage extends Page implements HasSchemas
 
         $this->userForm->fill([
             'ai_quota_k' => $user?->ai_quota_k,
-            'ai_endpoint' => $user?->ai_endpoint,
-            'ai_api_key' => $user?->ai_api_key,
+            'ai_image_endpoint' => $user?->ai_image_endpoint ?: $user?->ai_endpoint,
+            'ai_image_api_key' => $user?->ai_image_api_key ?: $user?->ai_api_key,
+            'ai_chat_endpoint' => $user?->ai_chat_endpoint ?: $user?->ai_endpoint,
+            'ai_chat_api_key' => $user?->ai_chat_api_key ?: $user?->ai_api_key,
         ]);
     }
 
@@ -160,8 +182,10 @@ class UserAiPage extends Page implements HasSchemas
 
         $user->update([
             'ai_quota_k' => blank($state['ai_quota_k'] ?? null) ? null : (int) $state['ai_quota_k'],
-            'ai_endpoint' => blank($state['ai_endpoint'] ?? null) ? null : (string) $state['ai_endpoint'],
-            'ai_api_key' => blank($state['ai_api_key'] ?? null) ? null : (string) $state['ai_api_key'],
+            'ai_image_endpoint' => blank($state['ai_image_endpoint'] ?? null) ? null : (string) $state['ai_image_endpoint'],
+            'ai_image_api_key' => blank($state['ai_image_api_key'] ?? null) ? null : (string) $state['ai_image_api_key'],
+            'ai_chat_endpoint' => blank($state['ai_chat_endpoint'] ?? null) ? null : (string) $state['ai_chat_endpoint'],
+            'ai_chat_api_key' => blank($state['ai_chat_api_key'] ?? null) ? null : (string) $state['ai_chat_api_key'],
         ]);
 
         Notification::make()->title('用户 AI 配置已保存')->success()->send();

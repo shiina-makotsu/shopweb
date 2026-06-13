@@ -21,7 +21,26 @@ class GuestSupportChatSessionResource extends SupportChatSessionResource
     {
         return SupportChatSession::query()
             ->whereNull('user_id')
-            ->whereNotNull('guest_id');
+            ->whereNotNull('guest_id')
+            ->whereHas('messages');
+    }
+
+    public static function getNavigationBadge(): ?string
+    {
+        $count = SupportChatSession::query()
+            ->whereNull('user_id')
+            ->whereNotNull('guest_id')
+            ->where('status', SupportChatSession::STATUS_OPEN)
+            ->whereNull('assigned_admin_id')
+            ->whereHas('messages')
+            ->count();
+
+        return $count > 0 ? (string) $count : null;
+    }
+
+    public static function getNavigationBadgeColor(): string|array|null
+    {
+        return 'danger';
     }
 
     public static function getPages(): array

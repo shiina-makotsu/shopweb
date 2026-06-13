@@ -51,10 +51,13 @@ Route::get('/tags/{tag:slug}', [ProductController::class, 'tag'])->name('tags.sh
 Route::get('/products/{product:slug}', [ProductController::class, 'show'])->name('products.show');
 Route::get('/search', [SearchController::class, 'index'])->name('search.index');
 Route::get('/friend-links', [FriendLinkController::class, 'index'])->name('friend-links.index');
-Route::get('/ai-image', [AiImageController::class, 'index'])->name('ai-image.index');
-Route::post('/ai-image/models', [AiImageController::class, 'models'])->name('ai-image.models');
-Route::post('/ai-image/generate', [AiImageController::class, 'generate'])->name('ai-image.generate');
-Route::post('/ai-image/stream', [AiImageController::class, 'stream'])->name('ai-image.stream');
+Route::middleware('auth')->group(function (): void {
+    Route::get('/ai-image', [AiImageController::class, 'index'])->name('ai-image.index');
+    Route::post('/ai-image/models', [AiImageController::class, 'models'])->name('ai-image.models');
+    Route::post('/ai-image/generate', [AiImageController::class, 'generate'])->name('ai-image.generate');
+    Route::post('/ai-image/stream', [AiImageController::class, 'stream'])->name('ai-image.stream');
+    Route::post('/ai-image/chat', [AiImageController::class, 'chat'])->name('ai-image.chat');
+});
 Route::get('/users/{user:public_id}', [UserProfileController::class, 'show'])->name('users.show');
 Route::get('/announcements', [AnnouncementController::class, 'index'])->name('announcements.index');
 Route::get('/announcements/{announcement:slug}', [AnnouncementController::class, 'show'])->name('announcements.show');
@@ -68,6 +71,7 @@ Route::get('/p/{page:slug}', [PageController::class, 'show'])->name('pages.show'
 Route::get('/shipments', [ShipmentController::class, 'show'])->middleware('auth')->name('shipments.show');
 Route::get('/support', [SupportTicketController::class, 'index'])->name('support.index');
 Route::post('/support/sessions', [SupportTicketController::class, 'storeSession'])->name('support.sessions.store');
+Route::get('/support/sessions/{session}/messages', [SupportTicketController::class, 'messages'])->name('support.sessions.messages');
 Route::get('/support/sessions/{session}', [SupportTicketController::class, 'showSession'])->name('support.sessions.show');
 Route::get('/support/demands', [SupportTicketController::class, 'demand'])->name('support.demands');
 Route::post('/support', [SupportTicketController::class, 'store'])->name('support.store');
@@ -110,6 +114,7 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/products/{product:slug}/favorite', [ProductPreferenceController::class, 'toggleFavorite'])->name('products.favorite.toggle');
     Route::post('/products/{product:slug}/intent-vote', [VoteController::class, 'intent'])->name('votes.intent');
     Route::post('/products/{product:slug}/price-vote', [VoteController::class, 'price'])->name('votes.price');
+    Route::get('/messages/attachments/{message}', [PrivateMessageController::class, 'attachment'])->name('messages.attachment');
     Route::get('/messages/{user:public_id}', [PrivateMessageController::class, 'thread'])->name('messages.thread');
     Route::post('/messages/{user:public_id}', [PrivateMessageController::class, 'store'])->name('messages.store');
     Route::post('/forum/{section:slug}/threads', [ForumController::class, 'storeThread'])->name('forum.threads.store');

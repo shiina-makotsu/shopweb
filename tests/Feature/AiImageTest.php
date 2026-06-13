@@ -7,11 +7,19 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 
 it('renders the storefront ai image page and entry links', function (): void {
+    $user = User::factory()->create([
+        'role' => 'customer',
+    ]);
+
     SiteSetting::query()->create([
         'site_name' => '自定义生图站',
     ]);
 
     $this->get(route('ai-image.index'))
+        ->assertRedirect(route('login', absolute: false));
+
+    $this->actingAs($user)
+        ->get(route('ai-image.index'))
         ->assertOk()
         ->assertSee('AI')
         ->assertSee('自定义生图站')
@@ -21,6 +29,10 @@ it('renders the storefront ai image page and entry links', function (): void {
         ->assertSee('当前配置')
         ->assertSee('配置名称')
         ->assertSee('默认配置')
+        ->assertSee('data-endpoint-field', false)
+        ->assertSee('data-key-field', false)
+        ->assertSee('data-chat-url', false)
+        ->assertSee('shopweb.ai-image.tasks.v1', false)
         ->assertSee('获取模型')
         ->assertSee('是否透明')
         ->assertSee('流式传输')
@@ -56,8 +68,10 @@ it('uses backend default ai config for signed in users and records usage', funct
 
     SiteSetting::query()->create([
         'site_name' => 'ShopWeb',
-        'ai_default_endpoint' => 'https://backend.example.test/v1',
-        'ai_default_api_key' => 'backend-key',
+        'ai_default_image_endpoint' => 'https://backend.example.test/v1',
+        'ai_default_image_api_key' => 'backend-image-key',
+        'ai_default_chat_endpoint' => 'https://chat.example.test/v1',
+        'ai_default_chat_api_key' => 'backend-chat-key',
         'ai_default_user_quota_k' => 20,
     ]);
 
@@ -92,7 +106,7 @@ it('uses backend default ai config for signed in users and records usage', funct
         ->assertJsonPath('meta.provider_source', 'site_default');
 
     Http::assertSent(fn ($request): bool => $request->url() === 'https://backend.example.test/v1/images/generations'
-        && $request->hasHeader('Authorization', 'Bearer backend-key'));
+        && $request->hasHeader('Authorization', 'Bearer backend-image-key'));
 
     $this->assertDatabaseHas('ai_usage_logs', [
         'user_id' => $user->id,
@@ -161,7 +175,11 @@ it('renders ai quota dashboards for storefront users and admins', function (): v
         ->get('/admin/user-ai')
         ->assertOk()
         ->assertSee('用户 AI')
-        ->assertSee('默认总 Key')
+        ->assertSee('默认总配置')
+        ->assertSee('生图 API URL')
+        ->assertSee('聊天 API URL')
+        ->assertSee('用户生图 API URL')
+        ->assertSee('用户聊天 API URL')
         ->assertSee('用户列表')
         ->assertSee('搜索用户')
         ->assertSee('用户类型')
@@ -182,6 +200,8 @@ it('renders ai quota dashboards for storefront users and admins', function (): v
 });
 
 it('fetches image models through the server proxy', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+
     Http::fake([
         'https://api.example.test/v1/models' => Http::response([
             'data' => [
@@ -192,7 +212,8 @@ it('fetches image models through the server proxy', function (): void {
         ]),
     ]);
 
-    $this->postJson(route('ai-image.models'), [
+    $this->actingAs($user)->postJson(route('ai-image.models'), [
+        'feature' => 'image',
         'endpoint' => 'https://api.example.test/v1',
         'api_key' => 'test-key',
     ])
@@ -204,7 +225,91 @@ it('fetches image models through the server proxy', function (): void {
         && $request->hasHeader('Authorization', 'Bearer test-key'));
 });
 
+it('uses separate backend keys for image and chat ai requests', function (): void {
+    $user = User::factory()->create([
+        'role' => 'customer',
+    ]);
+
+    SiteSetting::query()->create([
+        'site_name' => 'ShopWeb',
+        'ai_default_image_endpoint' => 'https://image.example.test/v1',
+        'ai_default_image_api_key' => 'image-key',
+        'ai_default_chat_endpoint' => 'https://chat.example.test/v1',
+        'ai_default_chat_api_key' => 'chat-key',
+        'ai_default_user_quota_k' => 20,
+    ]);
+
+    Http::fake([
+        'https://chat.example.test/v1/chat/completions' => Http::response([
+            'usage' => [
+                'total_tokens' => 42,
+                'prompt_tokens' => 12,
+                'completion_tokens' => 30,
+            ],
+            'choices' => [
+                ['message' => ['content' => '聊天回复']],
+            ],
+        ]),
+    ]);
+
+    $this->actingAs($user)
+        ->postJson(route('ai-image.chat'), [
+            'config_mode' => 'default',
+            'config_name' => '默认聊天',
+            'model' => 'gpt-4.1-mini',
+            'prompt' => '你好',
+            'reasoning_mode' => 'medium',
+            'timeout_seconds' => 600,
+        ])
+        ->assertOk()
+        ->assertJsonPath('message', '聊天回复')
+        ->assertJsonPath('meta.provider_source', 'site_default');
+
+    Http::assertSent(fn ($request): bool => $request->url() === 'https://chat.example.test/v1/chat/completions'
+        && $request->hasHeader('Authorization', 'Bearer chat-key'));
+
+    $this->assertDatabaseHas('ai_usage_logs', [
+        'user_id' => $user->id,
+        'feature' => 'chat',
+        'model' => 'gpt-4.1-mini',
+        'token_count' => 42,
+    ]);
+});
+
+it('returns detailed provider errors for disabled image capability', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+
+    Http::fake([
+        'https://api.example.test/v1/images/generations' => Http::response([
+            'error' => [
+                'message' => '该分组没有启用图片功能',
+                'type' => 'image_not_enabled',
+            ],
+        ], 503),
+    ]);
+
+    $this->actingAs($user)
+        ->postJson(route('ai-image.generate'), [
+            'endpoint' => 'https://api.example.test/v1',
+            'api_key' => 'test-key',
+            'model' => 'gpt-image-1',
+            'prompt' => '测试错误',
+            'count' => 1,
+            'size_mode' => 'auto',
+            'quality' => 'auto',
+            'output_format' => 'png',
+            'timeout_seconds' => 600,
+        ])
+        ->assertStatus(503)
+        ->assertJson(fn ($json) => $json
+            ->where('message', fn (string $message): bool => str_contains($message, '服务商暂不可用')
+                && str_contains($message, '该分组没有启用图片功能'))
+        );
+});
+
 it('generates images with prompt dimensions and references', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+
     Http::fake([
         'https://api.example.test/v1/images/edits' => Http::response([
             'data' => [
@@ -214,7 +319,7 @@ it('generates images with prompt dimensions and references', function (): void {
         ]),
     ]);
 
-    $this->postJson(route('ai-image.generate'), [
+    $this->actingAs($user)->postJson(route('ai-image.generate'), [
         'endpoint' => 'https://api.example.test/v1',
         'api_key' => 'test-key',
         'model' => 'gpt-image-1',
@@ -248,6 +353,8 @@ it('generates images with prompt dimensions and references', function (): void {
 });
 
 it('generates auto sized transparent png images without sending a size', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+
     Http::fake([
         'https://api.example.test/v1/images/generations' => Http::response([
             'data' => [
@@ -256,7 +363,7 @@ it('generates auto sized transparent png images without sending a size', functio
         ]),
     ]);
 
-    $this->postJson(route('ai-image.generate'), [
+    $this->actingAs($user)->postJson(route('ai-image.generate'), [
         'endpoint' => 'https://api.example.test/v1',
         'api_key' => 'test-key',
         'model' => 'gpt-image-1',
@@ -284,7 +391,9 @@ it('registers the streaming image route used by the workbench', function (): voi
 });
 
 it('blocks localhost and private ai endpoints from the storefront proxy', function (): void {
-    $this->postJson(route('ai-image.models'), [
+    $user = User::factory()->create(['role' => 'customer']);
+
+    $this->actingAs($user)->postJson(route('ai-image.models'), [
         'endpoint' => 'http://127.0.0.1:11434/v1',
     ])
         ->assertUnprocessable()

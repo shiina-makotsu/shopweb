@@ -5,6 +5,7 @@ use App\Models\ForumActivityLog;
 use App\Models\ForumSection;
 use App\Models\MediaAsset;
 use App\Models\Category;
+use App\Models\PrivateMessage;
 use App\Models\Product;
 use App\Models\ProductComment;
 use App\Models\ProductVariant;
@@ -382,7 +383,97 @@ it('supports chat style customer service sessions with attachments and admin rec
         ->get("/admin/guest-support-chat-sessions/{$session->id}/edit")
         ->assertOk()
         ->assertSee('会话 #'.$session->id)
-        ->assertSee('发送回复');
+        ->assertSee('发送回复')
+        ->assertDontSee('暂无聊天记录');
+
+    expect($session->fresh()->assigned_admin_id)->toBe($admin->id)
+        ->and($session->fresh()->status)->toBe(SupportChatSession::STATUS_ACTIVE);
+});
+
+it('keeps empty support sessions out of admin reception queues and polls new messages', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+    $admin = User::factory()->create(['role' => 'support', 'name' => '客服乙']);
+
+    $this->actingAs($user)
+        ->get(route('support.index'))
+        ->assertOk();
+
+    $emptySession = SupportChatSession::query()->whereBelongsTo($user)->firstOrFail();
+
+    $this->actingAs($admin)
+        ->get('/admin/support-chat-sessions')
+        ->assertOk()
+        ->assertDontSee('会话 #'.$emptySession->id);
+
+    $this->actingAs($user)
+        ->post(route('support.messages.store'), [
+            'support_chat_session_id' => $emptySession->id,
+            'message' => '0',
+        ])
+        ->assertRedirect(route('support.sessions.show', $emptySession));
+
+    expect($emptySession->messages()->latest('id')->first()->body)->toBe('0');
+
+    $this->actingAs($admin)
+        ->get('/admin/support-chat-sessions')
+        ->assertOk()
+        ->assertSee('客服会话')
+        ->assertSee('未读会话')
+        ->assertSee('最新会话');
+
+    app(\App\Services\SupportChatService::class)->reply($emptySession->fresh(), $admin, '已收到 0。');
+
+    $response = $this->actingAs($user)
+        ->get(route('support.sessions.messages', $emptySession))
+        ->assertOk()
+        ->assertJsonPath('status_label', '接待中')
+        ->assertJsonPath('assigned_admin', '客服乙');
+
+    expect($response->json('html'))->toContain('已收到 0。');
+});
+
+it('splits admin support chat pagination into unread and latest tabs', function (): void {
+    $admin = User::factory()->create(['role' => 'support']);
+    $user = User::factory()->create(['role' => 'customer', 'name' => '未读客户']);
+    $readUser = User::factory()->create(['role' => 'customer', 'name' => '已读客户']);
+
+    $unreadSession = SupportChatSession::query()->create([
+        'user_id' => $user->id,
+        'status' => SupportChatSession::STATUS_OPEN,
+        'last_message_at' => now(),
+    ]);
+    $unreadSession->messages()->create([
+        'sender_user_id' => $user->id,
+        'sender_type' => SupportChatMessage::SENDER_CUSTOMER,
+        'body' => '还没有被客服读取。',
+    ]);
+
+    $readSession = SupportChatSession::query()->create([
+        'user_id' => $readUser->id,
+        'status' => SupportChatSession::STATUS_ACTIVE,
+        'assigned_admin_id' => $admin->id,
+        'last_message_at' => now()->subMinute(),
+    ]);
+    $readSession->messages()->create([
+        'sender_user_id' => $readUser->id,
+        'sender_type' => SupportChatMessage::SENDER_CUSTOMER,
+        'body' => '已经读取的会话。',
+        'read_at' => now(),
+    ]);
+
+    $this->actingAs($admin)
+        ->get('/admin/support-chat-sessions')
+        ->assertOk()
+        ->assertSee('未读会话')
+        ->assertSee('最新会话')
+        ->assertSee('未读客户')
+        ->assertDontSee('已读客户');
+
+    $this->actingAs($admin)
+        ->get('/admin/support-chat-sessions?tab=latest')
+        ->assertOk()
+        ->assertSee('未读客户')
+        ->assertSee('已读客户');
 });
 
 it('starts product support chats and toggles product preferences from product pages', function (): void {
@@ -526,6 +617,8 @@ it('lets users update their avatar and profile intro', function (): void {
 });
 
 it('searches products and users and links to private messages', function (): void {
+    Storage::fake('private_attachments');
+
     $viewer = User::factory()->create(['role' => 'customer', 'public_id' => 'viewer_1']);
     $target = User::factory()->create(['role' => 'customer', 'public_id' => 'alice_1', 'name' => 'Alice']);
     $category = Category::query()->create(['name' => '搜索分类', 'slug' => 'search']);
@@ -544,14 +637,64 @@ it('searches products and users and links to private messages', function (): voi
         ->assertSee(Url::route('messages.thread', $target), false);
 
     $this->actingAs($viewer)
-        ->post(route('messages.store', $target), ['body' => '你好。'])
+        ->post(route('messages.store', $target), [
+            'body' => '0',
+            'attachment' => UploadedFile::fake()->image('hello.png', 80, 80),
+        ])
         ->assertRedirect();
 
     $this->assertDatabaseHas('private_messages', [
         'sender_id' => $viewer->id,
         'recipient_id' => $target->id,
-        'body' => '你好。',
+        'body' => '0',
     ]);
+
+    $message = PrivateMessage::query()->firstOrFail();
+    Storage::disk('private_attachments')->assertExists($message->attachment_path);
+
+    $this->actingAs($target)
+        ->get(route('messages.thread', $viewer))
+        ->assertOk()
+        ->assertSee('搜索聊天记录')
+        ->assertSee('0')
+        ->assertSee('hello.png');
+
+    $this->actingAs($target)
+        ->get(route('messages.attachment', $message))
+        ->assertOk();
+});
+
+it('shows private chat in the user center with capped unread badges', function (): void {
+    $viewer = User::factory()->create(['role' => 'customer', 'public_id' => 'viewer_chat', 'name' => 'Viewer']);
+    $target = User::factory()->create(['role' => 'customer', 'public_id' => 'alice_chat', 'name' => 'Alice']);
+
+    PrivateMessage::query()->create([
+        'sender_id' => $viewer->id,
+        'recipient_id' => $target->id,
+        'body' => '我发出的消息。',
+    ]);
+
+    foreach (range(1, 105) as $index) {
+        PrivateMessage::query()->create([
+            'sender_id' => $target->id,
+            'recipient_id' => $viewer->id,
+            'body' => '未读消息 '.$index,
+        ]);
+    }
+
+    $this->actingAs($viewer)
+        ->get(route('user.center'))
+        ->assertOk()
+        ->assertSee('聊天')
+        ->assertSee('99+');
+
+    $this->actingAs($viewer)
+        ->get(route('user.section', 'chat'))
+        ->assertOk()
+        ->assertSee('私聊会话')
+        ->assertSee('Alice')
+        ->assertSee('99+')
+        ->assertSee(Url::route('messages.thread', $target), false);
 });
 
 it('browses forum sections before posting and supports search sorting and locked threads', function (): void {

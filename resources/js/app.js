@@ -38,6 +38,26 @@ const animateToCart = (source) => {
     dot.addEventListener('animationend', () => dot.remove(), { once: true });
 };
 
+const refreshCartSummary = (payload) => {
+    if (payload.cart_count !== undefined) {
+        document.querySelectorAll('[data-cart-count]').forEach((node) => {
+            node.textContent = payload.cart_count;
+        });
+    }
+
+    if (payload.cart_subtotal !== undefined) {
+        document.querySelectorAll('[data-cart-subtotal]').forEach((node) => {
+            node.textContent = payload.cart_subtotal;
+        });
+    }
+
+    const target = document.querySelector('#site-cart-target');
+
+    if (target && payload.cart_count !== undefined) {
+        target.setAttribute('aria-label', `购物车 ${payload.cart_count} 件`);
+    }
+};
+
 document.addEventListener('submit', async (event) => {
     const form = event.target;
 
@@ -66,10 +86,7 @@ document.addEventListener('submit', async (event) => {
 
         const payload = await response.json();
 
-        document.querySelectorAll('[data-cart-count]').forEach((node) => {
-            node.textContent = payload.cart_count;
-        });
-
+        refreshCartSummary(payload);
         animateToCart(button ?? form);
         flashCartStatus(payload.message ?? '已加入购物车。');
     } catch (error) {

@@ -14,6 +14,7 @@ class SupportChatMessage extends Model
 
     protected $fillable = [
         'support_chat_session_id',
+        'quoted_message_id',
         'sender_user_id',
         'sender_type',
         'body',

@@ -3,9 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Models\Order;
+use App\Models\PrivateMessage;
+use App\Models\User;
 use App\Models\UserAddress;
 use App\Services\AiUsageService;
 use App\Services\CouponService;
+use Illuminate\Support\Collection;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -39,6 +42,7 @@ class UserCenterController extends Controller
             'pendingShipmentCount' => (int) ($orderCounts[Order::STATUS_PENDING_SHIPMENT] ?? 0) + (int) ($orderCounts[Order::STATUS_INCOMING] ?? 0),
             'awaitingReceiptCount' => (int) ($orderCounts[Order::STATUS_SHIPPED] ?? 0) + (int) ($orderCounts[Order::STATUS_AWAITING_RECEIPT] ?? 0),
             'fulfilledCount' => (int) ($orderCounts[Order::STATUS_FULFILLED] ?? 0),
+            'privateUnreadCount' => $this->privateUnreadCount($user),
         ]);
     }
 
@@ -47,7 +51,7 @@ class UserCenterController extends Controller
         $user = $request->user();
         $user->ensurePublicId();
 
-        $allowed = ['profile', 'wishlists', 'favorites', 'addresses', 'coupons', 'ai', 'privacy', 'interface', 'membership'];
+        $allowed = ['profile', 'wishlists', 'favorites', 'addresses', 'coupons', 'chat', 'ai', 'privacy', 'interface', 'membership'];
         abort_unless(in_array($section, $allowed, true), 404);
 
         $aiUsage = app(AiUsageService::class);
@@ -67,6 +71,10 @@ class UserCenterController extends Controller
             'coupons' => $section === 'coupons'
                 ? $user->coupons()->with(['coupon.products', 'coupon.product'])->latest()->get()
                 : null,
+            'privateUnreadCount' => $this->privateUnreadCount($user),
+            'chatThreads' => $section === 'chat'
+                ? $this->chatThreads($user)
+                : collect(),
             'aiQuota' => $section === 'ai'
                 ? [
                     'limit_k' => $aiUsage->quotaLimitK($user),
@@ -78,6 +86,48 @@ class UserCenterController extends Controller
                 ]
                 : null,
         ]);
+    }
+
+    private function privateUnreadCount(User $user): int
+    {
+        return PrivateMessage::query()
+            ->where('recipient_id', $user->id)
+            ->whereNull('read_at')
+            ->count();
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, array{user: \App\Models\User, last_message: \App\Models\PrivateMessage, unread_count: int}>
+     */
+    private function chatThreads(User $user): Collection
+    {
+        return PrivateMessage::query()
+            ->with(['sender', 'recipient'])
+            ->where(function ($query) use ($user): void {
+                $query->where('sender_id', $user->id)
+                    ->orWhere('recipient_id', $user->id);
+            })
+            ->latest()
+            ->limit(300)
+            ->get()
+            ->groupBy(fn (PrivateMessage $message): int => $message->sender_id === $user->id ? $message->recipient_id : $message->sender_id)
+            ->map(function (Collection $messages) use ($user): array {
+                /** @var \App\Models\PrivateMessage $lastMessage */
+                $lastMessage = $messages->sortByDesc('created_at')->first();
+                $otherUser = $lastMessage->sender_id === $user->id ? $lastMessage->recipient : $lastMessage->sender;
+
+                return [
+                    'user' => $otherUser,
+                    'last_message' => $lastMessage,
+                    'unread_count' => $messages
+                        ->where('recipient_id', $user->id)
+                        ->whereNull('read_at')
+                        ->count(),
+                ];
+            })
+            ->filter(fn (array $thread): bool => $thread['user'] instanceof User)
+            ->sortByDesc(fn (array $thread) => $thread['last_message']->created_at)
+            ->values();
     }
 
     public function storeCoupon(Request $request, CouponService $coupons): RedirectResponse

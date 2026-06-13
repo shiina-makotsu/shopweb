@@ -23,6 +23,11 @@ class EditSupportChatSession extends EditRecord
     {
         parent::mount($record);
 
+        if (! $this->record->isClosed() && ! $this->record->isEnded()) {
+            app(SupportChatService::class)->assign($this->record, auth()->user());
+            $this->record->refresh();
+        }
+
         $this->markCustomerMessagesRead();
     }
 
@@ -72,6 +77,12 @@ class EditSupportChatSession extends EditRecord
             ->title('消息已发送')
             ->success()
             ->send();
+    }
+
+    public function refreshMessages(): void
+    {
+        $this->record->refresh();
+        $this->markCustomerMessagesRead();
     }
 
     protected function getHeaderActions(): array

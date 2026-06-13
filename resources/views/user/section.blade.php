@@ -5,6 +5,7 @@
         'favorites' => '收藏商品',
         'addresses' => '地址设置',
         'coupons' => '优惠码',
+        'chat' => '聊天',
         'ai' => 'AI 配额',
         'privacy' => '隐私设置',
         'interface' => '界面设置',
@@ -368,6 +369,63 @@
                         @endforelse
                     </div>
                 </section>
+            </div>
+        @elseif($section === 'chat')
+            @php
+                $chatThreads = collect($chatThreads ?? []);
+            @endphp
+            <div class="space-y-4 px-4 py-5">
+                <div class="rounded-sm border border-slate-300">
+                    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
+                        <div>
+                            <h2 class="text-sm font-semibold">私聊会话</h2>
+                            <p class="mt-1 text-xs text-slate-500">只显示你参与过的私聊，点击会话进入聊天页面。</p>
+                        </div>
+                        @if(($privateUnreadCount ?? 0) > 0)
+                            <span class="inline-flex items-center rounded-full bg-red-600 px-2.5 py-1 text-xs font-semibold text-white">
+                                未读 {{ (int) $privateUnreadCount > 99 ? '99+' : (int) $privateUnreadCount }}
+                            </span>
+                        @endif
+                    </div>
+                    <div class="divide-y divide-slate-100">
+                        @forelse($chatThreads as $thread)
+                            @php
+                                $threadUser = $thread['user'];
+                                $lastMessage = $thread['last_message'];
+                                $unreadCount = (int) $thread['unread_count'];
+                                $messageText = $lastMessage->body !== null && $lastMessage->body !== ''
+                                    ? $lastMessage->body
+                                    : ($lastMessage->attachment_original_name ? '附件：'.$lastMessage->attachment_original_name : '暂无文字内容');
+                            @endphp
+                            <a class="grid gap-3 px-4 py-4 hover:bg-blue-50 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center" href="{{ route('messages.thread', $threadUser) }}">
+                                <div class="flex h-11 w-11 items-center justify-center overflow-hidden rounded-full border border-slate-300 bg-white text-sm font-semibold text-blue-700">
+                                    @if($threadUser->avatar_path)
+                                        <img class="h-full w-full object-cover" src="{{ \Illuminate\Support\Facades\Storage::disk('public_uploads')->url($threadUser->avatar_path) }}" alt="{{ $threadUser->displayName() }}">
+                                    @else
+                                        {{ mb_substr($threadUser->displayName(), 0, 1) }}
+                                    @endif
+                                </div>
+                                <div class="min-w-0">
+                                    <div class="flex min-w-0 items-center gap-2">
+                                        <p class="truncate text-sm font-semibold text-slate-900">{{ $threadUser->displayName() }}</p>
+                                        <span class="shrink-0 text-xs text-slate-500">ID：{{ $threadUser->public_id }}</span>
+                                    </div>
+                                    <p class="mt-1 truncate text-sm text-slate-600">{{ $lastMessage->sender_id === auth()->id() ? '我：' : '' }}{{ \Illuminate\Support\Str::limit($messageText, 80) }}</p>
+                                </div>
+                                <div class="flex items-center gap-2 text-xs text-slate-500 sm:flex-col sm:items-end">
+                                    <span>{{ $lastMessage->created_at?->format('Y-m-d H:i') }}</span>
+                                    @if($unreadCount > 0)
+                                        <span class="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-semibold leading-none text-white">
+                                            {{ $unreadCount > 99 ? '99+' : $unreadCount }}
+                                        </span>
+                                    @endif
+                                </div>
+                            </a>
+                        @empty
+                            <p class="px-4 py-10 text-center text-sm text-slate-600">暂无私聊会话。</p>
+                        @endforelse
+                    </div>
+                </div>
             </div>
         @elseif($section === 'ai')
             @php

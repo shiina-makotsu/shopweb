@@ -5,6 +5,7 @@
         data-models-url="{{ \App\Support\Url::route('ai-image.models') }}"
         data-generate-url="{{ \App\Support\Url::route('ai-image.generate') }}"
         data-stream-url="{{ \App\Support\Url::route('ai-image.stream') }}"
+        data-chat-url="{{ \App\Support\Url::route('ai-image.chat') }}"
     >
         <form class="contents" data-ai-image-form>
             @csrf
@@ -243,12 +244,12 @@
                             <input class="mt-1 w-full rounded-lg border border-zinc-200 px-4 py-3 text-sm outline-none focus:border-zinc-400" name="config_name" type="text" value="默认配置" data-config-name>
                         </label>
 
-                        <label class="block text-sm">
+                        <label class="block text-sm" data-endpoint-field>
                             <span class="font-medium text-zinc-700">API URL</span>
                             <input class="mt-1 w-full rounded-lg border border-zinc-200 px-4 py-3 text-sm outline-none focus:border-zinc-400" name="endpoint" type="url" placeholder="https://api.openai.com/v1" data-ai-endpoint>
                         </label>
 
-                        <label class="block text-sm">
+                        <label class="block text-sm" data-key-field>
                             <span class="font-medium text-zinc-700">API Key</span>
                             <input class="mt-1 w-full rounded-lg border border-zinc-200 px-4 py-3 text-sm outline-none focus:border-zinc-400" name="api_key" type="password" autocomplete="off" placeholder="sk-..." data-ai-key>
                         </label>
@@ -435,6 +436,8 @@
                 const status = root.querySelector('[data-ai-status]');
                 const endpointInput = root.querySelector('[data-ai-endpoint]');
                 const apiKeyInput = root.querySelector('[data-ai-key]');
+                const endpointField = root.querySelector('[data-endpoint-field]');
+                const keyField = root.querySelector('[data-key-field]');
                 const configMode = root.querySelector('[data-config-mode]');
                 const configName = root.querySelector('[data-config-name]');
                 const modelSelect = root.querySelector('[data-ai-model-select]');
@@ -478,6 +481,7 @@
                 const tasks = new Map();
                 const chatStore = new Map();
                 const chatFileItems = [];
+                const taskStorageKey = 'shopweb.ai-image.tasks.v1';
                 let referenceItems = [];
                 let activeReferenceIndex = null;
                 let modelFetchTimer = null;
@@ -490,7 +494,7 @@
                 };
 
                 const activeModel = () => manualModel.value.trim() || modelSelect.value;
-                const selectedChatModel = () => chatModelSelect.value || activeModel() || '默认模型';
+                const selectedChatModel = () => chatModelSelect.value || manualModel.value.trim();
 
                 const setMode = (mode) => {
                     currentMode = mode === 'chat' ? 'chat' : 'gallery';
@@ -548,8 +552,8 @@
                     const custom = configMode.value === 'custom';
                     endpointInput.disabled = !custom;
                     apiKeyInput.disabled = !custom;
-                    endpointInput.closest('label')?.classList.toggle('opacity-50', !custom);
-                    apiKeyInput.closest('label')?.classList.toggle('opacity-50', !custom);
+                    endpointField?.classList.toggle('hidden', !custom);
+                    keyField?.classList.toggle('hidden', !custom);
 
                     if (!custom && !configName.value.trim()) {
                         configName.value = '默认配置';
@@ -945,13 +949,14 @@
                     }
 
                     const payload = new FormData();
+                    payload.append('feature', currentMode === 'chat' ? 'chat' : 'image');
                     payload.append('config_mode', configMode.value);
                     payload.append('config_name', configName.value);
                     if (configMode.value === 'custom') {
                         payload.append('endpoint', endpointInput.value);
                         payload.append('api_key', apiKeyInput.value);
                     }
-                    setStatus('正在获取可用图片模型...');
+                    setStatus(currentMode === 'chat' ? '正在获取可用聊天模型...' : '正在获取可用图片模型...');
 
                     try {
                         const response = await fetch(root.dataset.modelsUrl, {
@@ -963,18 +968,19 @@
 
                         if (!response.ok) throw new Error(data.message || '模型列表获取失败。');
 
-                        modelSelect.innerHTML = '';
-                        if (!data.models?.length) {
-                            modelSelect.insertAdjacentHTML('beforeend', '<option value="">没有识别到模型，请手动填写</option>');
+                        const targetSelect = currentMode === 'chat' ? chatModelSelect : modelSelect;
+                        targetSelect.innerHTML = currentMode === 'chat' ? '<option value="">默认模型</option>' : '';
+                        if (!data.models?.length && currentMode !== 'chat') {
+                            targetSelect.insertAdjacentHTML('beforeend', '<option value="">没有识别到模型，请手动填写</option>');
                         } else {
-                            data.models.forEach((model) => {
+                            data.models?.forEach((model) => {
                                 const option = document.createElement('option');
                                 option.value = model.id;
                                 option.textContent = model.name || model.id;
-                                modelSelect.appendChild(option);
+                                targetSelect.appendChild(option);
                             });
                         }
-                        syncChatModelOptions();
+                        if (currentMode !== 'chat') syncChatModelOptions();
 
                         setStatus(`已获取 ${data.models?.length ?? 0} 个模型。`, 'green');
                     } catch (error) {
@@ -1048,6 +1054,31 @@
                     return payload;
                 };
 
+                const buildChatPayload = () => {
+                    const model = selectedChatModel();
+                    if (!model || model === '默认模型') {
+                        openSettings();
+                        throw new Error('请先在右下角或右上角设置里选择聊天模型。');
+                    }
+
+                    const payload = new FormData();
+                    payload.set('config_mode', configMode.value);
+                    payload.set('config_name', configName.value.trim() || (configMode.value === 'default' ? '默认配置' : '自定义配置'));
+                    payload.set('model', model);
+                    payload.set('prompt', promptInput.value.trim());
+                    payload.set('reasoning_mode', chatReasoning.value || 'low');
+                    payload.set('timeout_seconds', form.timeout_seconds?.value || '600');
+
+                    if (configMode.value === 'custom') {
+                        payload.set('endpoint', endpointInput.value);
+                        payload.set('api_key', apiKeyInput.value);
+                    }
+
+                    chatFileItems.forEach((item) => payload.append('chat_files[]', item.file));
+
+                    return payload;
+                };
+
                 form.addEventListener('submit', async (event) => {
                     event.preventDefault();
 
@@ -1056,14 +1087,16 @@
                         return;
                     }
 
-                    if (currentMode === 'chat') {
-                        appendChatMessage(promptInput.value.trim());
-                        promptInput.value = '';
-                        autoGrowPrompt();
-                        return;
-                    }
-
                     try {
+                        if (currentMode === 'chat') {
+                            generateButton.disabled = true;
+                            const chatPayload = buildChatPayload();
+                            await appendChatMessage(promptInput.value.trim(), chatPayload);
+                            promptInput.value = '';
+                            autoGrowPrompt();
+                            return;
+                        }
+
                         const count = Math.max(1, Math.min(8, Number(form.count.value || 1)));
                         const stream = form.stream?.checked ?? false;
                         generateButton.disabled = true;
@@ -1174,7 +1207,7 @@
                     }
                 };
 
-                const appendChatMessage = (message) => {
+                const appendChatMessage = async (message, payload) => {
                     const session = currentChat() || createChatSession();
                     const model = selectedChatModel();
                     const reasoning = chatReasoning.value;
@@ -1195,22 +1228,52 @@
                         reasoningLabel,
                         createdAt: new Date(),
                     });
-                    session.messages.push({
-                        role: 'assistant',
-                        content: '收到。当前聊天接口尚未接入真实模型回复。',
-                        files: [],
-                        model,
-                        reasoning,
-                        reasoningLabel,
-                        createdAt: new Date(),
-                    });
                     session.title = chatTitleFromMessage(session.messages.find((item) => item.role === 'user')?.content);
                     session.updatedAt = new Date();
-
-                    clearChatFiles({ revoke: false });
                     renderChatSessions();
                     renderChats();
-                    setStatus('Chat 消息已发送。', 'green');
+                    setStatus('正在请求 AI 回复...');
+
+                    try {
+                        const response = await fetch(root.dataset.chatUrl, {
+                            method: 'POST',
+                            body: payload,
+                            headers: { 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' },
+                        });
+                        const data = await response.json().catch(() => ({}));
+
+                        if (!response.ok) throw new Error(data.message || 'AI 聊天请求失败。');
+
+                        session.messages.push({
+                            role: 'assistant',
+                            content: data.message || '',
+                            files: [],
+                            model: data.meta?.model || model,
+                            reasoning,
+                            reasoningLabel,
+                            createdAt: new Date(),
+                        });
+                        session.updatedAt = new Date();
+                        clearChatFiles({ revoke: false });
+                        renderChatSessions();
+                        renderChats();
+                        setStatus('Chat 消息已发送。', 'green');
+                    } catch (error) {
+                        session.messages.push({
+                            role: 'assistant',
+                            content: error.message || 'AI 聊天请求失败。',
+                            files: [],
+                            model,
+                            reasoning,
+                            reasoningLabel,
+                            error: true,
+                            createdAt: new Date(),
+                        });
+                        session.updatedAt = new Date();
+                        renderChatSessions();
+                        renderChats();
+                        setStatus(error.message || 'AI 聊天请求失败。', 'red');
+                    }
                 };
 
                 const renderChats = () => {
@@ -1341,6 +1404,7 @@
                     task.meta = meta;
                     task.elapsedMs = task.elapsedMs || 1;
                     renderTasks();
+                    persistTasks();
                     enrichImageDimensions(taskId);
                 };
 
@@ -1353,7 +1417,79 @@
                     task.elapsedMs = task.elapsedMs || 1;
                     task.error = message;
                     renderTasks();
+                    persistTasks();
                 };
+
+                const persistTasks = () => {
+                    try {
+                        const saved = Array.from(tasks.values())
+                            .filter((task) => task.status !== 'running')
+                            .slice(-80)
+                            .map((task) => ({
+                                id: task.id,
+                                status: task.status,
+                                stream: task.stream,
+                                prompt: task.prompt,
+                                submittedPrompt: task.submittedPrompt,
+                                config: task.config,
+                                images: serializeImages(task.images),
+                                partials: serializeImages(task.partials),
+                                error: task.error,
+                                createdAt: task.createdAt instanceof Date ? task.createdAt.toISOString() : task.createdAt,
+                                elapsedMs: task.elapsedMs,
+                                actualWidth: task.actualWidth,
+                                actualHeight: task.actualHeight,
+                                meta: task.meta ?? {},
+                                references: (task.references ?? [])
+                                    .filter((reference) => reference.url && !String(reference.url).startsWith('blob:'))
+                                    .map((reference) => ({
+                                        name: reference.name,
+                                        url: reference.url,
+                                        editNote: reference.editNote,
+                                        hasMask: reference.hasMask,
+                                    })),
+                            }));
+
+                        window.localStorage.setItem(taskStorageKey, JSON.stringify(saved));
+                    } catch (error) {
+                        // Ignore storage limits; the visible in-memory task still remains.
+                    }
+                };
+
+                const hydrateTasks = () => {
+                    try {
+                        const saved = JSON.parse(window.localStorage.getItem(taskStorageKey) || '[]');
+                        if (!Array.isArray(saved)) return;
+
+                        saved.forEach((task) => {
+                            if (!task?.id) return;
+                            tasks.set(task.id, {
+                                ...task,
+                                status: task.status === 'running' ? 'failed' : task.status,
+                                images: Array.isArray(task.images) ? task.images : [],
+                                partials: Array.isArray(task.partials) ? task.partials : [],
+                                references: Array.isArray(task.references) ? task.references : [],
+                                error: task.error || (task.status === 'running' ? '页面刷新后任务已中断。' : ''),
+                                createdAt: task.createdAt ? new Date(task.createdAt) : new Date(),
+                                elapsedMs: Number(task.elapsedMs || 0),
+                                timer: null,
+                            });
+                        });
+                    } catch (error) {
+                        window.localStorage.removeItem(taskStorageKey);
+                    }
+                };
+
+                const serializeImages = (images) => (images ?? [])
+                    .map((image) => {
+                        if (image?.url) return { url: image.url, revised_prompt: image.revised_prompt || '' };
+                        if (image?.data_url && image.data_url.length < 1024 * 1024) {
+                            return { data_url: image.data_url, revised_prompt: image.revised_prompt || '' };
+                        }
+
+                        return null;
+                    })
+                    .filter(Boolean);
 
                 const renderTasks = () => {
                     const query = gallerySearch.value.trim().toLowerCase();
@@ -1417,6 +1553,7 @@
                         task.actualWidth = probe.naturalWidth;
                         task.actualHeight = probe.naturalHeight;
                         renderTasks();
+                        persistTasks();
                     };
                     probe.src = src;
                 };
@@ -1522,6 +1659,7 @@
                             .catch(() => setStatus('输出图无法添加为参考图。', 'red'));
                     } else if (deleteButton) {
                         tasks.delete(deleteButton.dataset.deleteTask);
+                        persistTasks();
                         renderTasks();
                     }
                 });
@@ -1576,8 +1714,10 @@
                 const escapeAttribute = (value) => escapeHtml(value).replaceAll('`', '&#096;');
 
                 syncChatModelOptions();
+                hydrateTasks();
                 createChatSession();
                 setMode('gallery');
+                renderTasks();
             })();
         </script>
     </section>

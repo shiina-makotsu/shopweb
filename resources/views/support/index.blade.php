@@ -64,9 +64,9 @@
             <div class="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 bg-slate-100 px-4 py-3">
                 <div>
                     <h2 class="text-lg font-semibold">会话 #{{ $session->id }}</h2>
-                    <p class="mt-1 text-xs text-slate-600">
-                        状态：{{ $statusLabels[$session->status] ?? '等待接入' }}
-                        / 客服：{{ $session->assignedAdmin?->displayName() ?? '尚未接入' }}
+                    <p class="mt-1 text-xs text-slate-600" data-support-session-meta>
+                        状态：<span data-support-session-status>{{ $statusLabels[$session->status] ?? '等待接入' }}</span>
+                        / 客服：<span data-support-session-admin>{{ $session->assignedAdmin?->displayName() ?? '尚未接入' }}</span>
                         / 完成接待：{{ $session->served_count }} 次
                     </p>
                     @if($session->order)
@@ -98,60 +98,29 @@
                 </div>
             </div>
 
-            <div class="flex-1 space-y-4 overflow-y-auto bg-slate-50 px-4 py-4">
-                @forelse($session->messages as $message)
-                    @if($message->sender_type === SupportChatMessage::SENDER_SYSTEM)
-                        <div class="flex items-center gap-3 text-xs text-slate-500">
-                            <span class="h-px flex-1 bg-slate-200"></span>
-                            <span>{{ $message->body }}</span>
-                            <span class="h-px flex-1 bg-slate-200"></span>
-                        </div>
-                        @continue
-                    @endif
+            <div class="border-b border-slate-200 bg-white px-4 py-3">
+                <label class="block text-xs font-medium text-slate-600">
+                    搜索聊天记录
+                    <input
+                        class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm"
+                        type="search"
+                        placeholder="搜索消息内容、客服或客户..."
+                        data-chat-search
+                    >
+                </label>
+            </div>
 
-                    @if($message->sender_type === SupportChatMessage::SENDER_ADMIN && optional($session->messages[$loop->index - 1] ?? null)->sender_user_id !== $message->sender_user_id)
-                        <div class="flex items-center gap-3 text-xs text-slate-500">
-                            <span class="h-px flex-1 bg-slate-200"></span>
-                            <span>客服 {{ $message->sender?->displayName() ?? '后台用户' }} 为您服务</span>
-                            <span class="h-px flex-1 bg-slate-200"></span>
-                        </div>
-                    @endif
-
-                    @php($isMine = in_array($message->sender_type, [SupportChatMessage::SENDER_CUSTOMER, SupportChatMessage::SENDER_GUEST], true))
-                    <article class="flex {{ $isMine ? 'justify-end' : 'justify-start' }}">
-                        <div class="max-w-[84%] rounded-sm border px-3 py-2 text-sm shadow-sm {{ $isMine ? 'border-blue-200 bg-blue-50' : 'border-slate-200 bg-white' }}">
-                            <p class="text-xs text-slate-500">
-                                {{ $isMine ? '我' : ($message->sender?->displayName() ?? '客服') }}
-                                / {{ $message->created_at->format('Y-m-d H:i') }}
-                            </p>
-                            @if($message->body)
-                                <p class="mt-1 whitespace-pre-line text-slate-800">{{ $message->body }}</p>
-                            @endif
-                            @if($message->hasAttachment())
-                                <div class="mt-2">
-                                    @if($message->isImage())
-                                        <a href="{{ \App\Support\Url::route('support.messages.attachment', $message) }}" target="_blank" rel="noopener">
-                                            <img class="max-h-64 rounded-sm border border-slate-200 object-contain" src="{{ \App\Support\Url::route('support.messages.attachment', $message) }}" alt="{{ $message->attachment_original_name }}">
-                                        </a>
-                                    @else
-                                        <a class="inline-flex rounded-sm border border-slate-300 bg-white px-3 py-2 text-xs font-medium hover:bg-slate-50" href="{{ \App\Support\Url::route('support.messages.attachment', $message) }}">
-                                            下载附件：{{ $message->attachment_original_name }}
-                                        </a>
-                                    @endif
-                                </div>
-                            @endif
-                            @if($isMine)
-                                <p class="mt-1 text-right text-[11px] text-blue-700">
-                                    {{ $message->read_at ? '✓✓ 已读' : '✓ 已发送' }}
-                                </p>
-                            @endif
-                        </div>
-                    </article>
-                @empty
-                    <div class="rounded-sm border border-dashed border-slate-300 bg-white px-4 py-12 text-center text-sm text-slate-600">
-                        暂无消息。点击底部加号可以附带订单、图片或文件。
-                    </div>
-                @endforelse
+            <div
+                class="flex-1 space-y-4 overflow-y-auto bg-slate-50 px-4 py-4"
+                data-support-messages
+                data-support-messages-url="{{ \App\Support\Url::route('support.sessions.messages', $session) }}"
+                data-last-message-id="{{ $session->messages->max('id') ?? 0 }}"
+            >
+                @include('support.partials.messages', [
+                    'session' => $session,
+                    'mineMode' => 'customer',
+                    'emptyText' => '暂无消息。点击底部加号可以附带订单、图片或文件。',
+                ])
             </div>
 
             <form method="post" action="{{ route('support.messages.store') }}" enctype="multipart/form-data" class="border-t border-slate-200 bg-white px-4 py-3 text-sm">
@@ -230,6 +199,52 @@
             const dialog = document.getElementById('support-delete-dialog');
             document.querySelector('[data-open-support-delete]')?.addEventListener('click', () => dialog?.showModal());
             document.querySelector('[data-close-support-delete]')?.addEventListener('click', () => dialog?.close());
+
+            const container = document.querySelector('[data-support-messages]');
+            const search = document.querySelector('[data-chat-search]');
+            const status = document.querySelector('[data-support-session-status]');
+            const admin = document.querySelector('[data-support-session-admin]');
+            let isPolling = false;
+
+            const applySearch = () => {
+                const query = (search?.value || '').trim().toLowerCase();
+                container?.querySelectorAll('[data-chat-message]').forEach((message) => {
+                    const text = message.dataset.chatSearchText || '';
+                    message.classList.toggle('hidden', query !== '' && !text.includes(query));
+                });
+            };
+
+            const pollMessages = async () => {
+                if (!container || isPolling || document.hidden) return;
+
+                isPolling = true;
+                try {
+                    const url = new URL(container.dataset.supportMessagesUrl, window.location.href);
+                    url.searchParams.set('last_message_id', container.dataset.lastMessageId || '0');
+                    const response = await fetch(url, { headers: { Accept: 'application/json' } });
+                    const data = await response.json();
+
+                    if (!response.ok) return;
+
+                    if (data.html && String(data.last_message_id) !== container.dataset.lastMessageId) {
+                        const pinnedBottom = container.scrollTop + container.clientHeight >= container.scrollHeight - 80;
+                        container.innerHTML = data.html;
+                        container.dataset.lastMessageId = String(data.last_message_id || 0);
+                        if (status) status.textContent = data.status_label || status.textContent;
+                        if (admin) admin.textContent = data.assigned_admin || admin.textContent;
+                        applySearch();
+                        if (pinnedBottom) container.scrollTop = container.scrollHeight;
+                    }
+                } catch (error) {
+                    // Polling is best-effort; the normal form flow still works.
+                } finally {
+                    isPolling = false;
+                }
+            };
+
+            search?.addEventListener('input', applySearch);
+            container?.scrollTo({ top: container.scrollHeight });
+            window.setInterval(pollMessages, 3000);
         })();
     </script>
 </x-layouts.app>
