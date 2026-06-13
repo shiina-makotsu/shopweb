@@ -1,16 +1,28 @@
 <?php
 
+use App\Models\SiteSetting;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 
 it('renders the storefront ai image page and entry links', function (): void {
+    SiteSetting::query()->create([
+        'site_name' => '自定义生图站',
+    ]);
+
     $this->get(route('ai-image.index'))
         ->assertOk()
         ->assertSee('AI 生图')
-        ->assertSee('API URL')
+        ->assertSee('自定义生图站')
+        ->assertDontSee('天域工坊')
+        ->assertSee('生成设置')
         ->assertSee('获取模型')
-        ->assertSee('参考图')
-        ->assertSee('生成图片');
+        ->assertSee('是否透明')
+        ->assertSee('流式传输')
+        ->assertSee('partial_images')
+        ->assertSee('参考图编辑')
+        ->assertSee('添加遮罩')
+        ->assertSee('图像任务详情')
+        ->assertSee('PNG');
 
     $this->get(route('home'))
         ->assertOk()
@@ -64,18 +76,59 @@ it('generates images with prompt dimensions and references', function (): void {
         'style' => 'vivid',
         'background' => 'opaque',
         'output_format' => 'png',
+        'timeout_seconds' => 600,
         'reference_images' => [
             UploadedFile::fake()->image('reference.png', 64, 64),
         ],
+        'mask_image' => UploadedFile::fake()->image('mask.png', 64, 64),
     ])
         ->assertOk()
         ->assertJsonCount(2, 'images')
         ->assertJsonPath('images.0.data_url', 'data:image/png;base64,'.base64_encode('fake-image'))
-        ->assertJsonPath('images.1.url', 'https://cdn.example.test/generated.png');
+        ->assertJsonPath('images.1.url', 'https://cdn.example.test/generated.png')
+        ->assertJsonPath('meta.requested_size', '832x1216')
+        ->assertJsonPath('meta.format', 'png');
 
     Http::assertSent(fn ($request): bool => $request->url() === 'https://api.example.test/v1/images/edits'
         && str_contains($request->body(), '一张商品海报')
+        && str_contains($request->body(), 'name="mask"')
         && str_contains($request->body(), '832x1216'));
+});
+
+it('generates auto sized transparent png images without sending a size', function (): void {
+    Http::fake([
+        'https://api.example.test/v1/images/generations' => Http::response([
+            'data' => [
+                ['url' => 'https://cdn.example.test/auto.png'],
+            ],
+        ]),
+    ]);
+
+    $this->postJson(route('ai-image.generate'), [
+        'endpoint' => 'https://api.example.test/v1',
+        'api_key' => 'test-key',
+        'model' => 'gpt-image-1',
+        'prompt' => '一张透明背景商品图',
+        'count' => 1,
+        'size_mode' => 'auto',
+        'quality' => 'auto',
+        'transparent' => true,
+        'output_format' => 'png',
+        'timeout_seconds' => 600,
+    ])
+        ->assertOk()
+        ->assertJsonPath('images.0.url', 'https://cdn.example.test/auto.png')
+        ->assertJsonPath('meta.requested_size', null)
+        ->assertJsonPath('meta.transparent', true);
+
+    Http::assertSent(fn ($request): bool => $request->url() === 'https://api.example.test/v1/images/generations'
+        && str_contains($request->body(), '"output_format":"png"')
+        && str_contains($request->body(), '"background":"transparent"')
+        && ! str_contains($request->body(), '"size"'));
+});
+
+it('registers the streaming image route used by the workbench', function (): void {
+    expect(route('ai-image.stream', absolute: false))->toBe('/ai-image/stream');
 });
 
 it('blocks localhost and private ai endpoints from the storefront proxy', function (): void {

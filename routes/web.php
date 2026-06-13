@@ -54,6 +54,7 @@ Route::get('/friend-links', [FriendLinkController::class, 'index'])->name('frien
 Route::get('/ai-image', [AiImageController::class, 'index'])->name('ai-image.index');
 Route::post('/ai-image/models', [AiImageController::class, 'models'])->name('ai-image.models');
 Route::post('/ai-image/generate', [AiImageController::class, 'generate'])->name('ai-image.generate');
+Route::post('/ai-image/stream', [AiImageController::class, 'stream'])->name('ai-image.stream');
 Route::get('/users/{user:public_id}', [UserProfileController::class, 'show'])->name('users.show');
 Route::get('/announcements', [AnnouncementController::class, 'index'])->name('announcements.index');
 Route::get('/announcements/{announcement:slug}', [AnnouncementController::class, 'show'])->name('announcements.show');
