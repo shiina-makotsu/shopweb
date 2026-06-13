@@ -53,7 +53,7 @@
                         <input class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" name="db_database" value="{{ old('db_database', 'shopweb') }}" required>
                     </label>
                     <label class="block">
-                        <span class="text-sm font-medium">用户名</span>
+                        <span class="text-sm font-medium">管理员昵称</span>
                         <input class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" name="db_username" value="{{ old('db_username', 'root') }}" required>
                     </label>
                     <label class="block md:col-span-2">

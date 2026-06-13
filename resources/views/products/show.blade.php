@@ -56,7 +56,7 @@
                             <img src="{{ $mainMedia->url() }}" alt="{{ $mainMedia->alt ?? $product->title }}" class="aspect-square w-full object-cover {{ $isSoldOut ? 'grayscale' : '' }}" data-product-main-media data-media-type="image">
                         @endif
                     @elseif($mainImageUrl)
-                        <img src="{{ $mainImageUrl }}" alt="{{ $firstVariantImage?->specLabel() ?? $product->title }}" class="aspect-square w-full object-cover {{ $isSoldOut ? 'grayscale' : '' }}" data-product-main-media data-media-type="image">
+                        <img src="{{ $mainImageUrl }}" alt="{{ $firstVariantImage?->displayName() ?? $product->title }}" class="aspect-square w-full object-cover {{ $isSoldOut ? 'grayscale' : '' }}" data-product-main-media data-media-type="image">
                     @else
                         <div class="flex aspect-square items-center justify-center bg-slate-100 text-sm text-slate-500">暂无图片</div>
                     @endif
@@ -75,8 +75,8 @@
                             </figure>
                         @endforeach
                         @foreach($product->variants->filter(fn ($variant) => filled($variant->image_path)) as $variant)
-                            <figure class="border border-slate-200 bg-white p-1" data-gallery-item data-media-url="{{ $variant->imageUrl() }}" data-media-type="image" data-media-alt="{{ $variant->specLabel() }}">
-                                <img src="{{ $variant->imageUrl() }}" alt="{{ $variant->specLabel() }}" class="aspect-square w-full object-cover">
+                            <figure class="border border-slate-200 bg-white p-1" data-gallery-item data-media-url="{{ $variant->imageUrl() }}" data-media-type="image" data-media-alt="{{ $variant->displayName() }}">
+                                <img src="{{ $variant->imageUrl() }}" alt="{{ $variant->displayName() }}" class="aspect-square w-full object-cover">
                                 <figcaption class="truncate pt-1 text-center text-[11px] text-slate-500">SKU 图</figcaption>
                             </figure>
                         @endforeach
@@ -212,9 +212,9 @@
                         @if($product->isPresale())
                             <p class="mb-3 rounded-sm border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-slate-700">该商品为预售品，付款确认后会进入待发货；实际进货后后台会更新为进货中。</p>
                         @endif
-                        <label class="block">
+                        <div class="block">
                             <span class="text-sm font-medium">规格</span>
-                            <select id="product-detail-variant" class="mt-1 w-full rounded-sm border border-slate-300 bg-white px-3 py-2 text-sm" required>
+                            <select id="product-detail-variant" class="hidden" required>
                                 @foreach($product->variants as $variant)
                                     <option
                                         value="{{ $variant->id }}"
@@ -222,15 +222,53 @@
                                         data-compare-price="{{ $variant->hasActiveDiscount() ? \App\Support\Money::format($variant->price_cents) : ($variant->compare_at_price_cents ? \App\Support\Money::format($variant->compare_at_price_cents) : '') }}"
                                         data-has-discount="{{ $variant->hasActiveDiscount() ? '1' : '0' }}"
                                         data-stock-label="{{ $product->isPresale() ? '预售不限库存' : '库存 '.$variant->stock }}"
+                                        data-stock-value="{{ $product->isPresale() ? '预售不限库存' : $variant->stock }}"
                                         data-image-url="{{ $variant->imageUrl() }}"
-                                        data-image-alt="{{ $variant->specLabel() }}"
+                                        data-image-alt="{{ $variant->displayName() }}"
+                                        data-spec-label="{{ $variant->displayName() }}"
                                     >
-                                        {{ $variant->specLabel() }} / @money($variant->effectivePriceCents()) / {{ $product->isPresale() ? '预售不限库存' : '库存 '.$variant->stock }}
+                                        {{ $variant->displayName() }} / @money($variant->effectivePriceCents()) / {{ $product->isPresale() ? '预售不限库存' : '库存 '.$variant->stock }}
                                     </option>
                                 @endforeach
                             </select>
-                            <p class="mt-1 text-xs text-slate-500" data-product-variant-summary>{{ $firstVariant?->specLabel() }} / {{ $product->isPresale() ? '预售不限库存' : '库存 '.($firstVariant?->stock ?? 0) }}</p>
-                        </label>
+                            <div class="mt-2 grid gap-2" data-product-variant-options>
+                                @foreach($product->variants as $variant)
+                                    <button
+                                        type="button"
+                                        class="flex w-full items-center justify-between gap-3 rounded-sm border px-3 py-2 text-sm transition hover:border-blue-400 hover:bg-blue-50 {{ $loop->first ? 'border-blue-700 bg-blue-50 text-blue-900' : 'border-slate-300 bg-white text-slate-700' }}"
+                                        data-product-variant-option
+                                        data-variant-id="{{ $variant->id }}"
+                                        aria-pressed="{{ $loop->first ? 'true' : 'false' }}"
+                                    >
+                                        <span class="min-w-0 truncate text-left font-medium">{{ $variant->displayName() }}</span>
+                                        <span class="shrink-0 text-right font-semibold text-red-700">@money($variant->effectivePriceCents())</span>
+                                    </button>
+                                @endforeach
+                            </div>
+                        </div>
+                        <div class="mt-3 rounded-sm border border-slate-200 bg-white px-3 py-3">
+                            <div class="flex items-center justify-between gap-3">
+                                <p class="text-sm font-medium text-slate-700">规格明细</p>
+                                <p class="text-xs text-slate-500">当前 SKU</p>
+                            </div>
+                            <div class="mt-2 overflow-hidden rounded-sm border border-slate-200" data-product-spec-list>
+                                @forelse($firstVariant?->specItems() ?? [] as $spec)
+                                    <div class="grid grid-cols-[minmax(88px,0.34fr)_1fr] border-b border-slate-100 last:border-b-0">
+                                        <div class="bg-slate-50 px-3 py-2 text-sm font-medium text-slate-600">{{ $spec['name'] }}</div>
+                                        <div class="px-3 py-2 text-sm font-medium text-slate-900">{{ $spec['value'] }}</div>
+                                    </div>
+                                @empty
+                                    <div class="grid grid-cols-[minmax(88px,0.34fr)_1fr] border-b border-slate-100">
+                                        <div class="bg-slate-50 px-3 py-2 text-sm font-medium text-slate-600">规格</div>
+                                        <div class="px-3 py-2 text-sm font-medium text-slate-900">默认规格</div>
+                                    </div>
+                                @endforelse
+                                <div class="grid grid-cols-[minmax(88px,0.34fr)_1fr]">
+                                    <div class="bg-slate-50 px-3 py-2 text-sm font-medium text-slate-600">库存</div>
+                                    <div class="px-3 py-2 text-sm font-medium text-slate-900" data-product-stock>{{ $product->isPresale() ? '预售不限库存' : ($firstVariant?->stock ?? 0) }}</div>
+                                </div>
+                            </div>
+                        </div>
                         <div class="mt-3 flex flex-wrap items-end gap-3">
                             <label class="block">
                                 <span class="text-sm font-medium">数量</span>
@@ -424,9 +462,11 @@
             const comparePrice = document.querySelector('[data-product-compare-price]');
             const comparePriceValue = comparePrice?.querySelector('span');
             const discountNote = document.querySelector('[data-product-discount-note]');
-            const summary = document.querySelector('[data-product-variant-summary]');
+            const specList = document.querySelector('[data-product-spec-list]');
+            const variantButtons = document.querySelectorAll('[data-product-variant-option]');
             let mainMedia = document.querySelector('[data-product-main-media]');
             const galleryItems = document.querySelectorAll('[data-gallery-item]');
+            const variantSpecs = @json($product->variants->mapWithKeys(fn ($variant) => [$variant->id => $variant->specItems()])->all());
 
             if (!select || !price) {
                 return;
@@ -477,9 +517,26 @@
                     discountNote.classList.toggle('hidden', option.dataset.hasDiscount !== '1');
                 }
 
-                if (summary) {
-                    summary.textContent = `${option.textContent.split(' / ')[0].trim()} / ${option.dataset.stockLabel || ''}`.trim();
+                if (specList) {
+                    const specs = variantSpecs[option.value] || [];
+                    const rows = specs.length
+                        ? specs.map((spec) => specRow(spec.name || '规格', spec.value || spec.label || ''))
+                        : [specRow('规格', '默认规格')];
+
+                    rows.push(specRow('库存', option.dataset.stockValue || option.dataset.stockLabel || '', ' data-product-stock'));
+                    specList.innerHTML = rows.join('');
                 }
+
+                variantButtons.forEach((button) => {
+                    const active = button.dataset.variantId === option.value;
+                    button.classList.toggle('border-blue-700', active);
+                    button.classList.toggle('bg-blue-50', active);
+                    button.classList.toggle('text-blue-900', active);
+                    button.classList.toggle('border-slate-300', ! active);
+                    button.classList.toggle('bg-white', ! active);
+                    button.classList.toggle('text-slate-700', ! active);
+                    button.setAttribute('aria-pressed', active ? 'true' : 'false');
+                });
 
                 if (syncImage) {
                     setMainMedia(option.dataset.imageUrl || '', 'image', option.dataset.imageAlt || '');
@@ -493,7 +550,26 @@
             });
 
             select.addEventListener('change', () => refreshVariantPrice(true));
+            variantButtons.forEach((button) => {
+                button.addEventListener('click', () => {
+                    select.value = button.dataset.variantId || select.value;
+                    refreshVariantPrice(true);
+                });
+            });
             refreshVariantPrice(false);
+
+            function escapeHtml(value) {
+                return String(value)
+                    .replaceAll('&', '&amp;')
+                    .replaceAll('<', '&lt;')
+                    .replaceAll('>', '&gt;')
+                    .replaceAll('"', '&quot;')
+                    .replaceAll("'", '&#039;');
+            }
+
+            function specRow(name, value, valueAttributes = '') {
+                return `<div class="grid grid-cols-[minmax(88px,0.34fr)_1fr] border-b border-slate-100 last:border-b-0"><div class="bg-slate-50 px-3 py-2 text-sm font-medium text-slate-600">${escapeHtml(name)}</div><div class="px-3 py-2 text-sm font-medium text-slate-900"${valueAttributes}>${escapeHtml(value)}</div></div>`;
+            }
         })();
     </script>
 </x-layouts.app>

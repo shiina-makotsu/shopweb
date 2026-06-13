@@ -1,25 +1,41 @@
 <?php
 
-use App\Models\Product;
-use App\Models\ProductMedia;
+use App\Filament\Resources\ProductResource\Pages\EditProduct;
+use App\Models\Category;
 use App\Models\Coupon;
-use App\Models\UserCoupon;
 use App\Models\FlashSale;
 use App\Models\FriendLink;
+use App\Models\MediaAsset;
 use App\Models\Order;
+use App\Models\Page;
+use App\Models\Product;
+use App\Models\ProductMedia;
 use App\Models\ProductTag;
 use App\Models\ProductVariant;
-use App\Models\MediaAsset;
-use App\Models\Page;
 use App\Models\SiteSetting;
 use App\Models\User;
+use App\Models\UserCoupon;
 use App\Models\Warehouse;
 use App\Models\WarehouseShippingRate;
 use App\Models\WarehouseStock;
 use App\Services\OrderService;
+use App\Support\Money;
 use App\Support\Url;
-use App\Filament\Resources\ProductResource\Pages\EditProduct;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
+
+it('formats sku specification labels with value before name', function (): void {
+    $variant = new ProductVariant([
+        'spec_name' => '白色常规装',
+        'specs' => ['颜色' => '白色', '尺码' => 'M'],
+    ]);
+
+    expect(ProductVariant::specsLabel(['颜色' => '白色', '尺码' => 'M']))->toBe('白色颜色 * M尺码')
+        ->and(ProductVariant::specsLabel(['' => '标准']))->toBe('标准规格')
+        ->and(ProductVariant::specsLabel([]))->toBe('默认规格')
+        ->and($variant->displayName())->toBe('白色常规装')
+        ->and($variant->detailSpecLabel())->toBe('白色颜色 * M尺码');
+});
 
 it('allows a customer to add a sku to cart and create an order', function (): void {
     $this->seed();
@@ -48,7 +64,7 @@ it('allows a customer to add a sku to cart and create an order', function (): vo
 
     expect($variant->fresh()->stock)->toBe($variant->stock);
 
-    $order = \App\Models\Order::query()->where('user_id', $user->id)->firstOrFail();
+    $order = Order::query()->where('user_id', $user->id)->firstOrFail();
     app(OrderService::class)->confirmPayment($order);
 
     expect($variant->fresh()->stock)->toBe($variant->stock - 2);
@@ -165,7 +181,7 @@ it('allows presale checkout and concept crowdfunding without stock deduction', f
         'contact_email' => 'concept@example.com',
     ])->assertRedirect();
 
-    $conceptOrder = \App\Models\Order::query()->where('user_id', $user->id)->firstOrFail();
+    $conceptOrder = Order::query()->where('user_id', $user->id)->firstOrFail();
     app(OrderService::class)->confirmPayment($conceptOrder);
 
     expect($variant->fresh()->stock)->toBe($variant->stock);
@@ -184,11 +200,11 @@ it('allows presale checkout and concept crowdfunding without stock deduction', f
         'contact_email' => 'presale@example.com',
     ])->assertRedirect();
 
-    $order = \App\Models\Order::query()->where('user_id', $user->id)->latest('id')->firstOrFail();
+    $order = Order::query()->where('user_id', $user->id)->latest('id')->firstOrFail();
     app(OrderService::class)->confirmPayment($order);
 
     expect($variant->fresh()->stock)->toBe(0)
-        ->and($order->fresh()->status)->toBe(\App\Models\Order::STATUS_PENDING_SHIPMENT)
+        ->and($order->fresh()->status)->toBe(Order::STATUS_PENDING_SHIPMENT)
         ->and($order->items()->first()->quantity)->toBe(25);
 });
 
@@ -211,7 +227,7 @@ it('marks in stock products sold out after confirmed payment consumes stock', fu
         'contact_email' => 'stock@example.com',
     ])->assertRedirect();
 
-    app(OrderService::class)->confirmPayment(\App\Models\Order::query()->where('user_id', $user->id)->firstOrFail());
+    app(OrderService::class)->confirmPayment(Order::query()->where('user_id', $user->id)->firstOrFail());
 
     expect($variant->fresh()->stock)->toBe(0)
         ->and($product->fresh()->status)->toBe(Product::STATUS_SOLD_OUT);
@@ -222,11 +238,11 @@ it('hides storefront order numbers by default', function (): void {
 
     $user = User::factory()->create(['role' => 'customer']);
     $otherUser = User::factory()->create(['role' => 'customer']);
-    $order = \App\Models\Order::query()->create([
+    $order = Order::query()->create([
         'user_id' => $user->id,
         'order_number' => 'PRIVATE-ORDER-1',
-        'status' => \App\Models\Order::STATUS_PENDING_PAYMENT,
-        'payment_status' => \App\Models\Order::PAYMENT_PENDING,
+        'status' => Order::STATUS_PENDING_PAYMENT,
+        'payment_status' => Order::PAYMENT_PENDING,
         'subtotal_cents' => 1000,
         'total_cents' => 1000,
         'contact_name' => '隐私用户',
@@ -390,11 +406,11 @@ it('can hide the home welcome section and query shipments by order number only',
 
     $user = User::factory()->create(['role' => 'customer']);
     $otherUser = User::factory()->create(['role' => 'customer']);
-    $order = \App\Models\Order::query()->create([
+    $order = Order::query()->create([
         'user_id' => $user->id,
         'order_number' => 'SHIP-ONLY-1',
-        'status' => \App\Models\Order::STATUS_SHIPPED,
-        'payment_status' => \App\Models\Order::PAYMENT_CONFIRMED,
+        'status' => Order::STATUS_SHIPPED,
+        'payment_status' => Order::PAYMENT_CONFIRMED,
         'subtotal_cents' => 1000,
         'total_cents' => 1000,
         'contact_name' => 'A',
@@ -423,8 +439,8 @@ it('can hide the home welcome section and query shipments by order number only',
 it('orders home product sections and places store pages in the welcome header', function (): void {
     $this->seed();
 
-    $category = \App\Models\Category::query()->firstOrFail();
-    \App\Models\Page::query()->updateOrCreate(
+    $category = Category::query()->firstOrFail();
+    Page::query()->updateOrCreate(
         ['slug' => 'about-us'],
         ['title' => '关于我们', 'body' => 'About', 'is_published' => true],
     );
@@ -541,7 +557,7 @@ it('always renders home discount and concept sections with empty states', functi
 it('filters storefront product lists by featured discount and concept sections', function (): void {
     $this->seed();
 
-    $category = \App\Models\Category::query()->firstOrFail();
+    $category = Category::query()->firstOrFail();
 
     $featuredProduct = Product::query()->create([
         'category_id' => $category->id,
@@ -651,7 +667,7 @@ it('lets users buy now from product cards and crowdfund concept products through
     $this->seed();
 
     $user = User::factory()->create(['role' => 'customer']);
-    $category = \App\Models\Category::query()->firstOrFail();
+    $category = Category::query()->firstOrFail();
 
     $stockProduct = Product::query()->create([
         'category_id' => $category->id,
@@ -735,7 +751,7 @@ it('lets users buy now from product cards and crowdfund concept products through
         'line_total_cents' => 10000,
     ]);
 
-    app(OrderService::class)->confirmPayment(\App\Models\Order::query()
+    app(OrderService::class)->confirmPayment(Order::query()
         ->whereHas('items', fn ($query) => $query->where('product_id', $concept->id))
         ->firstOrFail());
 
@@ -745,7 +761,7 @@ it('lets users buy now from product cards and crowdfund concept products through
 it('shows storefront purchase actions on product details and sold out badges', function (): void {
     $this->seed();
 
-    $category = \App\Models\Category::query()->firstOrFail();
+    $category = Category::query()->firstOrFail();
     $product = Product::query()->create([
         'category_id' => $category->id,
         'title' => '详情购买商品',
@@ -822,7 +838,7 @@ it('prices orders by the selected sku variant', function (): void {
     $this->seed();
 
     $user = User::factory()->create(['role' => 'customer']);
-    $category = \App\Models\Category::query()->firstOrFail();
+    $category = Category::query()->firstOrFail();
     $product = Product::query()->create([
         'category_id' => $category->id,
         'title' => '多规格价格商品',
@@ -833,7 +849,8 @@ it('prices orders by the selected sku variant', function (): void {
     $variantA = ProductVariant::query()->create([
         'product_id' => $product->id,
         'sku' => 'SKU-PRICE-A',
-        'specs' => ['颜色' => '白色'],
+        'spec_name' => '白色常规装',
+        'specs' => ['颜色' => '白色', '尺码' => 'M'],
         'price_cents' => 1000,
         'stock' => 5,
         'is_active' => true,
@@ -841,6 +858,7 @@ it('prices orders by the selected sku variant', function (): void {
     $variantB = ProductVariant::query()->create([
         'product_id' => $product->id,
         'sku' => 'SKU-PRICE-B',
+        'spec_name' => '黑色大包装',
         'specs' => ['颜色' => '黑色'],
         'price_cents' => 2500,
         'stock' => 5,
@@ -851,8 +869,23 @@ it('prices orders by the selected sku variant', function (): void {
         ->assertOk()
         ->assertSee($variantA->specLabel())
         ->assertSee($variantB->specLabel())
-        ->assertSee(\App\Support\Money::format($variantA->price_cents))
-        ->assertSee(\App\Support\Money::format($variantB->price_cents));
+        ->assertSee('白色常规装')
+        ->assertSee('颜色')
+        ->assertSee('白色')
+        ->assertSee('尺码')
+        ->assertDontSee('颜色: 白色')
+        ->assertSee('data-product-spec-list', false)
+        ->assertSee('data-product-variant-option', false)
+        ->assertSee('data-product-stock', false)
+        ->assertSee('aria-pressed="true"', false)
+        ->assertSee('data-spec-label="白色常规装"', false)
+        ->assertSee(Money::format($variantA->price_cents))
+        ->assertSee(Money::format($variantB->price_cents));
+
+    $this->get(route('products.index'))
+        ->assertOk()
+        ->assertSee('白色常规装')
+        ->assertDontSee('颜色: 白色');
 
     $this->post(route('cart.items.store'), [
         'variant_id' => $variantB->id,
@@ -876,7 +909,7 @@ it('saves multiple sku rows with independent image links from the admin product 
     $this->seed();
 
     $admin = User::factory()->create(['role' => 'admin']);
-    $category = \App\Models\Category::query()->firstOrFail();
+    $category = Category::query()->firstOrFail();
     $product = Product::query()->create([
         'category_id' => $category->id,
         'title' => '后台多 SKU 商品',
@@ -892,6 +925,7 @@ it('saves multiple sku rows with independent image links from the admin product 
             'variants' => [
                 [
                     'sku' => 'ADMIN-SKU-WHITE-M',
+                    'spec_name' => '白色 M 码',
                     'specs' => ['颜色' => '白色', '尺码' => 'M'],
                     'image_path' => 'https://cdn.example.com/white-m.jpg',
                     'price_cents' => '19.90',
@@ -901,6 +935,7 @@ it('saves multiple sku rows with independent image links from the admin product 
                 ],
                 [
                     'sku' => 'ADMIN-SKU-BLACK-L',
+                    'spec_name' => '黑色 L 码',
                     'specs' => ['颜色' => '黑色', '尺码' => 'L'],
                     'image_path' => '/uploads/products/black-l.webp',
                     'price_cents' => '29.90',
@@ -923,6 +958,7 @@ it('saves multiple sku rows with independent image links from the admin product 
         ->assertHasNoFormErrors();
 
     expect($product->variants()->count())->toBe(2)
+        ->and(ProductVariant::query()->where('sku', 'ADMIN-SKU-WHITE-M')->first()?->spec_name)->toBe('白色 M 码')
         ->and(ProductVariant::query()->where('sku', 'ADMIN-SKU-WHITE-M')->first()?->image_path)->toBe('https://cdn.example.com/white-m.jpg')
         ->and(ProductVariant::query()->where('sku', 'ADMIN-SKU-WHITE-M')->first()?->price_cents)->toBe(1990)
         ->and(ProductVariant::query()->where('sku', 'ADMIN-SKU-BLACK-L')->first()?->specs)->toBe(['颜色' => '黑色', '尺码' => 'L'])
@@ -933,7 +969,7 @@ it('shows media library upload pickers beside product image inputs', function ()
     $this->seed();
 
     $admin = User::factory()->create(['role' => 'admin']);
-    $category = \App\Models\Category::query()->firstOrFail();
+    $category = Category::query()->firstOrFail();
     $product = Product::query()->create([
         'category_id' => $category->id,
         'title' => '后台图片选择商品',
@@ -972,7 +1008,7 @@ it('shows media library upload pickers beside product image inputs', function ()
 it('uses sku images as product detail fallback and gallery entries', function (): void {
     $this->seed();
 
-    $category = \App\Models\Category::query()->firstOrFail();
+    $category = Category::query()->firstOrFail();
     $product = Product::query()->create([
         'category_id' => $category->id,
         'title' => 'SKU 图片商品',
@@ -1012,7 +1048,7 @@ it('applies global coupons and restricts product coupons to a single matching ca
     $this->seed();
 
     $user = User::factory()->create(['role' => 'customer']);
-    $category = \App\Models\Category::query()->firstOrFail();
+    $category = Category::query()->firstOrFail();
     $productA = Product::query()->create([
         'category_id' => $category->id,
         'title' => '优惠商品 A',
@@ -1117,7 +1153,7 @@ it('applies global coupons and restricts product coupons to a single matching ca
 it('shows product price ranges and defaults detail price to the first sku', function (): void {
     $this->seed();
 
-    $category = \App\Models\Category::query()->firstOrFail();
+    $category = Category::query()->firstOrFail();
     $product = Product::query()->create([
         'category_id' => $category->id,
         'title' => '多价格商品',
@@ -1157,7 +1193,7 @@ it('lets users claim coupons and apply one coupon per cart sku', function (): vo
     $this->seed();
 
     $user = User::factory()->create(['role' => 'customer']);
-    $category = \App\Models\Category::query()->firstOrFail();
+    $category = Category::query()->firstOrFail();
     $productA = Product::query()->create([
         'category_id' => $category->id,
         'title' => '券包商品 A',
@@ -1265,7 +1301,7 @@ it('does not show coupon controls during flash sale checkout', function (): void
     $this->seed();
 
     $user = User::factory()->create(['role' => 'customer']);
-    $category = \App\Models\Category::query()->firstOrFail();
+    $category = Category::query()->firstOrFail();
     $product = Product::query()->create([
         'category_id' => $category->id,
         'title' => '秒杀无优惠商品',
@@ -1308,7 +1344,7 @@ it('lets users manage addresses and preloads the default address during checkout
     $this->seed();
 
     $user = User::factory()->create(['role' => 'customer']);
-    $category = \App\Models\Category::query()->firstOrFail();
+    $category = Category::query()->firstOrFail();
     $product = Product::query()->create([
         'category_id' => $category->id,
         'title' => '地址物流商品',
@@ -1364,7 +1400,7 @@ it('lets users manage addresses and preloads the default address during checkout
 });
 
 it('renders product videos and optional product introduction', function (): void {
-    $category = \App\Models\Category::query()->create(['name' => '媒体', 'slug' => 'media', 'is_active' => true]);
+    $category = Category::query()->create(['name' => '媒体', 'slug' => 'media', 'is_active' => true]);
     $product = Product::query()->create([
         'category_id' => $category->id,
         'title' => '视频商品',
@@ -1398,7 +1434,7 @@ it('renders product videos and optional product introduction', function (): void
 
 it('reserves flash sale quota before selecting a variant and never returns cancelled quota to the flash sale', function (): void {
     $user = User::factory()->create(['role' => 'customer']);
-    $category = \App\Models\Category::query()->create(['name' => '秒杀', 'slug' => 'flash', 'is_active' => true]);
+    $category = Category::query()->create(['name' => '秒杀', 'slug' => 'flash', 'is_active' => true]);
     $product = Product::query()->create([
         'category_id' => $category->id,
         'title' => '秒杀商品',
@@ -1443,7 +1479,7 @@ it('reserves flash sale quota before selecting a variant and never returns cance
         ->post(route('flash-sales.reserve', $flashSale), ['quantity' => 1])
         ->assertRedirect();
 
-    $order = \App\Models\Order::query()->where('user_id', $user->id)->firstOrFail();
+    $order = Order::query()->where('user_id', $user->id)->firstOrFail();
 
     expect($flashSale->fresh()->sold_quantity)->toBe(1)
         ->and($order->items()->first()->product_variant_id)->toBeNull()
@@ -1499,7 +1535,7 @@ it('renders friend links from the homepage and friend link listing', function ()
 });
 
 it('lets customers complete online delivery orders by copying codes or downloading attachments', function (): void {
-    \Illuminate\Support\Facades\Storage::fake('digital_deliveries');
+    Storage::fake('digital_deliveries');
 
     $user = User::factory()->create(['role' => 'customer']);
     $order = Order::query()->create([
@@ -1517,7 +1553,7 @@ it('lets customers complete online delivery orders by copying codes or downloadi
         'digital_delivery_attachment_paths' => ['DIGI-1/file.txt'],
         'digital_delivery_sent_at' => now(),
     ]);
-    \Illuminate\Support\Facades\Storage::disk('digital_deliveries')->put('DIGI-1/file.txt', 'secret-file');
+    Storage::disk('digital_deliveries')->put('DIGI-1/file.txt', 'secret-file');
 
     $this->actingAs($user)
         ->get(route('orders.show', $order))
@@ -1545,7 +1581,7 @@ it('lets customers complete online delivery orders by copying codes or downloadi
 });
 
 it('shows the next flash sale time when a flash sale has not started yet', function (): void {
-    $category = \App\Models\Category::query()->create(['name' => '下次秒杀', 'slug' => 'next-flash', 'is_active' => true]);
+    $category = Category::query()->create(['name' => '下次秒杀', 'slug' => 'next-flash', 'is_active' => true]);
     $product = Product::query()->create([
         'category_id' => $category->id,
         'title' => '下次秒杀商品',
@@ -1579,7 +1615,7 @@ it('shows the next flash sale time when a flash sale has not started yet', funct
 
 it('calculates checkout shipping from warehouse province rates and product extra fees', function (): void {
     $user = User::factory()->create(['role' => 'customer']);
-    $category = \App\Models\Category::query()->create(['name' => '邮费', 'slug' => 'shipping-fee', 'is_active' => true]);
+    $category = Category::query()->create(['name' => '邮费', 'slug' => 'shipping-fee', 'is_active' => true]);
 
     $warehouse = Warehouse::query()->create([
         'name' => '测试 A 仓',
@@ -1666,7 +1702,7 @@ it('calculates checkout shipping from warehouse province rates and product extra
 
 it('warns and charges per warehouse when an order must ship from multiple warehouses', function (): void {
     $user = User::factory()->create(['role' => 'customer']);
-    $category = \App\Models\Category::query()->create(['name' => '多仓', 'slug' => 'multi-warehouse', 'is_active' => true]);
+    $category = Category::query()->create(['name' => '多仓', 'slug' => 'multi-warehouse', 'is_active' => true]);
 
     $warehouseA = Warehouse::query()->create(['name' => '测试 A 仓', 'country' => '中国', 'street' => 'A 仓占位', 'is_active' => true]);
     $warehouseB = Warehouse::query()->create(['name' => '测试 B 仓', 'country' => '中国', 'street' => 'B 仓占位', 'is_active' => true]);

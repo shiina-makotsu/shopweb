@@ -1,4 +1,4 @@
-<x-layouts.app title="AI 生图" :wide="true">
+<x-layouts.app title="AI" :wide="true">
     <section
         class="relative -mx-4 -my-4 min-h-[calc(100vh-160px)] overflow-hidden bg-[#f7f7f8] text-zinc-900"
         data-ai-image-workbench
@@ -13,8 +13,8 @@
                 <div class="flex items-center justify-between gap-4">
                     <a class="min-w-0 truncate text-xl font-semibold tracking-normal text-zinc-950" href="{{ \App\Support\Url::route('home') }}">{{ $settings?->site_name ?? $siteSettings?->site_name ?? config('app.name', 'ShopWeb') }}</a>
                     <div class="flex items-center gap-2">
-                        <button class="rounded-full border border-zinc-200 bg-zinc-100 px-5 py-2 text-sm font-semibold text-zinc-950 shadow-inner" type="button">画廊</button>
-                        <button class="hidden rounded-full px-5 py-2 text-sm text-zinc-500 md:inline-flex" type="button">Agent</button>
+                        <button class="rounded-full border border-zinc-200 bg-zinc-100 px-5 py-2 text-sm font-semibold text-zinc-950 shadow-inner" type="button" data-mode-button="gallery">画廊</button>
+                        <button class="inline-flex rounded-full px-5 py-2 text-sm text-zinc-500" type="button" data-mode-button="chat">Chat</button>
                         <button class="inline-flex h-10 w-10 items-center justify-center rounded-full text-zinc-600 hover:bg-zinc-100" type="button" data-download-latest title="下载最近图片" aria-label="下载最近图片">
                             <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
                         </button>
@@ -28,7 +28,7 @@
                 </div>
             </header>
 
-            <div class="px-5 pb-44 pt-5">
+            <div class="px-5 pb-44 pt-5" data-gallery-view>
                 <div class="mb-4 grid gap-3 lg:grid-cols-[3rem_9rem_1fr]">
                     <button class="inline-flex h-12 w-12 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-500 shadow-sm hover:bg-zinc-50" type="button" data-star-filter aria-label="收藏筛选">
                         <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="2"><path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.8 1-6.1-4.4-4.3 6.1-.9L12 3Z"/></svg>
@@ -50,103 +50,168 @@
                     </label>
                 </div>
 
-                <div class="grid gap-4 md:grid-cols-2 2xl:grid-cols-3" data-ai-results>
-                    <div class="col-span-full rounded-lg border border-dashed border-zinc-300 bg-white px-6 py-16 text-center text-sm text-zinc-500">
+                <div class="grid gap-3 lg:grid-cols-3" data-ai-results>
+                    <div class="col-span-full rounded-2xl border border-dashed border-zinc-300 bg-white px-6 py-16 text-center text-sm text-zinc-500">
                         从底部输入提示词开始生成，完成后的图片会出现在这里。
                     </div>
                 </div>
             </div>
 
-            <div class="pointer-events-none fixed inset-x-0 bottom-5 z-40 px-4">
-                <div class="pointer-events-auto mx-auto max-w-5xl rounded-lg border border-zinc-200 bg-white/95 p-4 shadow-2xl shadow-zinc-950/10 backdrop-blur">
-                    <div class="mb-3 hidden max-h-20 items-center gap-3 overflow-x-auto pb-1 flex" data-reference-preview></div>
+            <div class="hidden px-5 pb-44 pt-5" data-chat-view>
+                <div class="mx-auto grid min-h-[calc(100vh-260px)] max-w-6xl gap-4 lg:grid-cols-[16rem_1fr]">
+                    <aside class="rounded-3xl border border-zinc-200 bg-white p-3 shadow-sm lg:sticky lg:top-20 lg:self-start">
+                        <div class="flex items-center justify-between gap-2 px-2 py-1">
+                            <h2 class="text-sm font-semibold text-zinc-950">会话</h2>
+                            <button class="inline-flex h-9 w-9 items-center justify-center rounded-full bg-zinc-950 text-white hover:bg-zinc-800" type="button" data-chat-new title="新增会话" aria-label="新增会话">
+                                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="2"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+                            </button>
+                        </div>
+                        <div class="mt-3 space-y-2" data-chat-sessions></div>
+                    </aside>
 
-                    <textarea
-                        class="max-h-44 min-h-14 w-full resize-none rounded-lg border border-zinc-200 bg-white px-5 py-4 text-sm leading-6 text-zinc-900 outline-none placeholder:text-zinc-400 focus:border-zinc-300"
-                        name="prompt"
-                        placeholder="描述你想生成的图片，可输入 @ 来指定参考图..."
-                        data-ai-prompt
-                        required
-                    ></textarea>
+                    <section class="flex min-h-[calc(100vh-260px)] flex-col rounded-3xl border border-zinc-200 bg-white shadow-sm">
+                        <div class="flex items-center justify-between gap-3 border-b border-zinc-100 px-5 py-4">
+                            <div class="min-w-0">
+                                <h2 class="truncate text-base font-semibold text-zinc-950" data-chat-title>新会话</h2>
+                                <p class="mt-1 text-xs text-zinc-500" data-chat-meta>0 条消息</p>
+                            </div>
+                            <button class="inline-flex items-center gap-2 rounded-full border border-zinc-200 px-3 py-2 text-xs font-medium text-zinc-600 hover:bg-zinc-50" type="button" data-chat-delete>
+                                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v5"/><path d="M14 11v5"/></svg>
+                                删除会话
+                            </button>
+                        </div>
 
-                    <div class="mt-3 flex flex-wrap items-end gap-3">
-                        <input class="hidden" type="file" name="reference_images[]" accept="image/png,image/jpeg,image/gif,image/webp" multiple data-reference-input>
+                        <div class="flex flex-1 flex-col gap-3 overflow-y-auto px-5 py-5" data-chat-messages>
+                            <div class="rounded-2xl border border-dashed border-zinc-300 bg-white px-6 py-16 text-center text-sm text-zinc-500">
+                                暂无消息。
+                            </div>
+                        </div>
+                    </section>
+                </div>
+            </div>
 
-                        <button class="inline-flex h-12 w-12 items-center justify-center rounded-lg bg-zinc-100 text-zinc-600 hover:bg-zinc-200" type="button" data-reference-button title="添加参考图" aria-label="添加参考图">
-                            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="2"><path d="M21.4 11.6 12 21a6 6 0 0 1-8.5-8.5l10-10a4 4 0 1 1 5.7 5.7l-10 10a2 2 0 0 1-2.8-2.8l9.3-9.3"/></svg>
+            <div class="pointer-events-none fixed inset-x-0 bottom-4 z-40 px-4">
+                <div class="pointer-events-auto mx-auto max-w-6xl rounded-[28px] border border-zinc-200 bg-white/95 p-3 shadow-2xl shadow-zinc-950/10 backdrop-blur">
+                    <div class="mb-2 hidden max-h-16 items-center gap-2 overflow-x-auto pb-1 flex" data-reference-preview></div>
+                    <div class="mb-2 hidden max-h-16 items-center gap-2 overflow-x-auto pb-1" data-chat-files-preview></div>
+
+                    <div class="relative">
+                        <textarea
+                            class="max-h-32 min-h-[42px] w-full resize-none rounded-2xl border border-zinc-200 bg-white px-4 py-2.5 pr-10 text-sm leading-5 text-zinc-900 outline-none placeholder:text-zinc-400 focus:border-zinc-300"
+                            name="prompt"
+                            placeholder="描述你想生成的图片..."
+                            data-ai-prompt
+                            required
+                        ></textarea>
+                        <button class="absolute right-2 top-2 hidden h-7 w-7 items-center justify-center rounded-full bg-zinc-100 text-zinc-500 hover:bg-zinc-200 hover:text-zinc-800" type="button" data-clear-prompt aria-label="清空提示词">
+                            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
                         </button>
+                    </div>
 
-                        <label class="min-w-28 flex-1 text-xs font-medium text-zinc-400 sm:flex-none">
-                            尺寸
-                            <select class="mt-1 h-10 w-full rounded-lg border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-900" name="size_mode" data-size-mode>
-                                <option value="auto">auto</option>
-                                <option value="ratio">按比例</option>
-                                <option value="custom">自定义宽高</option>
-                            </select>
-                        </label>
+                    <div class="mt-2 flex flex-wrap items-end gap-2">
+                        <input class="hidden" type="file" name="reference_images[]" accept="image/png,image/jpeg,image/gif,image/webp" multiple data-reference-input>
+                        <input class="hidden" type="file" name="chat_files[]" multiple data-chat-files-input>
 
-                        <label class="hidden min-w-28 flex-1 text-xs font-medium text-zinc-400 sm:flex-none" data-ratio-panel>
-                            比例
-                            <select class="mt-1 h-10 w-full rounded-lg border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-900" name="ratio">
-                                <option value="1:1">1:1</option>
-                                <option value="4:3">4:3</option>
-                                <option value="3:4">3:4</option>
-                                <option value="16:9">16:9</option>
-                                <option value="9:16">9:16</option>
-                                <option value="21:9">21:9</option>
-                            </select>
-                        </label>
+                        <div class="flex flex-wrap items-end gap-2" data-image-controls>
+                            <button class="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-600 hover:bg-zinc-200" type="button" data-reference-button title="添加参考图" aria-label="添加参考图">
+                                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="2"><path d="M21.4 11.6 12 21a6 6 0 0 1-8.5-8.5l10-10a4 4 0 1 1 5.7 5.7l-10 10a2 2 0 0 1-2.8-2.8l9.3-9.3"/></svg>
+                            </button>
 
-                        <div class="hidden grid min-w-44 grid-cols-2 gap-2" data-custom-size-panel>
-                            <label class="text-xs font-medium text-zinc-400">
-                                宽
-                                <input class="mt-1 h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-900" name="width" type="number" min="256" max="4096" step="64" value="1024">
+                            <label class="min-w-28 flex-1 text-xs font-medium text-zinc-400 sm:flex-none">
+                                尺寸
+                                <select class="mt-1 h-9 w-full rounded-2xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-900" name="size_mode" data-size-mode>
+                                    <option value="auto">auto</option>
+                                    <option value="ratio">按比例</option>
+                                    <option value="custom">自定义宽高</option>
+                                </select>
                             </label>
-                            <label class="text-xs font-medium text-zinc-400">
-                                高
-                                <input class="mt-1 h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-900" name="height" type="number" min="256" max="4096" step="64" value="1024">
+
+                            <label class="hidden min-w-28 flex-1 text-xs font-medium text-zinc-400 sm:flex-none" data-ratio-panel>
+                                比例
+                                <select class="mt-1 h-9 w-full rounded-2xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-900" name="ratio">
+                                    <option value="1:1">1:1</option>
+                                    <option value="4:3">4:3</option>
+                                    <option value="3:4">3:4</option>
+                                    <option value="16:9">16:9</option>
+                                    <option value="9:16">9:16</option>
+                                    <option value="21:9">21:9</option>
+                                </select>
+                            </label>
+
+                            <div class="hidden grid min-w-44 grid-cols-2 gap-2" data-custom-size-panel>
+                                <label class="text-xs font-medium text-zinc-400">
+                                    宽
+                                    <input class="mt-1 h-9 w-full rounded-2xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-900" name="width" type="number" min="256" max="4096" step="64" value="1024">
+                                </label>
+                                <label class="text-xs font-medium text-zinc-400">
+                                    高
+                                    <input class="mt-1 h-9 w-full rounded-2xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-900" name="height" type="number" min="256" max="4096" step="64" value="1024">
+                                </label>
+                            </div>
+
+                            <label class="min-w-28 flex-1 text-xs font-medium text-zinc-400 sm:flex-none">
+                                质量
+                                <select class="mt-1 h-9 w-full rounded-2xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-900" name="quality">
+                                    <option value="auto">auto</option>
+                                    <option value="low">low</option>
+                                    <option value="medium">medium</option>
+                                    <option value="high">high</option>
+                                </select>
+                            </label>
+
+                            <label class="min-w-28 flex-1 text-xs font-medium text-zinc-400 sm:flex-none">
+                                格式
+                                <select class="mt-1 h-9 w-full rounded-2xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-900" name="output_format">
+                                    <option value="png">PNG</option>
+                                    <option value="jpeg">JPEG</option>
+                                    <option value="webp">WebP</option>
+                                    <option value="auto">自动</option>
+                                </select>
+                            </label>
+
+                            <label class="min-w-28 flex-1 text-xs font-medium text-zinc-400 sm:flex-none">
+                                是否透明
+                                <select class="mt-1 h-9 w-full rounded-2xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-900" name="transparent">
+                                    <option value="0">否</option>
+                                    <option value="1">是</option>
+                                </select>
+                            </label>
+
+                            <label class="min-w-28 flex-1 text-xs font-medium text-zinc-400 sm:flex-none">
+                                数量
+                                <input class="mt-1 h-9 w-full rounded-2xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-900" name="count" type="number" min="1" max="8" value="1">
                             </label>
                         </div>
 
-                        <label class="min-w-28 flex-1 text-xs font-medium text-zinc-400 sm:flex-none">
-                            质量
-                            <select class="mt-1 h-10 w-full rounded-lg border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-900" name="quality">
-                                <option value="auto">auto</option>
-                                <option value="low">low</option>
-                                <option value="medium">medium</option>
-                                <option value="high">high</option>
-                            </select>
-                        </label>
+                        <div class="hidden flex-1 flex-wrap items-end gap-2" data-chat-controls>
+                            <button class="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-600 hover:bg-zinc-200" type="button" data-chat-files-button title="附加文件" aria-label="附加文件">
+                                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="2"><path d="M21.4 11.6 12 21a6 6 0 0 1-8.5-8.5l10-10a4 4 0 1 1 5.7 5.7l-10 10a2 2 0 0 1-2.8-2.8l9.3-9.3"/></svg>
+                            </button>
 
-                        <label class="min-w-28 flex-1 text-xs font-medium text-zinc-400 sm:flex-none">
-                            格式
-                            <select class="mt-1 h-10 w-full rounded-lg border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-900" name="output_format">
-                                <option value="png">PNG</option>
-                                <option value="jpeg">JPEG</option>
-                                <option value="webp">WebP</option>
-                                <option value="auto">自动</option>
-                            </select>
-                        </label>
+                            <label class="min-w-32 flex-1 text-xs font-medium text-zinc-400 sm:flex-none">
+                                推理模式
+                                <select class="mt-1 h-9 w-full rounded-2xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-900" name="reasoning_mode" data-chat-reasoning>
+                                    <option value="low">低</option>
+                                    <option value="medium">中</option>
+                                    <option value="high">高</option>
+                                    <option value="ultra">超高</option>
+                                </select>
+                            </label>
 
-                        <label class="min-w-28 flex-1 text-xs font-medium text-zinc-400 sm:flex-none">
-                            是否透明
-                            <select class="mt-1 h-10 w-full rounded-lg border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-900" name="transparent">
-                                <option value="0">否</option>
-                                <option value="1">是</option>
-                            </select>
-                        </label>
+                            <label class="ml-auto min-w-48 flex-1 text-xs font-medium text-zinc-400 sm:max-w-64 sm:flex-none">
+                                模型
+                                <select class="mt-1 h-9 w-full rounded-2xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-900" name="chat_model" data-chat-model-select>
+                                    <option value="">默认模型</option>
+                                </select>
+                            </label>
+                        </div>
 
-                        <label class="min-w-28 flex-1 text-xs font-medium text-zinc-400 sm:flex-none">
-                            数量
-                            <input class="mt-1 h-10 w-full rounded-lg border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-900" name="count" type="number" min="1" max="8" value="1">
-                        </label>
-
-                        <button class="ml-auto inline-flex h-12 w-12 items-center justify-center rounded-lg bg-blue-700 text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-zinc-200" type="submit" data-generate-button title="生成" aria-label="生成">
+                        <button class="ml-auto inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-700 text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-zinc-200" type="submit" data-generate-button title="生成" aria-label="生成">
                             <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
                         </button>
                     </div>
 
-                    <p class="mt-3 text-xs text-zinc-500" data-ai-status>等待填写提示词。</p>
+                    <p class="mt-2 text-xs text-zinc-500" data-ai-status>等待填写提示词。</p>
                 </div>
             </div>
 
@@ -166,8 +231,21 @@
                         </div>
 
                         <label class="block text-sm">
+                            <span class="font-medium text-zinc-700">当前配置</span>
+                            <select class="mt-1 w-full rounded-lg border border-zinc-200 px-4 py-3 text-sm outline-none focus:border-zinc-400" name="config_mode" data-config-mode>
+                                <option value="default">默认配置</option>
+                                <option value="custom">自定义配置</option>
+                            </select>
+                        </label>
+
+                        <label class="block text-sm">
+                            <span class="font-medium text-zinc-700">配置名称</span>
+                            <input class="mt-1 w-full rounded-lg border border-zinc-200 px-4 py-3 text-sm outline-none focus:border-zinc-400" name="config_name" type="text" value="默认配置" data-config-name>
+                        </label>
+
+                        <label class="block text-sm">
                             <span class="font-medium text-zinc-700">API URL</span>
-                            <input class="mt-1 w-full rounded-lg border border-zinc-200 px-4 py-3 text-sm outline-none focus:border-zinc-400" name="endpoint" type="url" placeholder="https://api.openai.com/v1" data-ai-endpoint required>
+                            <input class="mt-1 w-full rounded-lg border border-zinc-200 px-4 py-3 text-sm outline-none focus:border-zinc-400" name="endpoint" type="url" placeholder="https://api.openai.com/v1" data-ai-endpoint>
                         </label>
 
                         <label class="block text-sm">
@@ -308,8 +386,10 @@
 
         <section class="fixed inset-0 z-50 hidden bg-white" data-detail-panel>
             <div class="grid h-full lg:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
-                <div class="flex min-h-0 items-center justify-center bg-zinc-950 p-4">
+                <div class="relative flex min-h-0 items-center justify-center bg-zinc-950 p-4">
+                    <span class="absolute left-4 top-4 rounded-lg bg-zinc-950/70 px-2 py-1 text-xs font-semibold text-white" data-detail-time></span>
                     <img class="max-h-full max-w-full rounded-lg object-contain" src="" alt="" data-detail-image>
+                    <div class="hidden max-w-xl rounded-2xl border border-red-400/30 bg-red-500/10 px-5 py-4 text-sm leading-6 text-red-100" data-detail-error></div>
                 </div>
                 <div class="min-h-0 overflow-y-auto border-l border-zinc-200 bg-white">
                     <div class="sticky top-0 z-10 flex items-center justify-between border-b border-zinc-200 bg-white px-5 py-4">
@@ -355,9 +435,12 @@
                 const status = root.querySelector('[data-ai-status]');
                 const endpointInput = root.querySelector('[data-ai-endpoint]');
                 const apiKeyInput = root.querySelector('[data-ai-key]');
+                const configMode = root.querySelector('[data-config-mode]');
+                const configName = root.querySelector('[data-config-name]');
                 const modelSelect = root.querySelector('[data-ai-model-select]');
                 const manualModel = root.querySelector('[data-ai-manual-model]');
                 const promptInput = root.querySelector('[data-ai-prompt]');
+                const clearPromptButton = root.querySelector('[data-clear-prompt]');
                 const referenceInput = root.querySelector('[data-reference-input]');
                 const referencePreview = root.querySelector('[data-reference-preview]');
                 const referenceEditor = root.querySelector('[data-reference-editor]');
@@ -378,12 +461,28 @@
                 const helpPanel = root.querySelector('[data-help-panel]');
                 const statusFilter = root.querySelector('[data-status-filter]');
                 const gallerySearch = root.querySelector('[data-gallery-search]');
+                const galleryView = root.querySelector('[data-gallery-view]');
+                const chatView = root.querySelector('[data-chat-view]');
+                const chatMessages = root.querySelector('[data-chat-messages]');
+                const chatSessions = root.querySelector('[data-chat-sessions]');
+                const chatTitle = root.querySelector('[data-chat-title]');
+                const chatMeta = root.querySelector('[data-chat-meta]');
+                const imageControls = root.querySelector('[data-image-controls]');
+                const chatControls = root.querySelector('[data-chat-controls]');
+                const chatFilesInput = root.querySelector('[data-chat-files-input]');
+                const chatFilesPreview = root.querySelector('[data-chat-files-preview]');
+                const chatModelSelect = root.querySelector('[data-chat-model-select]');
+                const chatReasoning = root.querySelector('[data-chat-reasoning]');
                 const csrf = form.querySelector('input[name="_token"]')?.value ?? document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
 
                 const tasks = new Map();
+                const chatStore = new Map();
+                const chatFileItems = [];
                 let referenceItems = [];
                 let activeReferenceIndex = null;
                 let modelFetchTimer = null;
+                let activeChatId = null;
+                let currentMode = 'gallery';
 
                 const setStatus = (message, tone = 'zinc') => {
                     status.textContent = message;
@@ -391,6 +490,40 @@
                 };
 
                 const activeModel = () => manualModel.value.trim() || modelSelect.value;
+                const selectedChatModel = () => chatModelSelect.value || activeModel() || '默认模型';
+
+                const setMode = (mode) => {
+                    currentMode = mode === 'chat' ? 'chat' : 'gallery';
+                    galleryView.classList.toggle('hidden', currentMode !== 'gallery');
+                    chatView.classList.toggle('hidden', currentMode !== 'chat');
+                    imageControls?.classList.toggle('hidden', currentMode === 'chat');
+                    imageControls?.classList.toggle('flex', currentMode !== 'chat');
+                    chatControls?.classList.toggle('hidden', currentMode !== 'chat');
+                    chatControls?.classList.toggle('flex', currentMode === 'chat');
+                    referencePreview.classList.toggle('hidden', currentMode === 'chat' || referenceItems.length === 0);
+                    chatFilesPreview.classList.toggle('hidden', currentMode !== 'chat' || chatFileItems.length === 0);
+                    chatFilesPreview.classList.toggle('flex', currentMode === 'chat' && chatFileItems.length > 0);
+                    promptInput.placeholder = currentMode === 'chat' ? '向 AI 发送消息...' : '描述你想生成的图片...';
+                    generateButton.title = currentMode === 'chat' ? '发送' : '生成';
+                    generateButton.setAttribute('aria-label', currentMode === 'chat' ? '发送' : '生成');
+
+                    root.querySelectorAll('[data-mode-button]').forEach((button) => {
+                        const active = button.dataset.modeButton === currentMode;
+                        button.classList.toggle('border', active);
+                        button.classList.toggle('border-zinc-200', active);
+                        button.classList.toggle('bg-zinc-100', active);
+                        button.classList.toggle('font-semibold', active);
+                        button.classList.toggle('text-zinc-950', active);
+                        button.classList.toggle('shadow-inner', active);
+                        button.classList.toggle('text-zinc-500', !active);
+                    });
+
+                    setStatus(currentMode === 'chat' ? '等待输入聊天消息。' : '等待填写提示词。');
+                };
+
+                root.querySelectorAll('[data-mode-button]').forEach((button) => {
+                    button.addEventListener('click', () => setMode(button.dataset.modeButton));
+                });
 
                 const openSettings = () => {
                     settingsPanel.classList.remove('translate-x-full');
@@ -411,13 +544,208 @@
                     window.setTimeout(() => helpPanel.classList.add('hidden'), 5000);
                 });
 
+                const updateConfigMode = () => {
+                    const custom = configMode.value === 'custom';
+                    endpointInput.disabled = !custom;
+                    apiKeyInput.disabled = !custom;
+                    endpointInput.closest('label')?.classList.toggle('opacity-50', !custom);
+                    apiKeyInput.closest('label')?.classList.toggle('opacity-50', !custom);
+
+                    if (!custom && !configName.value.trim()) {
+                        configName.value = '默认配置';
+                    }
+                };
+
+                configMode.addEventListener('change', () => {
+                    if (configMode.value === 'default') {
+                        configName.value = configName.value.trim() || '默认配置';
+                    }
+                    updateConfigMode();
+                });
+                updateConfigMode();
+
                 const autoGrowPrompt = () => {
                     promptInput.style.height = 'auto';
-                    promptInput.style.height = `${Math.min(promptInput.scrollHeight, 176)}px`;
+                    promptInput.style.height = `${Math.min(promptInput.scrollHeight, 128)}px`;
+                    clearPromptButton?.classList.toggle('hidden', !promptInput.value.trim());
+                    clearPromptButton?.classList.toggle('flex', Boolean(promptInput.value.trim()));
                 };
 
                 promptInput.addEventListener('input', autoGrowPrompt);
+                clearPromptButton?.addEventListener('click', () => {
+                    promptInput.value = '';
+                    autoGrowPrompt();
+                    promptInput.focus();
+                });
+                promptInput.addEventListener('keydown', (event) => {
+                    if (currentMode !== 'chat' || event.key !== 'Enter' || event.shiftKey || event.isComposing) return;
+
+                    event.preventDefault();
+                    form.requestSubmit();
+                });
                 autoGrowPrompt();
+
+                const syncChatModelOptions = () => {
+                    const current = chatModelSelect.value;
+                    chatModelSelect.innerHTML = '<option value="">默认模型</option>';
+
+                    Array.from(modelSelect.options).forEach((option) => {
+                        if (!option.value) return;
+
+                        const clone = document.createElement('option');
+                        clone.value = option.value;
+                        clone.textContent = option.textContent;
+                        chatModelSelect.appendChild(clone);
+                    });
+
+                    const manual = manualModel.value.trim();
+                    if (manual && !Array.from(chatModelSelect.options).some((option) => option.value === manual)) {
+                        const option = document.createElement('option');
+                        option.value = manual;
+                        option.textContent = `手动：${manual}`;
+                        chatModelSelect.appendChild(option);
+                    }
+
+                    if (current && Array.from(chatModelSelect.options).some((option) => option.value === current)) {
+                        chatModelSelect.value = current;
+                    }
+                };
+
+                modelSelect.addEventListener('change', syncChatModelOptions);
+                manualModel.addEventListener('input', syncChatModelOptions);
+
+                const currentChat = () => chatStore.get(activeChatId);
+
+                const createChatSession = (title = '新会话') => {
+                    const id = `chat-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+                    const session = {
+                        id,
+                        title,
+                        messages: [],
+                        createdAt: new Date(),
+                        updatedAt: new Date(),
+                    };
+
+                    chatStore.set(id, session);
+                    activeChatId = id;
+                    renderChatSessions();
+                    renderChats();
+
+                    return session;
+                };
+
+                const deleteActiveChat = () => {
+                    const session = currentChat();
+                    session?.messages.forEach((message) => {
+                        (message.files ?? []).forEach((file) => {
+                            if (file.url) URL.revokeObjectURL(file.url);
+                        });
+                    });
+
+                    if (activeChatId) chatStore.delete(activeChatId);
+
+                    activeChatId = chatStore.keys().next().value ?? null;
+
+                    if (!activeChatId) {
+                        createChatSession();
+                        setStatus('会话已删除。', 'green');
+                        return;
+                    }
+
+                    renderChatSessions();
+                    renderChats();
+                    setStatus('会话已删除。', 'green');
+                };
+
+                const chatReasoningLabel = () => chatReasoning.options[chatReasoning.selectedIndex]?.textContent || '低';
+                const chatTitleFromMessage = (message) => {
+                    const title = String(message || '').replace(/\s+/g, ' ').trim();
+                    if (!title) return '新会话';
+
+                    return title.length > 24 ? `${title.slice(0, 24)}...` : title;
+                };
+
+                const renderChatSessions = () => {
+                    chatSessions.innerHTML = '';
+
+                    Array.from(chatStore.values()).forEach((session) => {
+                        const active = session.id === activeChatId;
+                        const button = document.createElement('button');
+                        button.className = `block w-full rounded-2xl px-3 py-3 text-left text-sm transition ${active ? 'bg-zinc-950 text-white' : 'text-zinc-700 hover:bg-zinc-100'}`;
+                        button.type = 'button';
+                        button.dataset.chatSession = session.id;
+                        button.innerHTML = `
+                            <span class="block truncate font-medium">${escapeHtml(session.title)}</span>
+                            <span class="mt-1 block text-xs ${active ? 'text-white/55' : 'text-zinc-400'}">${session.messages.length} 条消息</span>
+                        `;
+                        chatSessions.appendChild(button);
+                    });
+                };
+
+                const renderChatFiles = () => {
+                    chatFilesPreview.innerHTML = '';
+                    chatFilesPreview.classList.toggle('hidden', currentMode !== 'chat' || chatFileItems.length === 0);
+                    chatFilesPreview.classList.toggle('flex', currentMode === 'chat' && chatFileItems.length > 0);
+
+                    chatFileItems.forEach((item, index) => {
+                        const chip = document.createElement('div');
+                        chip.className = 'group flex h-14 max-w-64 shrink-0 items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-2 shadow-sm';
+                        chip.innerHTML = `
+                            ${item.url ? `<img class="h-10 w-10 rounded-xl object-cover" src="${escapeAttribute(item.url)}" alt="">` : '<span class="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-100 text-xs font-semibold text-zinc-500">FILE</span>'}
+                            <span class="min-w-0 flex-1">
+                                <span class="block truncate text-xs font-medium text-zinc-700">${escapeHtml(item.file.name)}</span>
+                                <span class="block text-[11px] text-zinc-400">${formatBytes(item.file.size)}</span>
+                            </span>
+                            <button class="hidden h-6 w-6 items-center justify-center rounded-full bg-zinc-100 text-zinc-500 group-hover:flex" type="button" data-remove-chat-file="${index}" aria-label="移除附件">×</button>
+                        `;
+                        chatFilesPreview.appendChild(chip);
+                    });
+                };
+
+                const clearChatFiles = ({ revoke = true } = {}) => {
+                    if (revoke) {
+                        chatFileItems.forEach((item) => {
+                            if (item.url) URL.revokeObjectURL(item.url);
+                        });
+                    }
+
+                    chatFileItems.length = 0;
+                    chatFilesInput.value = '';
+                    renderChatFiles();
+                };
+
+                root.querySelector('[data-chat-new]')?.addEventListener('click', () => {
+                    createChatSession();
+                    setStatus('已新增会话。', 'green');
+                });
+                root.querySelector('[data-chat-delete]')?.addEventListener('click', deleteActiveChat);
+                chatSessions.addEventListener('click', (event) => {
+                    const button = event.target.closest('[data-chat-session]');
+                    if (!button) return;
+
+                    activeChatId = button.dataset.chatSession;
+                    renderChatSessions();
+                    renderChats();
+                });
+                root.querySelector('[data-chat-files-button]')?.addEventListener('click', () => chatFilesInput.click());
+                chatFilesInput.addEventListener('change', () => {
+                    Array.from(chatFilesInput.files ?? []).forEach((file) => {
+                        const url = file.type.startsWith('image/') ? URL.createObjectURL(file) : null;
+                        chatFileItems.push({ file, url });
+                    });
+
+                    chatFilesInput.value = '';
+                    renderChatFiles();
+                });
+                chatFilesPreview.addEventListener('click', (event) => {
+                    const button = event.target.closest('[data-remove-chat-file]');
+                    if (!button) return;
+
+                    const item = chatFileItems[Number(button.dataset.removeChatFile)];
+                    if (item?.url) URL.revokeObjectURL(item.url);
+                    chatFileItems.splice(Number(button.dataset.removeChatFile), 1);
+                    renderChatFiles();
+                });
 
                 const updateSizeMode = () => {
                     const mode = sizeMode.value;
@@ -448,11 +776,11 @@
 
                 const renderReferencePreview = () => {
                     referencePreview.innerHTML = '';
-                    referencePreview.classList.toggle('hidden', referenceItems.length === 0);
+                    referencePreview.classList.toggle('hidden', currentMode === 'chat' || referenceItems.length === 0);
 
                     referenceItems.forEach((reference, index) => {
                         const item = document.createElement('div');
-                        item.className = 'group relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm';
+                        item.className = 'group relative h-14 w-14 shrink-0 overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm';
                         const url = reference.previewUrl;
                         item.innerHTML = `
                             <img class="aspect-square w-full object-cover" src="${escapeAttribute(url)}" alt="">
@@ -466,7 +794,10 @@
                         item.querySelector('img')?.addEventListener('load', () => {}, { once: true });
                         item.innerHTML = `
                             <button class="block h-full w-full" type="button" data-edit-reference="${index}" aria-label="编辑参考图">
-                                <img class="h-full w-full object-cover" src="${escapeAttribute(reference.previewUrl)}" alt="">
+                                <img class="h-full w-full object-cover transition duration-150 group-hover:brightness-50" src="${escapeAttribute(reference.previewUrl)}" alt="">
+                                <span class="absolute inset-0 hidden items-center justify-center text-white group-hover:flex">
+                                    <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                                </span>
                                 <span class="absolute bottom-1 left-1 rounded-full bg-zinc-950/75 px-1.5 py-0.5 text-[10px] font-semibold text-white">${index + 1}</span>
                                 ${reference.maskFile ? '<span class="absolute bottom-1 right-1 rounded-full bg-emerald-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">遮罩</span>' : ''}
                                 ${reference.editNote ? '<span class="absolute inset-x-0 bottom-0 h-1 bg-blue-500"></span>' : ''}
@@ -491,7 +822,7 @@
                     const item = referenceItems[index];
                     if (!item) return;
 
-                    URL.revokeObjectURL(item.previewUrl);
+                    if (item.ownedPreviewUrl !== false) URL.revokeObjectURL(item.previewUrl);
                     if (item.maskPreviewUrl) URL.revokeObjectURL(item.maskPreviewUrl);
                     referenceItems.splice(index, 1);
                     referenceInput.value = '';
@@ -503,6 +834,41 @@
                     }
 
                     renderReferencePreview();
+                };
+
+                const resetReferences = () => {
+                    referenceItems.forEach((item) => {
+                        if (item.ownedPreviewUrl !== false) URL.revokeObjectURL(item.previewUrl);
+                        if (item.maskPreviewUrl) URL.revokeObjectURL(item.maskPreviewUrl);
+                    });
+                    referenceItems = [];
+                    referenceInput.value = '';
+                    renderReferencePreview();
+                };
+
+                const cloneTaskReferences = (task) => task.references.map((reference) => ({
+                    file: reference.file,
+                    editNote: reference.editNote || '',
+                    maskFile: reference.maskFile || null,
+                    previewUrl: reference.url,
+                    ownedPreviewUrl: false,
+                }));
+
+                const imageToReference = async (image, task) => {
+                    const src = image?.url || image?.data_url || '';
+                    if (!src) return null;
+
+                    const response = await fetch(src);
+                    const blob = await response.blob();
+                    const extension = (blob.type.split('/')[1] || task.config.format || 'png').replace('jpeg', 'jpg');
+                    const file = new File([blob], `ai-output-${task.id}.${extension}`, { type: blob.type || 'image/png' });
+
+                    return {
+                        file,
+                        editNote: '',
+                        maskFile: null,
+                        previewUrl: URL.createObjectURL(file),
+                    };
                 };
 
                 const openReferenceEditor = (index) => {
@@ -572,15 +938,19 @@
                 });
 
                 const fetchModels = async () => {
-                    if (!endpointInput.value.trim()) {
+                    if (configMode.value === 'custom' && !endpointInput.value.trim()) {
                         setStatus('请先在右上角设置里填写 API URL。', 'red');
                         openSettings();
                         return;
                     }
 
                     const payload = new FormData();
-                    payload.append('endpoint', endpointInput.value);
-                    payload.append('api_key', apiKeyInput.value);
+                    payload.append('config_mode', configMode.value);
+                    payload.append('config_name', configName.value);
+                    if (configMode.value === 'custom') {
+                        payload.append('endpoint', endpointInput.value);
+                        payload.append('api_key', apiKeyInput.value);
+                    }
                     setStatus('正在获取可用图片模型...');
 
                     try {
@@ -604,6 +974,7 @@
                                 modelSelect.appendChild(option);
                             });
                         }
+                        syncChatModelOptions();
 
                         setStatus(`已获取 ${data.models?.length ?? 0} 个模型。`, 'green');
                     } catch (error) {
@@ -613,13 +984,14 @@
 
                 const scheduleModelFetch = () => {
                     window.clearTimeout(modelFetchTimer);
-                    if (!endpointInput.value.trim()) return;
+                    if (configMode.value === 'custom' && !endpointInput.value.trim()) return;
                     modelFetchTimer = window.setTimeout(fetchModels, 700);
                 };
 
                 root.querySelector('[data-fetch-models]')?.addEventListener('click', fetchModels);
-                endpointInput.addEventListener('change', fetchModels);
-                endpointInput.addEventListener('blur', fetchModels);
+                configMode.addEventListener('change', scheduleModelFetch);
+                endpointInput.addEventListener('change', scheduleModelFetch);
+                endpointInput.addEventListener('blur', scheduleModelFetch);
                 apiKeyInput.addEventListener('change', scheduleModelFetch);
                 apiKeyInput.addEventListener('blur', scheduleModelFetch);
 
@@ -651,9 +1023,16 @@
                     const payload = new FormData(form);
                     payload.set('model', model);
                     payload.set('prompt', composedPrompt());
+                    payload.set('config_mode', configMode.value);
+                    payload.set('config_name', configName.value.trim() || (configMode.value === 'default' ? '默认配置' : '自定义配置'));
                     payload.delete('manual_model');
                     payload.delete('reference_images[]');
                     payload.delete('mask_image');
+
+                    if (configMode.value !== 'custom') {
+                        payload.delete('endpoint');
+                        payload.delete('api_key');
+                    }
 
                     referenceItems.forEach((reference) => payload.append('reference_images[]', reference.file));
 
@@ -673,7 +1052,14 @@
                     event.preventDefault();
 
                     if (!promptInput.value.trim()) {
-                        setStatus('请先填写提示词。', 'red');
+                        setStatus(currentMode === 'chat' ? '请先输入聊天消息。' : '请先填写提示词。', 'red');
+                        return;
+                    }
+
+                    if (currentMode === 'chat') {
+                        appendChatMessage(promptInput.value.trim());
+                        promptInput.value = '';
+                        autoGrowPrompt();
                         return;
                     }
 
@@ -788,6 +1174,86 @@
                     }
                 };
 
+                const appendChatMessage = (message) => {
+                    const session = currentChat() || createChatSession();
+                    const model = selectedChatModel();
+                    const reasoning = chatReasoning.value;
+                    const reasoningLabel = chatReasoningLabel();
+                    const files = chatFileItems.map((item) => ({
+                        name: item.file.name,
+                        size: item.file.size,
+                        type: item.file.type || 'file',
+                        url: item.url,
+                    }));
+
+                    session.messages.push({
+                        role: 'user',
+                        content: message,
+                        files,
+                        model,
+                        reasoning,
+                        reasoningLabel,
+                        createdAt: new Date(),
+                    });
+                    session.messages.push({
+                        role: 'assistant',
+                        content: '收到。当前聊天接口尚未接入真实模型回复。',
+                        files: [],
+                        model,
+                        reasoning,
+                        reasoningLabel,
+                        createdAt: new Date(),
+                    });
+                    session.title = chatTitleFromMessage(session.messages.find((item) => item.role === 'user')?.content);
+                    session.updatedAt = new Date();
+
+                    clearChatFiles({ revoke: false });
+                    renderChatSessions();
+                    renderChats();
+                    setStatus('Chat 消息已发送。', 'green');
+                };
+
+                const renderChats = () => {
+                    const session = currentChat();
+                    chatMessages.innerHTML = '';
+                    chatTitle.textContent = session?.title || '新会话';
+                    chatMeta.textContent = `${session?.messages.length ?? 0} 条消息`;
+
+                    if (!session || !session.messages.length) {
+                        chatMessages.innerHTML = '<div class="rounded-2xl border border-dashed border-zinc-300 bg-white px-6 py-16 text-center text-sm text-zinc-500">暂无消息。</div>';
+                        return;
+                    }
+
+                    session.messages.forEach((chat) => {
+                        const mine = chat.role === 'user';
+                        const row = document.createElement('div');
+                        row.className = `flex ${mine ? 'justify-end' : 'justify-start'}`;
+                        const attachments = (chat.files ?? []).map((file) => `
+                            <div class="mt-2 flex items-center gap-2 rounded-2xl ${mine ? 'bg-white/10' : 'bg-zinc-100'} px-2 py-2">
+                                ${file.url ? `<img class="h-10 w-10 rounded-xl object-cover" src="${escapeAttribute(file.url)}" alt="">` : '<span class="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-white/20 text-[10px] font-semibold">FILE</span>'}
+                                <span class="min-w-0">
+                                    <span class="block truncate text-xs font-medium">${escapeHtml(file.name)}</span>
+                                    <span class="block text-[11px] opacity-70">${formatBytes(file.size)}</span>
+                                </span>
+                            </div>
+                        `).join('');
+                        row.innerHTML = `
+                            <div class="max-w-[78%] rounded-3xl px-4 py-3 text-sm leading-6 shadow-sm ${mine ? 'bg-zinc-950 text-white' : 'border border-zinc-200 bg-white text-zinc-800'}">
+                                <div class="whitespace-pre-wrap">${escapeHtml(chat.content)}</div>
+                                ${attachments}
+                                <div class="mt-2 flex flex-wrap gap-2 text-[11px] ${mine ? 'text-white/55' : 'text-zinc-400'}">
+                                    <span>${formatDate(chat.createdAt)}</span>
+                                    <span>${escapeHtml(chat.model)}</span>
+                                    <span>推理：${escapeHtml(chat.reasoningLabel)}</span>
+                                </div>
+                            </div>
+                        `;
+                        chatMessages.appendChild(row);
+                    });
+
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                };
+
                 const createTask = ({ status: taskStatus, stream = false }) => {
                     const id = `task-${Date.now()}-${Math.random().toString(16).slice(2)}`;
                     const config = captureConfig();
@@ -795,8 +1261,11 @@
                         id,
                         status: taskStatus,
                         stream,
-                        prompt: composedPrompt(),
+                        prompt: promptInput.value.trim(),
+                        submittedPrompt: composedPrompt(),
                         references: referenceItems.map((reference) => ({
+                            file: reference.file,
+                            maskFile: reference.maskFile,
                             name: reference.file.name,
                             url: URL.createObjectURL(reference.file),
                             editNote: reference.editNote,
@@ -816,7 +1285,11 @@
                 };
 
                 const captureConfig = () => ({
-                    source: endpointInput.value ? new URL(endpointInput.value).host : '未设置',
+                    source: configMode.value === 'default'
+                        ? (configName.value.trim() || '默认配置')
+                        : (endpointInput.value ? new URL(endpointInput.value).host : '未设置'),
+                    configMode: configMode.value,
+                    configName: configName.value.trim() || (configMode.value === 'default' ? '默认配置' : '自定义配置'),
                     model: activeModel(),
                     sizeMode: form.size_mode.value,
                     ratio: form.ratio.value,
@@ -877,6 +1350,7 @@
 
                     window.clearInterval(task.timer);
                     task.status = 'failed';
+                    task.elapsedMs = task.elapsedMs || 1;
                     task.error = message;
                     renderTasks();
                 };
@@ -894,7 +1368,7 @@
                     results.innerHTML = '';
 
                     if (!filtered.length) {
-                        results.innerHTML = '<div class="col-span-full rounded-lg border border-dashed border-zinc-300 bg-white px-6 py-16 text-center text-sm text-zinc-500">暂无匹配任务。</div>';
+                        results.innerHTML = '<div class="col-span-full rounded-2xl border border-dashed border-zinc-300 bg-white px-6 py-16 text-center text-sm text-zinc-500">暂无匹配任务。</div>';
                         return;
                     }
 
@@ -902,22 +1376,22 @@
                         const image = task.images[0] ?? task.partials.at(-1) ?? null;
                         const src = image?.url || image?.data_url || '';
                         const article = document.createElement('article');
-                        article.className = 'grid min-h-48 overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm transition hover:shadow-md sm:grid-cols-[40%_1fr]';
+                        article.className = 'grid min-h-44 overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm transition hover:shadow-md sm:grid-cols-[42%_1fr]';
                         article.dataset.taskId = task.id;
                         article.innerHTML = `
-                            <button class="relative min-h-48 bg-zinc-100 text-left" type="button" data-open-task="${escapeAttribute(task.id)}">
-                                ${src ? `<img class="h-full w-full object-cover" src="${escapeAttribute(src)}" alt="">` : '<div class="flex h-full min-h-48 items-center justify-center text-sm text-zinc-400">生成中</div>'}
-                                <span class="absolute left-2 top-2 rounded-md bg-zinc-950/65 px-2 py-1 text-xs font-semibold text-white" data-task-badge>${task.status === 'running' ? formatSeconds(task.elapsedMs) : taskDimensionLabel(task)}</span>
-                                <span class="absolute left-2 top-10 rounded-md bg-zinc-950/55 px-2 py-1 text-xs font-semibold text-white">${escapeHtml(taskRatioLabel(task))}</span>
+                            <button class="relative min-h-44 bg-zinc-100 text-left" type="button" data-open-task="${escapeAttribute(task.id)}">
+                                ${src ? `<img class="h-full w-full object-cover" src="${escapeAttribute(src)}" alt="">` : `<div class="flex h-full min-h-44 items-center justify-center px-4 text-center text-sm ${task.status === 'failed' ? 'text-red-600' : 'text-zinc-400'}">${escapeHtml(task.status === 'failed' ? task.error : '生成中')}</div>`}
+                                <span class="absolute left-2 top-2 rounded-lg bg-zinc-950/65 px-2 py-1 text-xs font-semibold text-white" data-task-badge>${task.status === 'running' ? formatSeconds(task.elapsedMs) : task.status === 'failed' ? formatSeconds(task.elapsedMs) : taskDimensionLabel(task)}</span>
+                                ${task.status === 'done' ? `<span class="absolute left-2 top-10 rounded-lg bg-zinc-950/55 px-2 py-1 text-xs font-semibold text-white">${escapeHtml(taskRatioLabel(task))}</span>` : ''}
                             </button>
-                            <div class="flex min-w-0 flex-col p-4">
-                                <p class="line-clamp-3 text-base leading-7 text-zinc-700">${escapeHtml(task.prompt)}</p>
-                                <div class="mt-4 inline-flex w-fit rounded-lg bg-zinc-100 px-2.5 py-1 text-xs text-zinc-500">&lt;/&gt; ${escapeHtml(task.config.model || '默认')}</div>
-                                ${task.error ? `<p class="mt-3 text-xs leading-5 text-red-600">${escapeHtml(task.error)}</p>` : ''}
-                                <div class="mt-auto flex justify-end gap-2 pt-4 text-zinc-400">
+                            <div class="flex min-w-0 flex-col p-3">
+                                <p class="line-clamp-3 text-sm leading-6 text-zinc-700">${escapeHtml(task.prompt)}</p>
+                                <div class="mt-3 inline-flex w-fit rounded-xl bg-zinc-100 px-2.5 py-1 text-xs text-zinc-500">&lt;/&gt; ${escapeHtml(task.config.model || '默认')}</div>
+                                ${task.error ? `<p class="mt-2 line-clamp-2 text-xs leading-5 text-red-600">${escapeHtml(task.error)}</p>` : ''}
+                                <div class="mt-auto flex justify-end gap-1.5 pt-3 text-zinc-400">
                                     <button class="rounded-full p-1.5 hover:bg-zinc-100 hover:text-zinc-700" type="button" title="收藏" aria-label="收藏"><svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.8 1-6.1-4.4-4.3 6.1-.9L12 3Z"/></svg></button>
-                                    <button class="rounded-full p-1.5 hover:bg-zinc-100 hover:text-zinc-700" type="button" data-reuse-task="${escapeAttribute(task.id)}" title="复用提示词" aria-label="复用提示词"><svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-2"/></svg></button>
-                                    <button class="rounded-full p-1.5 hover:bg-zinc-100 hover:text-zinc-700" type="button" data-open-task="${escapeAttribute(task.id)}" title="编辑详情" aria-label="编辑详情"><svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
+                                    <button class="rounded-full p-1.5 hover:bg-zinc-100 hover:text-zinc-700" type="button" data-reuse-task="${escapeAttribute(task.id)}" title="复用提示词和参考图" aria-label="复用提示词和参考图"><svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-2"/></svg></button>
+                                    ${task.status === 'failed' ? '' : `<button class="rounded-full p-1.5 hover:bg-zinc-100 hover:text-zinc-700" type="button" data-edit-output="${escapeAttribute(task.id)}" title="编辑输出" aria-label="编辑输出"><svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>`}
                                     <button class="rounded-full p-1.5 hover:bg-zinc-100 hover:text-red-600" type="button" data-delete-task="${escapeAttribute(task.id)}" title="删除" aria-label="删除"><svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-1 14H6L5 6"/></svg></button>
                                 </div>
                             </div>
@@ -973,8 +1447,14 @@
                     const image = task.images[0] ?? task.partials.at(-1);
                     const src = image?.url || image?.data_url || '';
                     const detailImage = detailPanel.querySelector('[data-detail-image]');
+                    const detailError = detailPanel.querySelector('[data-detail-error]');
+                    const detailTime = detailPanel.querySelector('[data-detail-time]');
                     const downloadLink = detailPanel.querySelector('[data-detail-download]');
-                    detailImage.src = src;
+                    detailTime.textContent = formatSeconds(task.elapsedMs);
+                    detailImage.classList.toggle('hidden', task.status === 'failed');
+                    detailError.classList.toggle('hidden', task.status !== 'failed');
+                    detailError.textContent = task.error || '图片生成失败。';
+                    detailImage.src = src || '';
                     detailImage.alt = task.status === 'failed' ? '失败任务的中间步骤图' : '生成图片';
                     downloadLink.href = src || '#';
                     downloadLink.download = `ai-image-${task.id}.png`;
@@ -1011,6 +1491,7 @@
                 root.addEventListener('click', (event) => {
                     const openButton = event.target.closest('[data-open-task]');
                     const reuseButton = event.target.closest('[data-reuse-task]');
+                    const editOutputButton = event.target.closest('[data-edit-output]');
                     const deleteButton = event.target.closest('[data-delete-task]');
 
                     if (openButton) {
@@ -1018,10 +1499,27 @@
                     } else if (reuseButton) {
                         const task = tasks.get(reuseButton.dataset.reuseTask);
                         if (task) {
+                            resetReferences();
                             promptInput.value = task.prompt;
+                            referenceItems = cloneTaskReferences(task).slice(0, 6);
+                            renderReferencePreview();
                             autoGrowPrompt();
-                            setStatus('已复用提示词。', 'green');
+                            setStatus('已复用提示词和参考图。', 'green');
                         }
+                    } else if (editOutputButton) {
+                        const task = tasks.get(editOutputButton.dataset.editOutput);
+                        const image = task?.images[0] ?? task?.partials.at(-1);
+                        if (!task || !image) return;
+
+                        imageToReference(image, task)
+                            .then((reference) => {
+                                if (!reference) return;
+                                resetReferences();
+                                referenceItems = [reference];
+                                renderReferencePreview();
+                                setStatus('已将输出图添加为参考图。', 'green');
+                            })
+                            .catch(() => setStatus('输出图无法添加为参考图。', 'red'));
                     } else if (deleteButton) {
                         tasks.delete(deleteButton.dataset.deleteTask);
                         renderTasks();
@@ -1047,8 +1545,26 @@
                     link.click();
                 });
 
-                const formatSeconds = (milliseconds) => `${Math.max(0, milliseconds / 1000).toFixed(1)}s`;
+                const formatSeconds = (milliseconds) => {
+                    const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
+
+                    if (totalSeconds >= 60) {
+                        const minutes = Math.floor(totalSeconds / 60);
+                        const seconds = String(totalSeconds % 60).padStart(2, '0');
+
+                        return `${minutes}:${seconds}`;
+                    }
+
+                    return `${totalSeconds}秒`;
+                };
                 const formatDate = (date) => new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(date);
+                const formatBytes = (bytes) => {
+                    const size = Number(bytes || 0);
+                    if (size >= 1024 * 1024) return `${(size / 1024 / 1024).toFixed(size >= 10 * 1024 * 1024 ? 0 : 1)} MB`;
+                    if (size >= 1024) return `${(size / 1024).toFixed(size >= 10 * 1024 ? 0 : 1)} KB`;
+
+                    return `${size} B`;
+                };
 
                 const escapeHtml = (value) => String(value)
                     .replaceAll('&', '&amp;')
@@ -1058,6 +1574,10 @@
                     .replaceAll("'", '&#039;');
 
                 const escapeAttribute = (value) => escapeHtml(value).replaceAll('`', '&#096;');
+
+                syncChatModelOptions();
+                createChatSession();
+                setMode('gallery');
             })();
         </script>
     </section>

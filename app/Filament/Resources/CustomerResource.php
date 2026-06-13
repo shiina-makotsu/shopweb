@@ -95,8 +95,7 @@ class CustomerResource extends Resource
                     ->unique(ignoreRecord: true)
                     ->maxLength(40)
                     ->helperText('只能使用英文、数字、下划线；不能和其他用户重复；staff_ 前缀保留给后台用户。'),
-                TextInput::make('name')->label('用户名')->required()->maxLength(255),
-                TextInput::make('nickname')->label('昵称')->maxLength(255),
+                TextInput::make('name')->label('用户昵称')->required()->maxLength(255),
                 TextInput::make('email')->label('注册邮箱')->email()->required()->unique(ignoreRecord: true)->maxLength(255),
                 FileUpload::make('avatar_path')
                     ->label('头像')
@@ -160,7 +159,7 @@ class CustomerResource extends Resource
                     ->disk('public_uploads')
                     ->imageSize(40),
                 TextColumn::make('name')
-                    ->label('用户名')
+                    ->label('用户昵称')
                     ->searchable(query: fn (Builder $query, string $search): Builder => RegexSearch::where($query, ['name'], $search))
                     ->sortable(),
                 TextColumn::make('public_id')

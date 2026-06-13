@@ -7,6 +7,7 @@ use App\Models\InventoryMovement;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -43,6 +44,7 @@ class CsvImportService
                 $variantData = [
                     'product_id' => $product->id,
                     'sku' => $sku,
+                    'spec_name' => $this->has($row, 'spec_name') ? $this->nullableString($row, 'spec_name') : $variant?->spec_name,
                     'specs' => $this->specs($row, $variant?->specs ?? []),
                     'image_path' => $this->has($row, 'image_path') ? $this->nullableString($row, 'image_path') : $variant?->image_path,
                     'price_cents' => $this->requiredInt($row, 'price_cents', $variant?->price_cents),
@@ -282,6 +284,7 @@ class CsvImportService
                 '商品状态', '状态', 'status' => 'status',
                 '交付类型', 'fulfillment_type', 'delivery_type' => 'fulfillment_type',
                 'SKU', 'sku' => 'sku',
+                '规格参数名', 'SKU展示名', 'SKU 展示名', 'spec_name', 'variant_name' => 'spec_name',
                 '规格', 'specs', 'options' => 'specs',
                 'SKU图片', 'SKU 图片', 'sku_image', 'sku_image_path', 'image_path', 'image' => 'image_path',
                 '售价(分)', '价格(分)', 'price_cents', 'price' => 'price_cents',
@@ -479,7 +482,7 @@ class CsvImportService
     }
 
     /**
-     * @param  class-string<\Illuminate\Database\Eloquent\Model>  $modelClass
+     * @param  class-string<Model>  $modelClass
      */
     private function uniqueSlug(string $value, string $prefix, string $modelClass, ?int $ignoreId = null): string
     {
@@ -499,6 +502,4 @@ class CsvImportService
     }
 }
 
-class CsvImportSkipException extends \RuntimeException
-{
-}
+class CsvImportSkipException extends \RuntimeException {}

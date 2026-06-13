@@ -5,11 +5,11 @@
                 @if($user->avatar_path)
                     <img class="h-full w-full object-cover" src="{{ \Illuminate\Support\Facades\Storage::disk('public_uploads')->url($user->avatar_path) }}" alt="{{ $user->name }}">
                 @else
-                    {{ mb_substr($user->nickname ?: $user->name, 0, 1) }}
+                    {{ mb_substr($user->name, 0, 1) }}
                 @endif
             </div>
             <div>
-                <h1 class="text-xl font-semibold">{{ $user->nickname ?: $user->name }}</h1>
+                <h1 class="text-xl font-semibold">{{ $user->name }}</h1>
                 <p class="mt-1 text-sm text-slate-600">用户 ID：{{ $user->public_id }} / {{ $user->email }}</p>
                 @if($user->profile_intro)
                     <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{{ \Illuminate\Support\Str::limit($user->profile_intro, 120) }}</p>
@@ -77,6 +77,7 @@
                     <a class="flex justify-between rounded-sm px-2 py-2 hover:bg-blue-50" href="{{ route('user.section', 'wishlists') }}"><span>愿望单</span><span>{{ $user->wishlists_count }}</span></a>
                     <a class="flex justify-between rounded-sm px-2 py-2 hover:bg-blue-50" href="{{ route('user.section', 'favorites') }}"><span>收藏商品</span><span>{{ $user->favorites_count }}</span></a>
                     <a class="flex justify-between rounded-sm px-2 py-2 hover:bg-blue-50" href="{{ route('user.section', 'coupons') }}"><span>优惠码</span><span></span></a>
+                    <a class="flex justify-between rounded-sm px-2 py-2 hover:bg-blue-50" href="{{ route('user.section', 'ai') }}"><span>AI 配额</span><span></span></a>
                 </dl>
             </div>
 

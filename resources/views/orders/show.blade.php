@@ -37,7 +37,7 @@
                                         <p class="font-medium">{{ $item->product_title }}</p>
                                         <p class="mt-1 text-slate-600">
                                             {{ $item->variant_sku }} /
-                                            {{ collect($item->variant_specs ?? [])->map(fn($v, $k) => "$k: $v")->implode(' / ') ?: '默认规格' }}
+                                            {{ \App\Models\ProductVariant::specsLabel($item->variant_specs ?? []) }}
                                         </p>
                                         <p class="mt-1 text-xs text-slate-600">
                                             当前商品：{{ $item->incomingProduct?->title ?? $item->product_title }} /
@@ -76,7 +76,7 @@
                                         <td class="px-4 py-3 font-medium">{{ $item->product_title }}</td>
                                         <td class="px-4 py-3 text-slate-600">
                                             {{ $item->variant_sku }} /
-                                            {{ collect($item->variant_specs ?? [])->map(fn($v, $k) => "$k: $v")->implode(' / ') ?: '默认规格' }}
+                                            {{ \App\Models\ProductVariant::specsLabel($item->variant_specs ?? []) }}
                                             @if($item->coupon_code)
                                                 <p class="mt-1 text-xs text-emerald-700">优惠码 {{ $item->coupon_code }}：- @money($item->discount_cents)</p>
                                             @endif

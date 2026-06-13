@@ -32,7 +32,6 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
         'forum_role',
         'forum_posting_banned_at',
         'forum_posting_ban_reason',
-        'nickname',
         'avatar_path',
         'profile_intro',
         'preferred_locale',
@@ -40,6 +39,9 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
         'privacy_settings',
         'can_view_order_numbers',
         'can_view_tracking_numbers',
+        'ai_quota_k',
+        'ai_endpoint',
+        'ai_api_key',
     ];
 
     protected $hidden = [
@@ -205,6 +207,11 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
         return $this->hasMany(SupportChatMessage::class, 'sender_user_id');
     }
 
+    public function aiUsageLogs(): HasMany
+    {
+        return $this->hasMany(AiUsageLog::class);
+    }
+
     public function getRouteKeyName(): string
     {
         return 'public_id';
@@ -221,7 +228,7 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
 
     public function displayName(): string
     {
-        return $this->nickname ?: $this->name;
+        return $this->name;
     }
 
     public function isForumModeratorFor(ForumSection $section): bool

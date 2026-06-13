@@ -5,6 +5,7 @@
         'favorites' => '收藏商品',
         'addresses' => '地址设置',
         'coupons' => '优惠码',
+        'ai' => 'AI 配额',
         'privacy' => '隐私设置',
         'interface' => '界面设置',
         'membership' => '注册会员',
@@ -57,16 +58,9 @@
                         <input class="mt-1 w-full rounded-sm border border-slate-300 bg-slate-100 px-3 py-2 text-sm text-slate-600" type="email" value="{{ $user->email }}" disabled>
                     </label>
                     <label class="block">
-                        <span class="text-sm font-medium text-slate-700">用户名</span>
+                        <span class="text-sm font-medium text-slate-700">用户昵称</span>
                         <input class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" type="text" name="name" value="{{ old('name', $user->name) }}" required>
                         @error('name')
-                            <span class="mt-1 block text-sm text-red-600">{{ $message }}</span>
-                        @enderror
-                    </label>
-                    <label class="block">
-                        <span class="text-sm font-medium text-slate-700">昵称</span>
-                        <input class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" type="text" name="nickname" value="{{ old('nickname', $user->nickname) }}">
-                        @error('nickname')
                             <span class="mt-1 block text-sm text-red-600">{{ $message }}</span>
                         @enderror
                     </label>
@@ -340,7 +334,9 @@
                     <h2 class="border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold">我的优惠码</h2>
                     <div class="divide-y divide-slate-100">
                         @forelse($coupons as $userCoupon)
-                            @php($coupon = $userCoupon->coupon)
+                            @php
+                                $coupon = $userCoupon->coupon;
+                            @endphp
                             @if($coupon)
                                 <article class="grid gap-3 px-4 py-4 text-sm md:grid-cols-[1fr_auto]">
                                     <div>
@@ -370,6 +366,83 @@
                         @empty
                             <p class="px-4 py-8 text-sm text-slate-600">暂无已添加的优惠码。</p>
                         @endforelse
+                    </div>
+                </section>
+            </div>
+        @elseif($section === 'ai')
+            @php
+                $breakdown = collect($aiQuota['model_breakdown'] ?? []);
+                $maxTokens = max(1, (int) $breakdown->max('total_tokens'));
+            @endphp
+            <div class="space-y-5 px-4 py-5">
+                <div class="grid gap-3 md:grid-cols-4">
+                    <div class="rounded-sm border border-slate-200 bg-slate-50 px-4 py-3">
+                        <p class="text-xs text-slate-500">AI 余额</p>
+                        <p class="mt-1 text-2xl font-semibold">{{ number_format((int) ($aiQuota['remaining_k'] ?? 0)) }}k</p>
+                    </div>
+                    <div class="rounded-sm border border-slate-200 bg-white px-4 py-3">
+                        <p class="text-xs text-slate-500">配额上限</p>
+                        <p class="mt-1 text-2xl font-semibold">{{ number_format((int) ($aiQuota['limit_k'] ?? 0)) }}k</p>
+                    </div>
+                    <div class="rounded-sm border border-slate-200 bg-white px-4 py-3">
+                        <p class="text-xs text-slate-500">总用量</p>
+                        <p class="mt-1 text-2xl font-semibold">{{ number_format((int) ($aiQuota['total_tokens'] ?? 0)) }}</p>
+                    </div>
+                    <div class="rounded-sm border border-slate-200 bg-white px-4 py-3">
+                        <p class="text-xs text-slate-500">24h 用量</p>
+                        <p class="mt-1 text-2xl font-semibold">{{ number_format((int) ($aiQuota['tokens_24h'] ?? 0)) }}</p>
+                    </div>
+                </div>
+
+                <section class="rounded-sm border border-slate-300">
+                    <h2 class="border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold">模型用量</h2>
+                    <div class="space-y-3 p-4">
+                        @forelse($breakdown as $row)
+                            <div class="grid gap-2 text-sm md:grid-cols-[12rem_1fr_7rem] md:items-center">
+                                <div class="truncate font-medium text-slate-700">{{ $row->model }}</div>
+                                <div class="h-3 overflow-hidden rounded-full bg-slate-100">
+                                    <div class="h-full rounded-full bg-blue-600" style="width: {{ max(4, min(100, ((int) $row->total_tokens / $maxTokens) * 100)) }}%"></div>
+                                </div>
+                                <div class="text-right text-slate-600">{{ number_format((int) $row->total_tokens) }}</div>
+                            </div>
+                        @empty
+                            <p class="text-sm text-slate-600">暂无 AI 使用记录。</p>
+                        @endforelse
+                    </div>
+                </section>
+
+                <section class="rounded-sm border border-slate-300">
+                    <h2 class="border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold">使用记录</h2>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-slate-200 text-left text-sm">
+                            <thead class="bg-slate-50 text-xs uppercase text-slate-500">
+                                <tr>
+                                    <th class="px-4 py-2">请求时间</th>
+                                    <th class="px-4 py-2">请求耗时</th>
+                                    <th class="px-4 py-2">模型</th>
+                                    <th class="px-4 py-2">token 参数</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100">
+                                @forelse(($aiQuota['recent_logs'] ?? []) as $log)
+                                    <tr>
+                                        <td class="px-4 py-3 text-slate-700">{{ $log->created_at?->format('Y-m-d H:i:s') }}</td>
+                                        <td class="px-4 py-3 text-slate-700">{{ $log->request_ms ? number_format($log->request_ms / 1000, 2).'s' : '-' }}</td>
+                                        <td class="px-4 py-3 text-slate-700">{{ $log->model ?: '-' }}</td>
+                                        <td class="px-4 py-3 text-slate-700">
+                                            {{ number_format((int) $log->token_count) }}
+                                            @if($log->config_name)
+                                                <span class="ml-2 rounded-sm bg-slate-100 px-2 py-0.5 text-xs text-slate-500">{{ $log->config_name }}</span>
+                                            @endif
+                                        </td>
+                                    </tr>
+                                @empty
+                                    <tr>
+                                        <td class="px-4 py-8 text-center text-slate-600" colspan="4">暂无使用记录。</td>
+                                    </tr>
+                                @endforelse
+                            </tbody>
+                        </table>
                     </div>
                 </section>
             </div>

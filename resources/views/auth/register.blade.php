@@ -11,7 +11,7 @@
                 <span class="mt-1 block text-xs text-slate-500">只能使用英文、数字、下划线，注册后用于个人主页和搜索。</span>
             </label>
             <label class="block">
-                <span class="text-sm font-medium">用户名</span>
+                <span class="text-sm font-medium">用户昵称</span>
                 <input class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" type="text" name="name" value="{{ old('name') }}" required>
             </label>
             <label class="block">

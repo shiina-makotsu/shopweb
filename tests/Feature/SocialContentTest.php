@@ -502,8 +502,7 @@ it('lets users update their avatar and profile intro', function (): void {
 
     $this->actingAs($user)
         ->patch(route('user.profile.update'), [
-            'name' => 'New Name',
-            'nickname' => 'Maple',
+            'name' => 'Maple',
             'profile_intro' => '喜欢分享商品体验和论坛讨论。',
             'avatar' => UploadedFile::fake()->image('avatar.png', 160, 160),
             'avatar_cropped' => 'data:image/png;base64,'.base64_encode('cropped-avatar'),
@@ -512,8 +511,7 @@ it('lets users update their avatar and profile intro', function (): void {
 
     $fresh = $user->fresh();
 
-    expect($fresh->name)->toBe('New Name')
-        ->and($fresh->nickname)->toBe('Maple')
+    expect($fresh->name)->toBe('Maple')
         ->and($fresh->profile_intro)->toBe('喜欢分享商品体验和论坛讨论。')
         ->and($fresh->avatar_path)->not->toBeNull();
 

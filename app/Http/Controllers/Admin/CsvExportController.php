@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\ProductVariant;
 use App\Models\User;
-use Illuminate\Http\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class CsvExportController extends Controller
@@ -24,6 +23,7 @@ class CsvExportController extends Controller
             '商品状态',
             '交付类型',
             'SKU',
+            '规格参数名',
             '规格',
             'SKU图片',
             '售价(分)',
@@ -42,7 +42,8 @@ class CsvExportController extends Controller
                     $product?->status,
                     $product?->fulfillment_type,
                     $variant->sku,
-                    $variant->specLabel(),
+                    $variant->spec_name,
+                    $variant->detailSpecLabel(),
                     $variant->image_path,
                     $variant->price_cents,
                     $variant->compare_at_price_cents,

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Order;
 use App\Models\UserAddress;
+use App\Services\AiUsageService;
 use App\Services\CouponService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -46,8 +47,10 @@ class UserCenterController extends Controller
         $user = $request->user();
         $user->ensurePublicId();
 
-        $allowed = ['profile', 'wishlists', 'favorites', 'addresses', 'coupons', 'privacy', 'interface', 'membership'];
+        $allowed = ['profile', 'wishlists', 'favorites', 'addresses', 'coupons', 'ai', 'privacy', 'interface', 'membership'];
         abort_unless(in_array($section, $allowed, true), 404);
+
+        $aiUsage = app(AiUsageService::class);
 
         return view('user.section', [
             'user' => $user,
@@ -63,6 +66,16 @@ class UserCenterController extends Controller
                 : null,
             'coupons' => $section === 'coupons'
                 ? $user->coupons()->with(['coupon.products', 'coupon.product'])->latest()->get()
+                : null,
+            'aiQuota' => $section === 'ai'
+                ? [
+                    'limit_k' => $aiUsage->quotaLimitK($user),
+                    'remaining_k' => $aiUsage->remainingK($user),
+                    'total_tokens' => $aiUsage->usedTokens($user),
+                    'tokens_24h' => $aiUsage->usedTokens($user, now()->subDay()),
+                    'model_breakdown' => $aiUsage->modelBreakdown($user),
+                    'recent_logs' => $aiUsage->recentLogs($user),
+                ]
                 : null,
         ]);
     }
@@ -84,7 +97,6 @@ class UserCenterController extends Controller
 
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'nickname' => ['nullable', 'string', 'max:255'],
             'profile_intro' => ['nullable', 'string', 'max:1000'],
             'avatar' => ['nullable', 'image', 'max:5120'],
             'avatar_cropped' => ['nullable', 'string'],

@@ -71,7 +71,7 @@ class AdminUserResource extends Resource
     public static function form(Schema $schema): Schema
     {
         return $schema->components([
-            TextInput::make('name')->label('用户名')->required()->maxLength(255),
+            TextInput::make('name')->label('后台用户昵称')->required()->maxLength(255),
             TextInput::make('public_id')
                 ->label('后台用户 ID')
                 ->required()
@@ -123,7 +123,7 @@ class AdminUserResource extends Resource
                     ->disk('public_uploads')
                     ->imageSize(40),
                 TextColumn::make('name')
-                    ->label('用户名')
+                    ->label('后台用户昵称')
                     ->searchable(query: fn (Builder $query, string $search): Builder => RegexSearch::where($query, ['name'], $search))
                     ->sortable(),
                 TextColumn::make('email')

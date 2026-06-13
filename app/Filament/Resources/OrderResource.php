@@ -148,7 +148,7 @@ class OrderResource extends Resource
                     ->searchable(query: fn (Builder $query, string $search): Builder => RegexSearch::where($query, ['order_number'], $search))
                     ->sortable(),
                 TextColumn::make('user.name')
-                    ->label('用户名')
+                    ->label('用户昵称')
                     ->searchable(query: fn (Builder $query, string $search): Builder => $query->whereHas('user', fn (Builder $userQuery) => RegexSearch::where($userQuery, ['name'], $search))),
                 TextColumn::make('user.email')
                     ->label('邮箱')

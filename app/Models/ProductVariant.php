@@ -16,6 +16,7 @@ class ProductVariant extends Model
     protected $fillable = [
         'product_id',
         'sku',
+        'spec_name',
         'specs',
         'image_path',
         'price_cents',
@@ -60,13 +61,81 @@ class ProductVariant extends Model
 
     public function specLabel(): string
     {
+        return $this->displayName();
+    }
+
+    public function displayName(): string
+    {
+        $name = trim((string) $this->spec_name);
+
+        if ($name !== '') {
+            return $name;
+        }
+
+        return $this->specsLabel($this->specs ?? []);
+    }
+
+    public function detailSpecLabel(): string
+    {
         $specs = $this->specs ?? [];
 
         if ($specs === []) {
             return '默认规格';
         }
 
-        return collect($specs)->map(fn ($value, $key) => "{$key}: {$value}")->implode(' / ');
+        return self::specsLabel($specs);
+    }
+
+    /**
+     * @return array<int, array{name: string, value: string, label: string}>
+     */
+    public function specItems(): array
+    {
+        return self::formatSpecItems($this->specs ?? []);
+    }
+
+    /**
+     * @param  array<mixed>  $specs
+     * @return array<int, array{name: string, value: string, label: string}>
+     */
+    public static function formatSpecItems(array $specs): array
+    {
+        $items = [];
+
+        foreach ($specs as $key => $value) {
+            $name = trim((string) $key);
+            $value = trim((string) $value);
+
+            if ($value === '') {
+                continue;
+            }
+
+            if ($name === '' || is_int($key)) {
+                $name = '规格';
+            }
+
+            $items[] = [
+                'name' => $name,
+                'value' => $value,
+                'label' => $value.$name,
+            ];
+        }
+
+        return $items;
+    }
+
+    /**
+     * @param  array<mixed>|null  $specs
+     */
+    public static function specsLabel(?array $specs): string
+    {
+        $items = self::formatSpecItems($specs ?? []);
+
+        if ($items === []) {
+            return '默认规格';
+        }
+
+        return collect($items)->pluck('label')->implode(' * ');
     }
 
     public function imageUrl(): ?string

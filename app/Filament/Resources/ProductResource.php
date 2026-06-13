@@ -124,11 +124,17 @@ class ProductResource extends Resource
                     ->relationship()
                     ->schema([
                         TextInput::make('sku')->label('SKU')->required()->maxLength(255),
+                        TextInput::make('spec_name')
+                            ->label('规格参数名')
+                            ->placeholder('例如 10片装、20mg 常规装')
+                            ->helperText('这是该 SKU 的前台显示名，类似对外展示名称；不填则使用下方规格列表生成。')
+                            ->maxLength(255),
                         KeyValue::make('specs')
                             ->label('规格值')
                             ->keyLabel('规格名')
                             ->valueLabel('规格值')
                             ->addActionLabel('添加规格名/值')
+                            ->helperText('这里填写该 SKU 的具体规格明细，例如 mg=20、片=10；商品详情页会按表格显示规格名和规格值。未填写上方“规格参数名”时，规格选项才会用“20mg * 10片”作为展示名。')
                             ->columnSpanFull(),
                         TextInput::make('image_path')
                             ->label('SKU 图片链接或路径')
@@ -150,7 +156,9 @@ class ProductResource extends Resource
                     ])
                     ->columns(3)
                     ->defaultItems(1)
-                    ->itemLabel(fn (array $state): ?string => filled($state['sku'] ?? null) ? (string) $state['sku'] : null)
+                    ->itemLabel(fn (array $state): ?string => filled($state['spec_name'] ?? null)
+                        ? (string) $state['spec_name']
+                        : (filled($state['sku'] ?? null) ? (string) $state['sku'] : null))
                     ->helperText('每一项就是一个可售 SKU，可维护多个规格名/规格值、独立基础价格、库存和 SKU 图片；折扣价与折扣时间请到交易菜单的“商品折扣”页面设置。')
                     ->columnSpanFull(),
             ])->columnSpanFull(),

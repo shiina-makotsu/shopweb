@@ -11,7 +11,7 @@
 
         <div class="grid gap-6 xl:grid-cols-2">
             <x-report-table title="低库存 SKU" :rows="$this->lowStockVariants()" :columns="['sku' => 'SKU', 'product' => '商品', 'stock' => '库存', 'threshold' => '阈值']" />
-            <x-report-table title="客户排行" :rows="$this->topCustomers()" :columns="['name' => '用户名', 'email' => '邮箱', 'orders' => '订单数', 'total' => '累计金额']" />
+            <x-report-table title="客户排行" :rows="$this->topCustomers()" :columns="['name' => '用户昵称', 'email' => '邮箱', 'orders' => '订单数', 'total' => '累计金额']" />
             <x-report-table title="优惠码使用" :rows="$this->couponUsage()" :columns="['code' => '代码', 'name' => '名称', 'confirmed' => '确认次数', 'discount' => '优惠金额']" />
             <x-report-table title="商品销售排行" :rows="$this->productSales()" :columns="['product' => '商品', 'sku' => 'SKU', 'quantity' => '数量', 'total' => '销售额']" :export-url="\App\Support\Url::route('admin.report-exports.product-sales')" />
             <x-report-table title="分类销售排行" :rows="$this->categorySales()" :columns="['category' => '分类', 'items' => '订单商品数', 'quantity' => '数量', 'total' => '销售额']" :export-url="\App\Support\Url::route('admin.report-exports.category-sales')" />

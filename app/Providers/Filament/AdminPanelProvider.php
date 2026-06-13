@@ -21,6 +21,7 @@ use App\Filament\Pages\ReportsPage;
 use App\Filament\Pages\StoreInfoPage;
 use App\Filament\Pages\SupportAiSettingsPage;
 use App\Filament\Pages\SystemInfoPage;
+use App\Filament\Pages\UserAiPage;
 use App\Models\SiteSetting;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
@@ -97,6 +98,7 @@ class AdminPanelProvider extends PanelProvider
                 StoreInfoPage::class,
                 SupportAiSettingsPage::class,
                 SystemInfoPage::class,
+                UserAiPage::class,
             ])
             ->widgets([
                 DashboardStats::class,

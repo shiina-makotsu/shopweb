@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\SiteSetting;
+use App\Services\AiUsageService;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -16,6 +17,10 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AiImageController extends Controller
 {
+    public function __construct(private readonly AiUsageService $usage)
+    {
+    }
+
     public function index(): View
     {
         return view('ai-image.index', [
@@ -26,15 +31,18 @@ class AiImageController extends Controller
     public function models(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'endpoint' => ['required', 'url:http,https', 'max:2048'],
+            'config_mode' => ['nullable', 'in:default,custom'],
+            'config_name' => ['nullable', 'string', 'max:100'],
+            'endpoint' => ['nullable', 'url:http,https', 'max:2048'],
             'api_key' => ['nullable', 'string', 'max:4096'],
         ]);
 
-        $baseUrl = $this->apiBaseUrl((string) $data['endpoint']);
+        $config = $this->usage->resolveConfig($request->user(), $data);
+        $baseUrl = $this->apiBaseUrl((string) $config['endpoint']);
         try {
             $response = Http::timeout(30)
                 ->acceptJson()
-                ->withHeaders($this->apiHeaders($data['api_key'] ?? null))
+                ->withHeaders($this->apiHeaders($config['api_key'] ?? null))
                 ->get($baseUrl.'/models');
         } catch (ConnectionException $exception) {
             return response()->json([
@@ -51,22 +59,30 @@ class AiImageController extends Controller
         return response()->json([
             'models' => $models,
             'base_url' => $baseUrl,
+            'config_name' => $config['config_name'],
+            'provider_source' => $config['source'],
         ]);
     }
 
     public function generate(Request $request): JsonResponse
     {
         $data = $this->validatedGenerationData($request);
+        $config = $this->usage->resolveConfig($request->user(), $data);
 
-        $baseUrl = $this->apiBaseUrl((string) $data['endpoint']);
+        if (($config['tracked'] ?? false) && $request->user()) {
+            $this->usage->assertWithinQuota($request->user());
+        }
+
+        $baseUrl = $this->apiBaseUrl((string) $config['endpoint']);
         $payload = $this->generationPayload($data);
         $references = $request->file('reference_images', []);
         $mask = $request->file('mask_image');
 
         $pendingRequest = Http::timeout((int) ($data['timeout_seconds'] ?? 600))
             ->acceptJson()
-            ->withHeaders($this->apiHeaders($data['api_key'] ?? null));
+            ->withHeaders($this->apiHeaders($config['api_key'] ?? null));
 
+        $startedAt = microtime(true);
         try {
             if ($references !== []) {
                 foreach (array_values($references) as $index => $file) {
@@ -99,6 +115,7 @@ class AiImageController extends Controller
             ], 502);
         }
 
+        $requestMs = (int) round((microtime(true) - $startedAt) * 1000);
         $providerPayload = (array) $response->json();
 
         if ($response->failed()) {
@@ -113,9 +130,15 @@ class AiImageController extends Controller
             ], 502);
         }
 
+        $this->usage->record($request->user(), $data, $config, $providerPayload, $requestMs, metadata: [
+            'feature' => 'image',
+            'image_count' => count($images),
+            'stream' => false,
+        ]);
+
         return response()->json([
             'images' => $images,
-            'meta' => $this->generationMeta($data, $baseUrl),
+            'meta' => $this->generationMeta($data, $baseUrl, $config),
         ]);
     }
 
@@ -124,23 +147,33 @@ class AiImageController extends Controller
         $data = $this->validatedGenerationData($request);
         $data['count'] = 1;
         $data['stream'] = true;
+        $config = $this->usage->resolveConfig($request->user(), $data);
 
-        $baseUrl = $this->apiBaseUrl((string) $data['endpoint']);
+        if (($config['tracked'] ?? false) && $request->user()) {
+            $this->usage->assertWithinQuota($request->user());
+        }
+
+        $baseUrl = $this->apiBaseUrl((string) $config['endpoint']);
         $payload = $this->generationPayload($data);
         $references = $this->referenceAttachments($request->file('reference_images', []));
         $mask = $this->uploadedAttachment($request->file('mask_image'), 'mask.png');
         $timeout = (int) ($data['timeout_seconds'] ?? 600);
-        $headers = $this->apiHeaders($data['api_key'] ?? null);
+        $headers = $this->apiHeaders($config['api_key'] ?? null);
+        $user = $request->user();
+        $usage = $this->usage;
 
-        return response()->stream(function () use ($baseUrl, $payload, $references, $mask, $timeout, $headers, $data): void {
+        return response()->stream(function () use ($baseUrl, $payload, $references, $mask, $timeout, $headers, $data, $config, $user, $usage): void {
             $emit = fn (string $event, array $payload): bool => $this->emitSse($event, $payload);
 
             $emit('started', [
                 'created_at' => now()->toIso8601String(),
             ]);
 
+            $startedAt = microtime(true);
+
             try {
                 $images = $this->streamImages($baseUrl, $payload, $references, $mask, $timeout, $headers, $emit);
+                $requestMs = (int) round((microtime(true) - $startedAt) * 1000);
 
                 if ($images === []) {
                     $emit('error', [
@@ -152,7 +185,13 @@ class AiImageController extends Controller
 
                 $emit('done', [
                     'images' => $images,
-                    'meta' => $this->generationMeta($data, $baseUrl),
+                    'meta' => $this->generationMeta($data, $baseUrl, $config),
+                ]);
+
+                $usage->record($user, $data, $config, [], $requestMs, metadata: [
+                    'feature' => 'image',
+                    'image_count' => count($images),
+                    'stream' => true,
                 ]);
             } catch (RuntimeException $exception) {
                 $emit('error', [
@@ -181,7 +220,9 @@ class AiImageController extends Controller
     private function validatedGenerationData(Request $request): array
     {
         $data = $request->validate([
-            'endpoint' => ['required', 'url:http,https', 'max:2048'],
+            'config_mode' => ['nullable', 'in:default,custom'],
+            'config_name' => ['nullable', 'string', 'max:100'],
+            'endpoint' => ['nullable', 'url:http,https', 'max:2048'],
             'api_key' => ['nullable', 'string', 'max:4096'],
             'model' => ['required', 'string', 'max:255'],
             'prompt' => ['required', 'string', 'max:5000'],
@@ -533,10 +574,12 @@ class AiImageController extends Controller
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>
      */
-    private function generationMeta(array $data, string $baseUrl): array
+    private function generationMeta(array $data, string $baseUrl, array $config = []): array
     {
         return [
             'source' => parse_url($baseUrl, PHP_URL_HOST) ?: $baseUrl,
+            'config_name' => (string) ($config['config_name'] ?? ''),
+            'provider_source' => (string) ($config['source'] ?? ''),
             'model' => trim((string) $data['model']),
             'size_mode' => (string) ($data['size_mode'] ?? 'auto'),
             'requested_size' => $this->requestedSize($data),

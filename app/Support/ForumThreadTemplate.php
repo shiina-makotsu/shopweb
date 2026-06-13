@@ -58,7 +58,7 @@ class ForumThreadTemplate
         return match (self::normalize($template)) {
             self::FRIENDSHIP => <<<'MARKDOWN'
 ## 基本信息
-- 昵称：
+- 称呼：
 - 性别/自定义性别：
 - 年龄段：
 - 常驻城市/区域：

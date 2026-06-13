@@ -74,6 +74,9 @@ class SiteSetting extends Model
         'support_ai_model',
         'support_ai_system_prompt',
         'support_ai_idle_minutes',
+        'ai_default_endpoint',
+        'ai_default_api_key',
+        'ai_default_user_quota_k',
     ];
 
     protected function casts(): array

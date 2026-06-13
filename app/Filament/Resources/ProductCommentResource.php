@@ -33,7 +33,7 @@ class ProductCommentResource extends Resource
             ->columns([
                 TextColumn::make('product.title')->label('商品')->searchable(),
                 TextColumn::make('user.public_id')->label('用户 ID')->searchable(),
-                TextColumn::make('user.name')->label('用户名')->searchable(),
+                TextColumn::make('user.name')->label('用户昵称')->searchable(),
                 TextColumn::make('rating')->label('评分')->sortable(),
                 TextColumn::make('body')
                     ->label('内容')

@@ -75,6 +75,9 @@
                     <p class="text-xs text-slate-500 line-through">@money($variant->compare_at_price_cents)</p>
                 @endif
                 <p class="mt-1 text-xs text-slate-500">{{ $statusNote }}</p>
+                @if($variant)
+                    <p class="mt-1 truncate text-xs text-slate-500">{{ $variant->specLabel() }}</p>
+                @endif
             </div>
         </div>
         <div class="grid gap-2 sm:grid-cols-2">
