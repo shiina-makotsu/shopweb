@@ -145,6 +145,49 @@ class AdminPanelProvider extends PanelProvider
                                 return button;
                             };
 
+                            const renderMarkdownPreview = (editor) => {
+                                const wrapper = editor?.codemirror?.getWrapperElement();
+
+                                if (! wrapper) {
+                                    return;
+                                }
+
+                                const targets = [];
+                                const fullPreview = wrapper.querySelector('.editor-preview-full.editor-preview-active, .editor-preview.editor-preview-active');
+                                const sidePreview = wrapper.nextElementSibling?.classList?.contains('editor-preview-active-side')
+                                    ? wrapper.nextElementSibling
+                                    : null;
+
+                                if (fullPreview) {
+                                    targets.push(fullPreview);
+                                }
+
+                                if (sidePreview) {
+                                    targets.push(sidePreview);
+                                }
+
+                                targets.forEach((preview) => {
+                                    const rendered = editor.options.previewRender(editor.value(), preview);
+
+                                    if (rendered !== null) {
+                                        preview.innerHTML = rendered;
+                                    }
+                                });
+                            };
+
+                            const refreshMarkdownMode = (editor, toolbar) => {
+                                window.setTimeout(() => {
+                                    editor.codemirror.refresh();
+                                    renderMarkdownPreview(editor);
+
+                                    toolbar?.querySelectorAll('.shop-md-tool-btn').forEach((button) => {
+                                        button.classList.toggle('active', button.classList.contains('shop-md-tool-edit') && ! editor.isPreviewActive() && ! editor.isSideBySideActive());
+                                        button.classList.toggle('active', button.classList.contains('shop-md-tool-preview') && editor.isPreviewActive());
+                                        button.classList.toggle('active', button.classList.contains('shop-md-tool-side-by-side') && editor.isSideBySideActive());
+                                    });
+                                }, 20);
+                            };
+
                             const setMarkdownMode = (editor, mode) => {
                                 if (mode === 'edit') {
                                     if (editor.isPreviewActive()) {
@@ -201,26 +244,39 @@ class AdminPanelProvider extends PanelProvider
                                         tabs.className = 'shop-md-tabs';
                                         toolbar.appendChild(tabs);
 
+                                        editor.codemirror.on('change', () => renderMarkdownPreview(editor));
+
                                         tabs.appendChild(makeMarkdownToolButton(
                                             'edit',
                                             '编辑',
                                             '<svg viewBox="0 0 20 20" aria-hidden="true"><path fill="currentColor" d="M4 14.5V17h2.5L15 8.5 12.5 6 4 14.5Zm13.1-8.6a1.2 1.2 0 0 0 0-1.7l-1.3-1.3a1.2 1.2 0 0 0-1.7 0l-1 1 2.5 2.5 1.1-1.1Z"/></svg>',
-                                            () => setMarkdownMode(editor, 'edit'),
+                                            () => {
+                                                setMarkdownMode(editor, 'edit');
+                                                refreshMarkdownMode(editor, toolbar);
+                                            },
                                         ));
 
                                         tabs.appendChild(makeMarkdownToolButton(
                                             'preview',
                                             '预览',
                                             '<svg viewBox="0 0 20 20" aria-hidden="true"><path fill="currentColor" d="M10 4.5c-3.9 0-7 3.1-8.4 5.5 1.4 2.4 4.5 5.5 8.4 5.5s7-3.1 8.4-5.5C17 7.6 13.9 4.5 10 4.5Zm0 9.2A3.7 3.7 0 1 1 10 6.3a3.7 3.7 0 0 1 0 7.4Zm0-1.5a2.2 2.2 0 1 0 0-4.4 2.2 2.2 0 0 0 0 4.4Z"/></svg>',
-                                            () => setMarkdownMode(editor, 'preview'),
+                                            () => {
+                                                setMarkdownMode(editor, 'preview');
+                                                refreshMarkdownMode(editor, toolbar);
+                                            },
                                         ));
 
                                         tabs.appendChild(makeMarkdownToolButton(
                                             'side-by-side',
                                             '分屏预览',
                                             '<svg viewBox="0 0 20 20" aria-hidden="true"><path fill="currentColor" d="M3.5 3A1.5 1.5 0 0 0 2 4.5v11A1.5 1.5 0 0 0 3.5 17h13a1.5 1.5 0 0 0 1.5-1.5v-11A1.5 1.5 0 0 0 16.5 3h-13ZM4 5h5.25v10H4V5Zm6.75 0H16v10h-5.25V5Z"/></svg>',
-                                            () => setMarkdownMode(editor, 'side-by-side'),
+                                            () => {
+                                                setMarkdownMode(editor, 'side-by-side');
+                                                refreshMarkdownMode(editor, toolbar);
+                                            },
                                         ));
+
+                                        refreshMarkdownMode(editor, toolbar);
                                     });
                                 });
                             };

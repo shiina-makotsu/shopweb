@@ -6,12 +6,14 @@
     $storeName = $siteSettings?->site_name ?? config('app.name');
     $categories = $storeCategories ?? collect();
     $pages = $storePages ?? collect();
-    $menuItems = $storeMenuItems ?? collect();
+    $menuItems = $storeTopNavItems ?? $storeMenuItems ?? collect();
     $path = fn (string $name, mixed $parameters = []): string => \App\Support\Url::route($name, $parameters);
     $topNavItems = $menuItems->isNotEmpty()
         ? $menuItems
         : collect([
-            ['label' => '首页', 'url' => $path('home'), 'opens_new_tab' => false, 'children' => collect()],
+            ['label' => '首页', 'url' => $path('home'), 'opens_new_tab' => false, 'children' => collect([
+                ['label' => '标签', 'url' => $path('tags.index'), 'opens_new_tab' => false, 'children' => collect()],
+            ])],
             ['label' => '全部商品', 'url' => $path('products.index'), 'opens_new_tab' => false, 'children' => collect()],
             ['label' => 'AI', 'url' => $path('ai-image.index'), 'opens_new_tab' => false, 'children' => collect()],
             ['label' => '友情链接', 'url' => $path('friend-links.index'), 'opens_new_tab' => false, 'children' => collect()],
@@ -19,6 +21,7 @@
             ['label' => '物流查询', 'url' => $path('shipments.show'), 'opens_new_tab' => false, 'children' => collect()],
             ['label' => '客服会话', 'url' => $path('support.index'), 'opens_new_tab' => false, 'children' => collect()],
             ['label' => '客服工单', 'url' => $path('support.demands'), 'opens_new_tab' => false, 'children' => collect()],
+            ['label' => '订单查询', 'url' => $path(auth()->check() ? 'orders.index' : 'login'), 'opens_new_tab' => false, 'children' => collect()],
         ]);
     $menuLabel = fn ($item): string => is_array($item) ? $item['label'] : $item->label;
     $menuUrl = fn ($item): string => is_array($item) ? $item['url'] : $item->resolvedUrl();
@@ -134,7 +137,20 @@
         </div>
 
         <nav class="border-t border-slate-200 bg-blue-800 text-sm font-medium text-white">
-            <div class="mx-auto flex max-w-7xl flex-wrap px-4">
+            <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-2 md:hidden">
+                <span class="font-semibold">首页菜单</span>
+                <button
+                    class="inline-flex items-center gap-2 rounded-sm border border-blue-200 px-3 py-2 text-sm font-medium text-white hover:bg-blue-900"
+                    type="button"
+                    data-mobile-menu-open
+                    aria-controls="site-mobile-menu"
+                    aria-expanded="false"
+                >
+                    <svg class="h-4 w-4" viewBox="0 0 20 20" aria-hidden="true" fill="currentColor"><path d="M3 5.75A.75.75 0 0 1 3.75 5h12.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 5.75Zm0 4A.75.75 0 0 1 3.75 9h12.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 9.75Zm.75 3.25a.75.75 0 0 0 0 1.5h12.5a.75.75 0 0 0 0-1.5H3.75Z"/></svg>
+                    菜单
+                </button>
+            </div>
+            <div class="mx-auto hidden max-w-7xl flex-wrap px-4 md:flex">
                 @foreach($topNavItems as $menuItem)
                     @php($children = $menuChildren($menuItem))
                     <div class="group relative">
@@ -160,13 +176,45 @@
                         @endif
                     </div>
                 @endforeach
-                @auth
-                    <a class="px-4 py-3 hover:bg-blue-900" href="{{ $path('orders.index') }}">订单查询</a>
-                @else
-                    <a class="px-4 py-3 hover:bg-blue-900" href="{{ $path('login') }}">用户登录</a>
-                @endauth
             </div>
         </nav>
+
+        <div id="site-mobile-menu" class="fixed inset-0 z-50 hidden md:hidden" data-mobile-menu>
+            <button class="absolute inset-0 bg-slate-950/45" type="button" data-mobile-menu-close aria-label="关闭菜单"></button>
+            <aside class="absolute bottom-0 left-0 top-0 flex w-80 max-w-[86vw] flex-col border-r border-slate-300 bg-white text-slate-900 shadow-xl">
+                <div class="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+                    <span class="text-base font-semibold">首页菜单</span>
+                    <button class="rounded-sm border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50" type="button" data-mobile-menu-close>关闭</button>
+                </div>
+                <nav class="flex-1 overflow-y-auto px-3 py-3 text-sm">
+                    @foreach($topNavItems as $menuItem)
+                        @php($children = $menuChildren($menuItem))
+                        <div class="border-b border-slate-100 py-1">
+                            <a
+                                class="block rounded-sm px-3 py-2 font-medium hover:bg-blue-50 hover:text-blue-800"
+                                href="{{ $menuUrl($menuItem) }}"
+                                @if($menuTarget($menuItem)) target="{{ $menuTarget($menuItem) }}" rel="noopener noreferrer" @endif
+                            >
+                                {{ $menuLabel($menuItem) }}
+                            </a>
+                            @if($children->isNotEmpty())
+                                <div class="pb-2 pl-4">
+                                    @foreach($children as $child)
+                                        <a
+                                            class="block rounded-sm px-3 py-2 text-slate-600 hover:bg-blue-50 hover:text-blue-800"
+                                            href="{{ $menuUrl($child) }}"
+                                            @if($menuTarget($child)) target="{{ $menuTarget($child) }}" rel="noopener noreferrer" @endif
+                                        >
+                                            {{ $menuLabel($child) }}
+                                        </a>
+                                    @endforeach
+                                </div>
+                            @endif
+                        </div>
+                    @endforeach
+                </nav>
+            </aside>
+        </div>
     </header>
 
     <main class="mx-auto max-w-7xl px-4 py-4">

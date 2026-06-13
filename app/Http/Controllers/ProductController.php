@@ -90,6 +90,18 @@ class ProductController extends Controller
         ]);
     }
 
+    public function tags(): View
+    {
+        return view('tags.index', [
+            'tags' => ProductTag::query()
+                ->active()
+                ->withCount(['products' => fn ($query) => $query->publiclyVisible()])
+                ->orderBy('sort_order')
+                ->orderBy('name')
+                ->get(),
+        ]);
+    }
+
     public function show(Product $product): View
     {
         abort_unless(in_array($product->status, [

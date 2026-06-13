@@ -12,6 +12,8 @@ use App\Support\PageTemplate;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Forms\Components\Builder;
+use Filament\Forms\Components\Builder\Block;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\MarkdownEditor;
 use Filament\Forms\Components\Select;
@@ -60,13 +62,22 @@ class PageResource extends Resource
                     ->required()
                     ->live()
                     ->afterStateUpdated(function ($state, callable $set): void {
+                        if ($title = PageTemplate::defaultTitle($state)) {
+                            $set('title', $title);
+                        }
+
                         if ($slug = PageTemplate::defaultSlug($state)) {
                             $set('slug', $slug);
                         }
 
+                        if ($excerpt = PageTemplate::defaultExcerpt($state)) {
+                            $set('excerpt', $excerpt);
+                            $set('seo_description', $excerpt);
+                        }
+
                         $set('body', PageTemplate::defaultBody($state));
                     })
-                    ->helperText('功能模板会在前台自动渲染菜单、友链、搜索、资源发布或 404 内容；正文可继续写自定义说明。'),
+                    ->helperText('功能模板会在前台自动渲染菜单、友链、搜索、资源发布、关于我们或 404 内容；正文可继续写自定义说明。'),
                 Select::make('cover_media_asset_id')
                     ->label('封面图')
                     ->helperText('从媒体库选择已有图片；也可以使用下方上传框直接上传新封面。')
@@ -113,6 +124,96 @@ class PageResource extends Resource
                     ])
                     ->minHeight('24rem')
                     ->helperText('支持标题、列表、表格、链接和图片。前台会安全渲染 Markdown，不直接执行原始 HTML。')
+                    ->columnSpanFull(),
+            ])->columnSpanFull(),
+
+            Section::make('拖拽式页面区块')->schema([
+                Builder::make('blocks')
+                    ->label('页面区块')
+                    ->helperText('像页面编辑器一样添加、拖动和排序区块；区块会渲染在 Markdown 正文后方。')
+                    ->blocks([
+                        Block::make('heading')
+                            ->label(fn (?array $state): string => filled($state['text'] ?? null) ? '标题：'.$state['text'] : '标题')
+                            ->schema([
+                                TextInput::make('text')->label('标题文字')->required()->maxLength(255),
+                                Select::make('level')
+                                    ->label('标题级别')
+                                    ->options([
+                                        'h2' => '二级标题',
+                                        'h3' => '三级标题',
+                                        'h4' => '四级标题',
+                                    ])
+                                    ->default('h2')
+                                    ->required(),
+                            ])->columns(2),
+                        Block::make('paragraph')
+                            ->label('段落 / Markdown')
+                            ->schema([
+                                Textarea::make('content')
+                                    ->label('内容')
+                                    ->rows(6)
+                                    ->required()
+                                    ->columnSpanFull(),
+                            ]),
+                        Block::make('quote')
+                            ->label('引用')
+                            ->schema([
+                                Textarea::make('content')->label('引用内容')->rows(4)->required()->columnSpanFull(),
+                                TextInput::make('author')->label('来源 / 作者')->maxLength(255),
+                            ]),
+                        Block::make('image')
+                            ->label(fn (?array $state): string => filled($state['caption'] ?? null) ? '图片：'.$state['caption'] : '图片')
+                            ->schema([
+                                TextInput::make('url')
+                                    ->label('图片地址')
+                                    ->required()
+                                    ->maxLength(2048)
+                                    ->helperText('支持站内相对路径或 http/https 图片地址。'),
+                                TextInput::make('alt')->label('替代文字')->maxLength(255),
+                                TextInput::make('caption')->label('图片说明')->maxLength(255)->columnSpanFull(),
+                            ])->columns(2),
+                        Block::make('button')
+                            ->label(fn (?array $state): string => filled($state['label'] ?? null) ? '按钮：'.$state['label'] : '按钮')
+                            ->schema([
+                                TextInput::make('label')->label('按钮文字')->required()->maxLength(80),
+                                TextInput::make('url')->label('链接地址')->required()->maxLength(2048),
+                                Select::make('style')
+                                    ->label('样式')
+                                    ->options([
+                                        'primary' => '主按钮',
+                                        'secondary' => '次按钮',
+                                    ])
+                                    ->default('primary')
+                                    ->required(),
+                            ])->columns(3),
+                        Block::make('notice')
+                            ->label('提示框')
+                            ->schema([
+                                Select::make('type')
+                                    ->label('类型')
+                                    ->options([
+                                        'info' => '信息',
+                                        'success' => '成功',
+                                        'warning' => '提醒',
+                                        'danger' => '警告',
+                                    ])
+                                    ->default('info')
+                                    ->required(),
+                                Textarea::make('content')->label('内容')->rows(4)->required()->columnSpanFull(),
+                            ]),
+                        Block::make('columns')
+                            ->label('双栏内容')
+                            ->schema([
+                                Textarea::make('left')->label('左栏')->rows(5),
+                                Textarea::make('right')->label('右栏')->rows(5),
+                            ])->columns(2),
+                    ])
+                    ->addActionLabel('添加区块')
+                    ->blockNumbers(false)
+                    ->blockIcons(false)
+                    ->reorderableWithButtons()
+                    ->reorderableWithDragAndDrop()
+                    ->collapsible()
                     ->columnSpanFull(),
             ])->columnSpanFull(),
 

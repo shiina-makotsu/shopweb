@@ -17,6 +17,7 @@ class Page extends Model
         'template',
         'cover_media_asset_id',
         'body',
+        'blocks',
         'excerpt',
         'seo_title',
         'seo_description',
@@ -27,6 +28,7 @@ class Page extends Model
     protected function casts(): array
     {
         return [
+            'blocks' => 'array',
             'is_published' => 'boolean',
         ];
     }

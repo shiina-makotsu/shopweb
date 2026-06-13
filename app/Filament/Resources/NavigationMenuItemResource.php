@@ -7,6 +7,7 @@ use App\Filament\Resources\NavigationMenuItemResource\Pages\CreateNavigationMenu
 use App\Filament\Resources\NavigationMenuItemResource\Pages\EditNavigationMenuItem;
 use App\Filament\Resources\NavigationMenuItemResource\Pages\ListNavigationMenuItems;
 use App\Models\NavigationMenuItem;
+use App\Models\Page;
 use App\Support\RegexSearch;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
@@ -40,18 +41,41 @@ class NavigationMenuItemResource extends Resource
     {
         return $schema->components([
             Section::make('菜单项')->schema([
+                Select::make('placement')
+                    ->label('显示位置')
+                    ->options(NavigationMenuItem::placementOptions())
+                    ->default(NavigationMenuItem::PLACEMENT_TOP_NAV)
+                    ->required()
+                    ->live(),
                 Select::make('parent_id')
                     ->label('上级菜单')
-                    ->options(fn (): array => NavigationMenuItem::query()->whereNull('parent_id')->orderBy('sort_order')->pluck('label', 'id')->all())
+                    ->options(fn (callable $get): array => NavigationMenuItem::query()
+                        ->whereNull('parent_id')
+                        ->where('placement', $get('placement') ?: NavigationMenuItem::PLACEMENT_TOP_NAV)
+                        ->orderBy('sort_order')
+                        ->pluck('label', 'id')
+                        ->all())
                     ->searchable()
                     ->preload(),
                 TextInput::make('label')->label('显示文字')->required()->maxLength(255),
-                TextInput::make('url')->label('自定义 URL')->maxLength(500)->helperText('可填写外部链接或站内路径，如 /products。'),
-                TextInput::make('route_name')->label('Laravel 路由名')->maxLength(255)->helperText('例如 home、products.index、friend-links.index、pages.show。'),
+                Select::make('route_name')
+                    ->label('内置功能')
+                    ->options(NavigationMenuItem::routeOptions())
+                    ->searchable()
+                    ->helperText('选择内置功能后会自动生成站内相对路径；需要链接到自定义页面时选择“自定义页面”并填写页面 Slug。'),
+                Select::make('route_parameters.page')
+                    ->label('自定义页面')
+                    ->options(fn (): array => Page::query()->orderBy('sort_order')->orderBy('title')->pluck('title', 'slug')->all())
+                    ->searchable()
+                    ->preload()
+                    ->visible(fn (callable $get): bool => $get('route_name') === 'pages.show')
+                    ->helperText('链接到后台“自定义页面”中的某个页面。'),
+                TextInput::make('url')->label('自定义 URL')->maxLength(500)->helperText('可填写外部链接或站内路径，如 /products。留空时使用内置功能。'),
                 KeyValue::make('route_parameters')
                     ->label('路由参数')
                     ->keyLabel('参数名')
                     ->valueLabel('参数值')
+                    ->visible(fn (callable $get): bool => filled($get('route_name')) && $get('route_name') !== 'pages.show')
                     ->columnSpanFull(),
                 TextInput::make('sort_order')->label('排序')->numeric()->default(0),
                 Toggle::make('is_active')->label('启用')->default(true),
@@ -67,6 +91,11 @@ class NavigationMenuItemResource extends Resource
                 TextColumn::make('label')
                     ->label('菜单')
                     ->searchable(query: fn (Builder $query, string $search): Builder => RegexSearch::where($query, ['label', 'url', 'route_name'], $search))
+                    ->sortable(),
+                TextColumn::make('placement')
+                    ->label('显示位置')
+                    ->formatStateUsing(fn (?string $state): string => NavigationMenuItem::placementOptions()[$state] ?? '顶部导航')
+                    ->badge()
                     ->sortable(),
                 TextColumn::make('parent.label')->label('上级')->toggleable(),
                 TextColumn::make('route_name')->label('路由')->toggleable(),

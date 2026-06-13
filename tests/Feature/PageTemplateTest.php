@@ -92,6 +92,72 @@ it('renders search results inside a custom search page template', function (): v
         ->assertSee('搜索提示。');
 });
 
+it('renders the about custom page template with editable placeholders', function (): void {
+    expect(PageTemplate::options())->toHaveKey(PageTemplate::ABOUT)
+        ->and(PageTemplate::defaultSlug(PageTemplate::ABOUT))->toBe('about')
+        ->and(PageTemplate::defaultTitle(PageTemplate::ABOUT))->toBe('关于我们')
+        ->and(PageTemplate::defaultExcerpt(PageTemplate::ABOUT))->toBeNull()
+        ->and(PageTemplate::defaultBody(PageTemplate::ABOUT))->toContain('在这里介绍你的网站定位')
+        ->and(PageTemplate::defaultBody(PageTemplate::ABOUT))->not->toContain('枫叶、白桦、丛林');
+
+    $page = Page::query()->create([
+        'title' => PageTemplate::defaultTitle(PageTemplate::ABOUT),
+        'slug' => PageTemplate::defaultSlug(PageTemplate::ABOUT),
+        'template' => PageTemplate::ABOUT,
+        'body' => PageTemplate::defaultBody(PageTemplate::ABOUT),
+        'excerpt' => PageTemplate::defaultExcerpt(PageTemplate::ABOUT),
+        'is_published' => true,
+    ]);
+
+    $this->get(route('pages.show', $page))
+        ->assertOk()
+        ->assertSee('关于我们')
+        ->assertSee('在这里放一句与你的网站理念相关的诗词')
+        ->assertSee('在这里介绍你的网站定位')
+        ->assertSee('在这里介绍网站名称、品牌名称或域名的来源')
+        ->assertDontSee('枫叶、白桦、丛林')
+        ->assertSee('CC BY 4.0')
+        ->assertSee('creativecommons.org/licenses/by/4.0/deed.zh-hans', false);
+});
+
+it('renders drag and drop page blocks after markdown content', function (): void {
+    $page = Page::query()->create([
+        'title' => '区块页面',
+        'slug' => 'block-page',
+        'template' => PageTemplate::DEFAULT,
+        'body' => '正文开头',
+        'blocks' => [
+            [
+                'type' => 'heading',
+                'data' => ['text' => '自由贸易说明', 'level' => 'h2'],
+            ],
+            [
+                'type' => 'quote',
+                'data' => ['content' => '尊重边界，平等沟通。', 'author' => '枫桦林'],
+            ],
+            [
+                'type' => 'button',
+                'data' => ['label' => '回到首页', 'url' => '/', 'style' => 'secondary'],
+            ],
+            [
+                'type' => 'columns',
+                'data' => ['left' => '左栏内容', 'right' => '右栏内容'],
+            ],
+        ],
+        'is_published' => true,
+    ]);
+
+    $this->get(route('pages.show', $page))
+        ->assertOk()
+        ->assertSee('正文开头')
+        ->assertSee('自由贸易说明')
+        ->assertSee('尊重边界，平等沟通。')
+        ->assertSee('枫桦林')
+        ->assertSee('回到首页')
+        ->assertSee('左栏内容')
+        ->assertSee('右栏内容');
+});
+
 it('uses a published 404 template page when no page with slug 404 exists', function (): void {
     Page::query()->create([
         'title' => '模板 404 页面',

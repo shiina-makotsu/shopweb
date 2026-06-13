@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Models\Category;
 use App\Models\DeliveryStatus;
 use App\Models\Manufacturer;
+use App\Models\NavigationMenuItem;
 use App\Models\OrderStatusSetting;
 use App\Models\Page;
 use App\Models\PriceVoteOption;
@@ -16,6 +17,7 @@ use App\Models\SiteSetting;
 use App\Models\SoldOutStatus;
 use App\Models\Supplier;
 use App\Models\User;
+use App\Support\PageTemplate;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 
@@ -155,9 +157,60 @@ class DatabaseSeeder extends Seeder
             ['slug' => 'about'],
             [
                 'title' => '关于我们',
-                'body' => '<p>这是一个简单页面示例。</p>',
+                'template' => PageTemplate::ABOUT,
+                'body' => PageTemplate::defaultBody(PageTemplate::ABOUT),
+                'excerpt' => PageTemplate::defaultExcerpt(PageTemplate::ABOUT),
+                'seo_title' => PageTemplate::defaultTitle(PageTemplate::ABOUT),
+                'seo_description' => PageTemplate::defaultExcerpt(PageTemplate::ABOUT),
                 'is_published' => true,
+                'sort_order' => 5,
             ],
         );
+
+        $homeMenuItem = null;
+
+        foreach ([
+            ['label' => '首页', 'route_name' => 'home', 'sort_order' => 10],
+            ['label' => '全部商品', 'route_name' => 'products.index', 'sort_order' => 20],
+            ['label' => 'AI', 'route_name' => 'ai-image.index', 'sort_order' => 30],
+            ['label' => '友情链接', 'route_name' => 'friend-links.index', 'sort_order' => 40],
+            ['label' => '论坛', 'route_name' => 'forum.index', 'sort_order' => 50],
+            ['label' => '物流查询', 'route_name' => 'shipments.show', 'sort_order' => 60],
+            ['label' => '客服会话', 'route_name' => 'support.index', 'sort_order' => 70],
+            ['label' => '客服工单', 'route_name' => 'support.demands', 'sort_order' => 80],
+            ['label' => '订单查询', 'route_name' => 'orders.index', 'sort_order' => 90],
+        ] as $item) {
+            $menuItem = NavigationMenuItem::query()->firstOrCreate(
+                [
+                    'placement' => NavigationMenuItem::PLACEMENT_TOP_NAV,
+                    'label' => $item['label'],
+                ],
+                [
+                    ...$item,
+                    'is_active' => true,
+                    'opens_new_tab' => false,
+                ],
+            );
+
+            if ($item['route_name'] === 'home') {
+                $homeMenuItem = $menuItem;
+            }
+        }
+
+        if ($homeMenuItem) {
+            NavigationMenuItem::query()->firstOrCreate(
+                [
+                    'placement' => NavigationMenuItem::PLACEMENT_TOP_NAV,
+                    'parent_id' => $homeMenuItem->id,
+                    'label' => '标签',
+                ],
+                [
+                    'route_name' => 'tags.index',
+                    'sort_order' => 10,
+                    'is_active' => true,
+                    'opens_new_tab' => false,
+                ],
+            );
+        }
     }
 }

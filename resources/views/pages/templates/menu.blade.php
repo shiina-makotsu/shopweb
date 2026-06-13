@@ -11,6 +11,7 @@
                 {{ \App\Support\Markdown::render($page->body) }}
             </div>
         @endif
+        @include('pages.partials.blocks')
     </article>
 
     <section class="rounded-sm border border-slate-300 bg-white">

@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
+use Throwable;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -45,7 +46,7 @@ class AppServiceProvider extends ServiceProvider
         });
 
         View::composer('*', function ($view): void {
-            if (app()->runningInConsole() || ! $this->canReadSettings()) {
+            if (! $this->canReadSettings()) {
                 return;
             }
 
@@ -60,13 +61,9 @@ class AppServiceProvider extends ServiceProvider
             $view->with([
                 'storeCategories' => Category::query()->active()->orderBy('sort_order')->orderBy('name')->get(),
                 'storePages' => Page::query()->published()->orderBy('sort_order')->orderBy('title')->limit(8)->get(),
-                'storeMenuItems' => NavigationMenuItem::query()
-                    ->active()
-                    ->whereNull('parent_id')
-                    ->with(['children' => fn ($query) => $query->active()->orderBy('sort_order')->orderBy('label')])
-                    ->orderBy('sort_order')
-                    ->orderBy('label')
-                    ->get(),
+                'storeMenuItems' => $this->navigationMenuItems(NavigationMenuItem::PLACEMENT_TOP_NAV),
+                'storeTopNavItems' => $this->navigationMenuItems(NavigationMenuItem::PLACEMENT_TOP_NAV),
+                'storeHomeInfoMenuItems' => $this->navigationMenuItems(NavigationMenuItem::PLACEMENT_HOME_INFO),
                 'cartItemCount' => $cartItems->sum('quantity'),
                 'cartSubtotalCents' => $cartItems->sum('line_total_cents'),
                 'unreadAnnouncementCount' => auth()->check()
@@ -93,6 +90,32 @@ class AppServiceProvider extends ServiceProvider
                 ->count();
         } catch (Throwable) {
             return 0;
+        }
+    }
+
+    private function navigationMenuItems(string $placement)
+    {
+        try {
+            if (! \Schema::hasTable('navigation_menu_items')) {
+                return collect();
+            }
+
+            $hasPlacementColumn = \Schema::hasColumn('navigation_menu_items', 'placement');
+
+            return NavigationMenuItem::query()
+                ->active()
+                ->when($hasPlacementColumn, fn ($query) => $query->placement($placement))
+                ->whereNull('parent_id')
+                ->with(['children' => fn ($query) => $query
+                    ->active()
+                    ->when($hasPlacementColumn, fn ($query) => $query->placement($placement))
+                    ->orderBy('sort_order')
+                    ->orderBy('label')])
+                ->orderBy('sort_order')
+                ->orderBy('label')
+                ->get();
+        } catch (Throwable) {
+            return collect();
         }
     }
 

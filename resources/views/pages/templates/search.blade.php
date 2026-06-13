@@ -11,6 +11,7 @@
                 {{ \App\Support\Markdown::render($page->body) }}
             </div>
         @endif
+        @include('pages.partials.blocks')
         <form method="get" action="{{ \App\Support\Url::route('pages.show', $page) }}" class="grid gap-2 px-4 py-4 sm:grid-cols-[1fr_auto]">
             <input class="rounded-sm border border-slate-300 px-3 py-2 text-sm" type="search" name="q" value="{{ $keyword }}" placeholder="搜索商品、用户 ID 或用户昵称">
             <button class="rounded-sm border border-blue-700 bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800" type="submit">搜索</button>

@@ -15,4 +15,5 @@
     <div class="content-body px-4 py-4 text-sm">
         {{ \App\Support\Markdown::render($page->body) }}
     </div>
+    @include('pages.partials.blocks')
 </article>

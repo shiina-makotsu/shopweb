@@ -58,6 +58,33 @@ const refreshCartSummary = (payload) => {
     }
 };
 
+const setupMobileMenu = () => {
+    const menu = document.querySelector('[data-mobile-menu]');
+    const openButtons = document.querySelectorAll('[data-mobile-menu-open]');
+    const closeButtons = document.querySelectorAll('[data-mobile-menu-close]');
+
+    if (!menu || openButtons.length === 0) {
+        return;
+    }
+
+    const setOpen = (open) => {
+        menu.classList.toggle('hidden', !open);
+        document.body.classList.toggle('overflow-hidden', open);
+        openButtons.forEach((button) => button.setAttribute('aria-expanded', open ? 'true' : 'false'));
+    };
+
+    openButtons.forEach((button) => button.addEventListener('click', () => setOpen(true)));
+    closeButtons.forEach((button) => button.addEventListener('click', () => setOpen(false)));
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+            setOpen(false);
+        }
+    });
+};
+
+setupMobileMenu();
+
 document.addEventListener('submit', async (event) => {
     const form = event.target;
 

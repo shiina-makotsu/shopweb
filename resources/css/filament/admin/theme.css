@@ -833,11 +833,121 @@
 .fi-fo-markdown-editor .editor-preview-side,
 .fi-fo-markdown-editor .editor-preview-full {
     background: #fff;
+    box-sizing: border-box;
     color: var(--wp-admin-text);
     line-height: 1.7;
     max-width: 100%;
-    overflow-x: auto;
+    overflow: auto;
     padding: 1rem;
+}
+
+.fi-fo-markdown-editor .editor-preview-full,
+.fi-fo-markdown-editor .editor-preview {
+    inset: 0;
+    min-height: 24rem;
+    position: absolute;
+    z-index: 8;
+}
+
+.fi-fo-markdown-editor .editor-preview-active,
+.fi-fo-markdown-editor .editor-preview-active-side {
+    display: block;
+}
+
+.fi-fo-markdown-editor .editor-preview-side {
+    border-left: 1px solid #dcdcde;
+    display: none;
+    min-height: 24rem;
+}
+
+.fi-fo-markdown-editor .editor-preview h1,
+.fi-fo-markdown-editor .editor-preview-side h1,
+.fi-fo-markdown-editor .editor-preview-full h1 {
+    font-size: 1.75rem;
+    font-weight: 600;
+    line-height: 1.25;
+    margin: 0 0 1rem;
+}
+
+.fi-fo-markdown-editor .editor-preview h2,
+.fi-fo-markdown-editor .editor-preview-side h2,
+.fi-fo-markdown-editor .editor-preview-full h2 {
+    border-bottom: 1px solid #e5e7eb;
+    font-size: 1.25rem;
+    font-weight: 600;
+    line-height: 1.35;
+    margin: 1.5rem 0 0.75rem;
+    padding-bottom: 0.35rem;
+}
+
+.fi-fo-markdown-editor .editor-preview h3,
+.fi-fo-markdown-editor .editor-preview-side h3,
+.fi-fo-markdown-editor .editor-preview-full h3 {
+    font-size: 1.05rem;
+    font-weight: 600;
+    margin: 1.25rem 0 0.5rem;
+}
+
+.fi-fo-markdown-editor .editor-preview p,
+.fi-fo-markdown-editor .editor-preview-side p,
+.fi-fo-markdown-editor .editor-preview-full p,
+.fi-fo-markdown-editor .editor-preview blockquote,
+.fi-fo-markdown-editor .editor-preview-side blockquote,
+.fi-fo-markdown-editor .editor-preview-full blockquote,
+.fi-fo-markdown-editor .editor-preview ul,
+.fi-fo-markdown-editor .editor-preview-side ul,
+.fi-fo-markdown-editor .editor-preview-full ul,
+.fi-fo-markdown-editor .editor-preview ol,
+.fi-fo-markdown-editor .editor-preview-side ol,
+.fi-fo-markdown-editor .editor-preview-full ol {
+    margin-bottom: 0.875rem;
+}
+
+.fi-fo-markdown-editor .editor-preview blockquote,
+.fi-fo-markdown-editor .editor-preview-side blockquote,
+.fi-fo-markdown-editor .editor-preview-full blockquote {
+    border-left: 4px solid color-mix(in srgb, var(--wp-admin-blue), #fff 35%);
+    color: var(--wp-admin-muted);
+    padding-left: 1rem;
+}
+
+.fi-fo-markdown-editor .editor-preview ul,
+.fi-fo-markdown-editor .editor-preview-side ul,
+.fi-fo-markdown-editor .editor-preview-full ul {
+    list-style: disc;
+    padding-left: 1.25rem;
+}
+
+.fi-fo-markdown-editor .editor-preview ol,
+.fi-fo-markdown-editor .editor-preview-side ol,
+.fi-fo-markdown-editor .editor-preview-full ol {
+    list-style: decimal;
+    padding-left: 1.25rem;
+}
+
+.fi-fo-markdown-editor .editor-preview a,
+.fi-fo-markdown-editor .editor-preview-side a,
+.fi-fo-markdown-editor .editor-preview-full a {
+    color: var(--wp-admin-blue);
+    text-decoration: underline;
+}
+
+.fi-fo-markdown-editor .editor-preview table,
+.fi-fo-markdown-editor .editor-preview-side table,
+.fi-fo-markdown-editor .editor-preview-full table {
+    border-collapse: collapse;
+    margin-bottom: 1rem;
+    width: 100%;
+}
+
+.fi-fo-markdown-editor .editor-preview th,
+.fi-fo-markdown-editor .editor-preview-side th,
+.fi-fo-markdown-editor .editor-preview-full th,
+.fi-fo-markdown-editor .editor-preview td,
+.fi-fo-markdown-editor .editor-preview-side td,
+.fi-fo-markdown-editor .editor-preview-full td {
+    border: 1px solid #dcdcde;
+    padding: 0.5rem;
 }
 
 .fi-fo-markdown-editor .EasyMDEContainer.sided--no-fullscreen .CodeMirror-sided,
@@ -845,6 +955,11 @@
     box-sizing: border-box;
     max-width: 50%;
     width: 50% !important;
+}
+
+.fi-fo-markdown-editor .EasyMDEContainer.sided--no-fullscreen .editor-preview-side {
+    height: auto;
+    position: static;
 }
 
 .fi-fo-markdown-editor .EasyMDEContainer:not(.sided--no-fullscreen) .CodeMirror-sided {

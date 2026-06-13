@@ -6,6 +6,7 @@ use App\Models\Coupon;
 use App\Models\FlashSale;
 use App\Models\FriendLink;
 use App\Models\MediaAsset;
+use App\Models\NavigationMenuItem;
 use App\Models\Order;
 use App\Models\Page;
 use App\Models\Product;
@@ -94,6 +95,24 @@ it('renders product tag listing pages', function (): void {
     $this->get(route('products.show', $product))
         ->assertOk()
         ->assertSee(Url::route('tags.show', $tag), false);
+});
+
+it('renders the tag index and exposes it under the home navigation menu', function (): void {
+    $this->seed();
+
+    $tag = ProductTag::query()->firstOrFail();
+
+    $this->get(route('tags.index'))
+        ->assertOk()
+        ->assertSee('标签')
+        ->assertSee('# '.$tag->name)
+        ->assertSee(Url::route('tags.show', $tag), false);
+
+    $this->get(route('home'))
+        ->assertOk()
+        ->assertSee('data-mobile-menu-open', false)
+        ->assertSee('data-mobile-menu', false)
+        ->assertSee(Url::route('tags.index'), false);
 });
 
 it('registers customers with a simple human verification challenge', function (): void {
@@ -527,6 +546,57 @@ it('orders home product sections and places store pages in the welcome header', 
     expect(strpos($html, '推荐商品'))->toBeLessThan(strpos($html, '最新商品'))
         ->and(strpos($html, '最新商品'))->toBeLessThan(strpos($html, '折扣商品'))
         ->and(strpos($html, '折扣商品'))->toBeLessThan(strpos($html, '概念商品'));
+});
+
+it('renders configurable top navigation and home information menu items separately', function (): void {
+    $this->seed();
+
+    NavigationMenuItem::query()->delete();
+
+    $page = Page::query()->create([
+        'title' => '关于枫桦林',
+        'slug' => 'maple-birch-about',
+        'body' => '关于页面正文',
+        'is_published' => true,
+    ]);
+
+    NavigationMenuItem::query()->create([
+        'placement' => NavigationMenuItem::PLACEMENT_TOP_NAV,
+        'label' => '自定义关于',
+        'route_name' => 'pages.show',
+        'route_parameters' => ['page' => $page->slug],
+        'sort_order' => 10,
+        'is_active' => true,
+    ]);
+
+    NavigationMenuItem::query()->create([
+        'placement' => NavigationMenuItem::PLACEMENT_TOP_NAV,
+        'label' => '论坛入口',
+        'route_name' => 'forum.index',
+        'sort_order' => 20,
+        'is_active' => true,
+    ]);
+
+    NavigationMenuItem::query()->create([
+        'placement' => NavigationMenuItem::PLACEMENT_HOME_INFO,
+        'label' => '商店声明',
+        'route_name' => 'pages.show',
+        'route_parameters' => ['page' => $page->slug],
+        'sort_order' => 5,
+        'is_active' => true,
+    ]);
+
+    $response = $this->get(route('home'))
+        ->assertOk()
+        ->assertSee('自定义关于')
+        ->assertSee('论坛入口')
+        ->assertSee('商店声明')
+        ->assertSee('/p/maple-birch-about', false);
+
+    $html = $response->getContent();
+
+    expect(strpos($html, '自定义关于'))->toBeLessThan(strpos($html, '论坛入口'))
+        ->and(substr_count($html, '商店声明'))->toBe(1);
 });
 
 it('always renders home discount and concept sections with empty states', function (): void {

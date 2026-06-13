@@ -4,8 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\Page;
 use App\Models\FlashSale;
+use App\Models\NavigationMenuItem;
 use App\Models\Product;
 use App\Models\SiteSetting;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\View\View;
 
 class HomeController extends Controller
@@ -54,6 +56,22 @@ class HomeController extends Controller
                 ->limit(8)
                 ->get(),
             'pages' => Page::query()->published()->orderBy('sort_order')->limit(6)->get(),
+            'homeInfoMenuItems' => $this->homeInfoMenuItems(),
         ]);
+    }
+
+    private function homeInfoMenuItems()
+    {
+        if (! Schema::hasTable('navigation_menu_items') || ! Schema::hasColumn('navigation_menu_items', 'placement')) {
+            return collect();
+        }
+
+        return NavigationMenuItem::query()
+            ->active()
+            ->placement(NavigationMenuItem::PLACEMENT_HOME_INFO)
+            ->whereNull('parent_id')
+            ->orderBy('sort_order')
+            ->orderBy('label')
+            ->get();
     }
 }

@@ -1,13 +1,27 @@
+@php
+    $homeInfoMenuItems = $homeInfoMenuItems ?? collect();
+    $homeInfoLinks = $homeInfoMenuItems->isNotEmpty() ? $homeInfoMenuItems : $pages;
+    $homeInfoLabel = fn ($item): string => $item instanceof \App\Models\NavigationMenuItem ? $item->label : $item->title;
+    $homeInfoUrl = fn ($item): string => $item instanceof \App\Models\NavigationMenuItem ? $item->resolvedUrl() : route('pages.show', $item);
+    $homeInfoTarget = fn ($item): ?string => $item instanceof \App\Models\NavigationMenuItem && $item->opens_new_tab ? '_blank' : null;
+@endphp
+
 <x-layouts.app :title="$settings?->site_name ?? config('app.name')" :settings="$settings">
     @if($settings?->home_welcome_enabled ?? true)
         <section class="mb-4 rounded-sm border border-slate-300 bg-white">
             <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-100 px-4 py-2">
                 <h1 class="text-lg font-semibold">{{ $settings?->home_title ?? '欢迎光临' }}</h1>
-                @if($pages->isNotEmpty())
+                @if($homeInfoLinks->isNotEmpty())
                     <nav class="flex flex-wrap items-center gap-2 text-xs">
                         <span class="text-slate-500">商店信息</span>
-                        @foreach($pages as $page)
-                            <a href="{{ route('pages.show', $page) }}" class="rounded-sm border border-slate-300 bg-white px-2 py-1 hover:bg-blue-50 hover:text-blue-800">{{ $page->title }}</a>
+                        @foreach($homeInfoLinks as $link)
+                            <a
+                                href="{{ $homeInfoUrl($link) }}"
+                                class="rounded-sm border border-slate-300 bg-white px-2 py-1 hover:bg-blue-50 hover:text-blue-800"
+                                @if($homeInfoTarget($link)) target="{{ $homeInfoTarget($link) }}" rel="noopener noreferrer" @endif
+                            >
+                                {{ $homeInfoLabel($link) }}
+                            </a>
                         @endforeach
                     </nav>
                 @endif
@@ -29,13 +43,19 @@
                 </div>
             </div>
         </section>
-    @elseif($pages->isNotEmpty())
+    @elseif($homeInfoLinks->isNotEmpty())
         <section class="mb-4 rounded-sm border border-slate-300 bg-white">
             <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                 <h1 class="text-base font-semibold">商店信息</h1>
                 <nav class="flex flex-wrap gap-2 text-xs">
-                    @foreach($pages as $page)
-                        <a href="{{ route('pages.show', $page) }}" class="rounded-sm border border-slate-300 bg-white px-2 py-1 hover:bg-blue-50 hover:text-blue-800">{{ $page->title }}</a>
+                    @foreach($homeInfoLinks as $link)
+                        <a
+                            href="{{ $homeInfoUrl($link) }}"
+                            class="rounded-sm border border-slate-300 bg-white px-2 py-1 hover:bg-blue-50 hover:text-blue-800"
+                            @if($homeInfoTarget($link)) target="{{ $homeInfoTarget($link) }}" rel="noopener noreferrer" @endif
+                        >
+                            {{ $homeInfoLabel($link) }}
+                        </a>
                     @endforeach
                 </nav>
             </div>

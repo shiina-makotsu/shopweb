@@ -291,7 +291,21 @@ it('renders direct page cover upload field for admins', function (): void {
         ->get('/admin/pages/create')
         ->assertOk()
         ->assertSee('cover_upload', false)
-        ->assertSee('上传新封面图');
+        ->assertSee('上传新封面图')
+        ->assertSee('拖拽式页面区块')
+        ->assertSee('添加区块');
+});
+
+it('renders configurable storefront navigation menu fields for admins', function (): void {
+    $admin = User::factory()->create(['role' => 'admin']);
+
+    $this->actingAs($admin)
+        ->get('/admin/navigation-menu-items/create')
+        ->assertOk()
+        ->assertSee('显示位置')
+        ->assertSee('首页商店信息')
+        ->assertSee('内置功能')
+        ->assertSee('自定义页面');
 });
 
 it('creates a media asset when a page cover upload path is submitted', function (): void {

@@ -47,6 +47,7 @@ Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])
 
 Route::get('/', [HomeController::class, 'index'])->name('home');
 Route::get('/products', [ProductController::class, 'index'])->name('products.index');
+Route::get('/tags', [ProductController::class, 'tags'])->name('tags.index');
 Route::get('/tags/{tag:slug}', [ProductController::class, 'tag'])->name('tags.show');
 Route::get('/products/{product:slug}', [ProductController::class, 'show'])->name('products.show');
 Route::get('/search', [SearchController::class, 'index'])->name('search.index');

@@ -10,6 +10,7 @@
             {{ \App\Support\Markdown::render($page->body) }}
         </div>
     @endif
+    @include('pages.partials.blocks')
     <div class="grid gap-px bg-slate-200 sm:grid-cols-2 lg:grid-cols-3">
         @forelse($links as $link)
             <a class="block bg-white px-4 py-4 hover:bg-blue-50" href="{{ $link->url }}" target="_blank" rel="noopener noreferrer">

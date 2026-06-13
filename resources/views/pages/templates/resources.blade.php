@@ -10,6 +10,7 @@
             {{ \App\Support\Markdown::render($page->body) }}
         </div>
     @endif
+    @include('pages.partials.blocks')
     <div class="grid gap-px bg-slate-200 sm:grid-cols-2 xl:grid-cols-3">
         @forelse($resources as $resource)
             <article class="bg-white px-4 py-4">

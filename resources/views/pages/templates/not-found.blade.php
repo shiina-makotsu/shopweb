@@ -19,6 +19,8 @@
             <p class="mx-auto max-w-xl text-sm leading-6 text-slate-600">{{ $page->excerpt }}</p>
         @endif
 
+        @include('pages.partials.blocks', ['class' => 'mx-auto max-w-2xl text-left'])
+
         <a
             href="{{ \App\Support\Url::route('home') }}"
             class="inline-flex rounded-sm border border-blue-700 bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800"

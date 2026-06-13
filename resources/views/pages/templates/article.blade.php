@@ -19,4 +19,5 @@
     <div class="content-body px-5 py-6 text-sm leading-7 sm:px-8">
         {{ \App\Support\Markdown::render($page->body) }}
     </div>
+    @include('pages.partials.blocks', ['class' => 'border-t border-slate-200 px-5 py-6 sm:px-8'])
 </article>
