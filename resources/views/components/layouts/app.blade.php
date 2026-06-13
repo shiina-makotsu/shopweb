@@ -13,6 +13,7 @@
         : collect([
             ['label' => '首页', 'url' => $path('home'), 'opens_new_tab' => false, 'children' => collect()],
             ['label' => '全部商品', 'url' => $path('products.index'), 'opens_new_tab' => false, 'children' => collect()],
+            ['label' => 'AI 生图', 'url' => $path('ai-image.index'), 'opens_new_tab' => false, 'children' => collect()],
             ['label' => '友情链接', 'url' => $path('friend-links.index'), 'opens_new_tab' => false, 'children' => collect()],
             ['label' => '论坛', 'url' => $path('forum.index'), 'opens_new_tab' => false, 'children' => collect()],
             ['label' => '物流查询', 'url' => $path('shipments.show'), 'opens_new_tab' => false, 'children' => collect()],

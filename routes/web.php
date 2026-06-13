@@ -1,18 +1,19 @@
 <?php
 
-use App\Http\Controllers\Auth\AuthenticatedSessionController;
-use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\Admin\BackupController;
 use App\Http\Controllers\Admin\CsvExportController;
 use App\Http\Controllers\Admin\PaymentProofController;
 use App\Http\Controllers\Admin\ReportExportController;
 use App\Http\Controllers\AfterSalesController;
+use App\Http\Controllers\AiImageController;
+use App\Http\Controllers\AnnouncementController;
+use App\Http\Controllers\Auth\AuthenticatedSessionController;
+use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\CartController;
 use App\Http\Controllers\CheckoutController;
-use App\Http\Controllers\AnnouncementController;
+use App\Http\Controllers\FlashSaleCheckoutController;
 use App\Http\Controllers\ForumController;
 use App\Http\Controllers\FriendLinkController;
-use App\Http\Controllers\FlashSaleCheckoutController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\InstallController;
 use App\Http\Controllers\OrderController;
@@ -50,6 +51,9 @@ Route::get('/tags/{tag:slug}', [ProductController::class, 'tag'])->name('tags.sh
 Route::get('/products/{product:slug}', [ProductController::class, 'show'])->name('products.show');
 Route::get('/search', [SearchController::class, 'index'])->name('search.index');
 Route::get('/friend-links', [FriendLinkController::class, 'index'])->name('friend-links.index');
+Route::get('/ai-image', [AiImageController::class, 'index'])->name('ai-image.index');
+Route::post('/ai-image/models', [AiImageController::class, 'models'])->name('ai-image.models');
+Route::post('/ai-image/generate', [AiImageController::class, 'generate'])->name('ai-image.generate');
 Route::get('/users/{user:public_id}', [UserProfileController::class, 'show'])->name('users.show');
 Route::get('/announcements', [AnnouncementController::class, 'index'])->name('announcements.index');
 Route::get('/announcements/{announcement:slug}', [AnnouncementController::class, 'show'])->name('announcements.show');

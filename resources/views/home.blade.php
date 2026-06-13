@@ -42,7 +42,11 @@
         </section>
     @endif
 
-    <section class="mb-4 grid gap-3 md:grid-cols-3">
+    <section class="mb-4 grid gap-3 md:grid-cols-4">
+        <a class="rounded-sm border border-violet-200 bg-white px-4 py-4 hover:bg-violet-50" href="{{ route('ai-image.index') }}">
+            <span class="block text-base font-semibold text-violet-900">AI 生图</span>
+            <span class="mt-1 block text-sm text-slate-600">接入自定义模型接口，用提示词、参考图和尺寸参数生成图片。</span>
+        </a>
         <a class="rounded-sm border border-blue-200 bg-white px-4 py-4 hover:bg-blue-50" href="{{ route('support.index') }}">
             <span class="block text-base font-semibold text-blue-900">客服会话</span>
             <span class="mt-1 block text-sm text-slate-600">像聊天一样和客服即时沟通，可附带订单、图片或文件。</span>
