@@ -299,6 +299,10 @@ it('renders direct page cover upload field for admins', function (): void {
         ->assertSee('交互式区块')
         ->assertSee('交互式区块编辑')
         ->assertSee('添加区块')
+        ->assertSee('头图横幅')
+        ->assertSee('菜单模块')
+        ->assertSee('文章模块')
+        ->assertSee('资源模块')
         ->assertSee('发布到菜单')
         ->assertSee('不添加到菜单')
         ->assertSee('顶部导航')
@@ -339,14 +343,20 @@ it('renders configurable storefront navigation menu fields for admins', function
         ->assertOk()
         ->assertSee('菜单目录树')
         ->assertSee('保存排序')
-        ->assertSee('拖动菜单项可调整显示顺序');
+        ->assertSee('拖动菜单项可调整显示顺序')
+        ->assertSee('dragMove', false)
+        ->assertSee('dragWheel', false)
+        ->assertSee('stopAutoScroll', false);
 
     $this->actingAs($admin)
         ->get('/admin/navigation-menu-items/create')
         ->assertOk()
         ->assertSee('显示位置')
         ->assertSee('首页商店信息')
+        ->assertSee('文章')
         ->assertSee('内置功能')
+        ->assertSee('链接提示文本')
+        ->assertSee('鼠标悬停在菜单链接上时显示')
         ->assertSee('自定义页面')
         ->assertSee('没有子菜单的无页面菜单不会在前台显示');
 });

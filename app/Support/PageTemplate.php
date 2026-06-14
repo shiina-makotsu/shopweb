@@ -96,6 +96,7 @@ class PageTemplate
     {
         return match (self::normalize($template)) {
             self::ABOUT => '关于我们',
+            self::ARTICLE => '文章标题',
             self::NOT_FOUND => '页面不存在',
             self::MENU => '导航菜单',
             self::FRIEND_LINKS => '友情链接',

@@ -17,9 +17,9 @@
                 </form>
             </div>
         </div>
-        <div class="grid gap-px bg-slate-200 md:grid-cols-2">
+        <div class="grid gap-4 bg-slate-50 p-4 md:grid-cols-3">
             @forelse($sections as $section)
-                <a class="block bg-white px-4 py-4 hover:bg-blue-50" href="{{ route('forum.sections.show', $section) }}">
+                <a class="block rounded-sm border border-slate-200 bg-white px-4 py-4 shadow-sm hover:border-blue-200 hover:bg-blue-50" href="{{ route('forum.sections.show', $section) }}">
                     <div class="flex items-start justify-between gap-4">
                         <div>
                             <h2 class="font-semibold text-slate-900">{{ $section->name }}</h2>
@@ -34,8 +34,11 @@
                     </div>
                 </a>
             @empty
-                <p class="bg-white px-4 py-8 text-sm text-slate-600">暂无论坛版块。</p>
+                <p class="col-span-full bg-white px-4 py-8 text-sm text-slate-600">暂无论坛版块。</p>
             @endforelse
+        </div>
+        <div class="border-t border-slate-200 px-4 py-3">
+            {{ $sections->links('pagination::tailwind') }}
         </div>
     </section>
 

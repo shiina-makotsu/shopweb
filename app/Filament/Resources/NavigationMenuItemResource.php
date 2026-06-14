@@ -74,6 +74,11 @@ class NavigationMenuItemResource extends Resource
                     ->visible(fn (callable $get): bool => $get('route_name') === 'pages.show')
                     ->helperText('链接到后台“自定义页面”中的某个页面。'),
                 TextInput::make('url')->label('自定义 URL')->maxLength(500)->helperText('可填写外部链接或站内路径，如 /products。留空时使用内置功能。'),
+                TextInput::make('tooltip_text')
+                    ->label('链接提示文本')
+                    ->maxLength(500)
+                    ->helperText('鼠标悬停在菜单链接上时显示；留空则不显示提示。')
+                    ->columnSpanFull(),
                 KeyValue::make('route_parameters')
                     ->label('路由参数')
                     ->keyLabel('参数名')
@@ -104,6 +109,7 @@ class NavigationMenuItemResource extends Resource
                 TextColumn::make('parent.label')->label('上级')->toggleable(),
                 TextColumn::make('route_name')->label('类型')->state(fn (NavigationMenuItem $record): string => $record->typeLabel())->toggleable(),
                 TextColumn::make('url')->label('URL')->limit(36)->toggleable(),
+                TextColumn::make('tooltip_text')->label('提示文本')->limit(40)->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('sort_order')->label('排序')->sortable(),
                 TextColumn::make('is_active')->label('状态')->formatStateUsing(fn (bool $state): string => $state ? '启用' : '停用')->badge(),
                 TextColumn::make('updated_at')->label('更新')->dateTime('Y-m-d H:i')->sortable(),

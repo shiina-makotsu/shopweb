@@ -26,6 +26,7 @@
     $menuLabel = fn ($item): string => is_array($item) ? $item['label'] : $item->label;
     $menuUrl = fn ($item): string => is_array($item) ? $item['url'] : $item->resolvedUrl();
     $menuTarget = fn ($item): ?string => (is_array($item) ? ($item['opens_new_tab'] ?? false) : $item->opens_new_tab) ? '_blank' : null;
+    $menuTooltip = fn ($item): ?string => filled(is_array($item) ? ($item['tooltip_text'] ?? null) : $item->tooltip_text) ? (string) (is_array($item) ? $item['tooltip_text'] : $item->tooltip_text) : null;
     $menuChildren = fn ($item) => is_array($item) ? collect($item['children'] ?? []) : ($item->children ?? collect());
     $menuHasDestination = fn ($item): bool => is_array($item) ? filled($item['url'] ?? null) : $item->hasDestination();
     $menuVisible = fn ($item): bool => $menuHasDestination($item) || $menuChildren($item)->isNotEmpty();
@@ -161,6 +162,7 @@
                             <a
                                 class="block px-4 py-3 hover:bg-blue-900"
                                 href="{{ $menuUrl($menuItem) }}"
+                                @if($menuTooltip($menuItem)) title="{{ $menuTooltip($menuItem) }}" @endif
                                 @if($menuTarget($menuItem)) target="{{ $menuTarget($menuItem) }}" rel="noopener noreferrer" @endif
                             >
                                 {{ $menuLabel($menuItem) }}
@@ -181,6 +183,7 @@
                                         <a
                                             class="block max-w-[18rem] truncate px-4 py-2 text-sm hover:bg-blue-50 hover:text-blue-800"
                                             href="{{ $menuUrl($child) }}"
+                                            @if($menuTooltip($child)) title="{{ $menuTooltip($child) }}" @endif
                                             @if($menuTarget($child)) target="{{ $menuTarget($child) }}" rel="noopener noreferrer" @endif
                                         >
                                             {{ $menuLabel($child) }}
@@ -212,6 +215,7 @@
                                 <a
                                     class="block rounded-sm px-3 py-2 font-medium hover:bg-blue-50 hover:text-blue-800"
                                     href="{{ $menuUrl($menuItem) }}"
+                                    @if($menuTooltip($menuItem)) title="{{ $menuTooltip($menuItem) }}" @endif
                                     @if($menuTarget($menuItem)) target="{{ $menuTarget($menuItem) }}" rel="noopener noreferrer" @endif
                                 >
                                     {{ $menuLabel($menuItem) }}
@@ -232,6 +236,7 @@
                                             <a
                                                 class="block rounded-sm px-3 py-2 text-slate-600 hover:bg-blue-50 hover:text-blue-800"
                                                 href="{{ $menuUrl($child) }}"
+                                                @if($menuTooltip($child)) title="{{ $menuTooltip($child) }}" @endif
                                                 @if($menuTarget($child)) target="{{ $menuTarget($child) }}" rel="noopener noreferrer" @endif
                                             >
                                                 {{ $menuLabel($child) }}
@@ -335,6 +340,7 @@
                                             <a
                                                 class="block px-3 py-2 hover:bg-blue-50 hover:text-blue-800"
                                                 href="{{ $menuUrl($infoItem) }}"
+                                                @if($menuTooltip($infoItem)) title="{{ $menuTooltip($infoItem) }}" @endif
                                                 @if($menuTarget($infoItem)) target="{{ $menuTarget($infoItem) }}" rel="noopener noreferrer" @endif
                                             >
                                                 {{ $menuLabel($infoItem) }}
@@ -351,6 +357,7 @@
                                                 <a
                                                     class="block px-6 py-2 text-slate-600 hover:bg-blue-50 hover:text-blue-800"
                                                     href="{{ $menuUrl($child) }}"
+                                                    @if($menuTooltip($child)) title="{{ $menuTooltip($child) }}" @endif
                                                     @if($menuTarget($child)) target="{{ $menuTarget($child) }}" rel="noopener noreferrer" @endif
                                                 >
                                                     {{ $menuLabel($child) }}

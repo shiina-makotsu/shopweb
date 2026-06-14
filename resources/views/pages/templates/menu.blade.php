@@ -23,7 +23,11 @@
                 @continue($item->isPlaceholder() && $item->children->isEmpty())
                 <div class="px-4 py-3 text-sm">
                     @if($item->hasDestination())
-                        <a class="font-medium hover:text-blue-800" href="{{ $item->resolvedUrl() }}">{{ $item->label }}</a>
+                        <a
+                            class="font-medium hover:text-blue-800"
+                            href="{{ $item->resolvedUrl() }}"
+                            @if($item->tooltip_text) title="{{ $item->tooltip_text }}" @endif
+                        >{{ $item->label }}</a>
                     @else
                         <div>
                             <p class="font-medium text-slate-900">{{ $item->label }}</p>
@@ -35,7 +39,11 @@
                             @foreach($item->children as $child)
                                 @continue($child->isPlaceholder() && $child->children->isEmpty())
                                 @if($child->hasDestination())
-                                    <a class="rounded-sm border border-slate-300 px-3 py-1 text-xs hover:bg-blue-50 hover:text-blue-800" href="{{ $child->resolvedUrl() }}">{{ $child->label }}</a>
+                                    <a
+                                        class="rounded-sm border border-slate-300 px-3 py-1 text-xs hover:bg-blue-50 hover:text-blue-800"
+                                        href="{{ $child->resolvedUrl() }}"
+                                        @if($child->tooltip_text) title="{{ $child->tooltip_text }}" @endif
+                                    >{{ $child->label }}</a>
                                 @else
                                     <span class="rounded-sm border border-slate-200 px-3 py-1 text-xs text-slate-500">{{ $child->label }}</span>
                                 @endif

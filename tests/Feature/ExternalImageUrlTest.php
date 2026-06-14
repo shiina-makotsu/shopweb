@@ -5,6 +5,7 @@ use App\Filament\Resources\MediaAssetResource;
 use App\Models\FriendLink;
 use App\Models\MediaAsset;
 use App\Models\SiteSetting;
+use App\Models\User;
 
 it('allows image fields to use external web urls', function (): void {
     $asset = MediaAsset::createImageFromUploadOrUrl([
@@ -61,4 +62,14 @@ it('prefers uploaded local image paths over stale external urls', function (): v
 
     expect($friendData['image_path'])->toBe('friend-links/new.png')
         ->and($friendData)->not->toHaveKey('image_url');
+});
+
+it('renders friend link image url preview controls in the admin form', function (): void {
+    $admin = User::factory()->create(['role' => 'admin']);
+
+    $this->actingAs($admin)
+        ->get('/admin/friend-links/create')
+        ->assertOk()
+        ->assertSee('image_url_preview', false)
+        ->assertSee('粘贴图片 URL 或上传图片后显示预览。');
 });

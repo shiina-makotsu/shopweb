@@ -19,6 +19,7 @@ class NavigationMenuItem extends Model
         'placement',
         'label',
         'url',
+        'tooltip_text',
         'route_name',
         'route_parameters',
         'sort_order',
@@ -130,6 +131,7 @@ class NavigationMenuItem extends Model
     {
         return [
             'home' => '首页',
+            'articles.index' => '文章',
             'tags.index' => '标签',
             'products.index' => '全部商品',
             'ai-image.index' => 'AI',

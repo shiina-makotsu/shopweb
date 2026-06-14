@@ -47,6 +47,10 @@ it('renders the storefront ai image page and entry links', function (): void {
         ->assertSee('lg:sticky', false)
         ->assertSee('data-chat-files-input', false)
         ->assertSee('data-chat-model-select', false)
+        ->assertSee('data-chat-web-search', false)
+        ->assertSee('aria-pressed="false"', false)
+        ->assertSee('gpt-image-2')
+        ->assertSee('gpt-5.5')
         ->assertSee('chatTitleFromMessage', false)
         ->assertSee('推理模式')
         ->assertSee('超高')
@@ -363,14 +367,18 @@ it('uses separate backend keys for image and chat ai requests', function (): voi
             'model' => 'gpt-4.1-mini',
             'prompt' => '你好',
             'reasoning_mode' => 'medium',
+            'web_search' => true,
             'timeout_seconds' => 600,
         ])
         ->assertOk()
         ->assertJsonPath('message', '聊天回复')
-        ->assertJsonPath('meta.provider_source', 'site_default');
+        ->assertJsonPath('meta.provider_source', 'site_default')
+        ->assertJsonPath('meta.web_search', true);
 
     Http::assertSent(fn ($request): bool => $request->url() === 'https://chat.example.test/v1/chat/completions'
-        && $request->hasHeader('Authorization', 'Bearer chat-key'));
+        && $request->hasHeader('Authorization', 'Bearer chat-key')
+        && str_contains($request->body(), '"web_search":true')
+        && str_contains($request->body(), '"web_search_preview"'));
 
     $this->assertDatabaseHas('ai_usage_logs', [
         'user_id' => $user->id,

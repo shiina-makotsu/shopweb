@@ -254,6 +254,7 @@ class AiImageController extends Controller
         ], $config, $providerPayload, $requestMs, metadata: [
             'feature' => 'chat',
             'reasoning_mode' => $data['reasoning_mode'],
+            'web_search' => (bool) ($data['web_search'] ?? false),
             'attachment_count' => count($request->file('chat_files', [])),
         ]);
 
@@ -265,6 +266,7 @@ class AiImageController extends Controller
                 'provider_source' => (string) ($config['source'] ?? ''),
                 'model' => trim((string) $data['model']),
                 'reasoning_mode' => $data['reasoning_mode'],
+                'web_search' => (bool) ($data['web_search'] ?? false),
                 'request_ms' => $requestMs,
             ],
         ]);
@@ -335,6 +337,7 @@ class AiImageController extends Controller
             'model' => ['required', 'string', 'max:255'],
             'prompt' => ['required', 'string', 'max:5000'],
             'reasoning_mode' => ['nullable', 'in:low,medium,high,ultra'],
+            'web_search' => ['nullable', 'boolean'],
             'timeout_seconds' => ['nullable', 'integer', 'min:30', 'max:1200'],
             'chat_files' => ['nullable', 'array', 'max:6'],
             'chat_files.*' => ['file', 'max:20480'],
@@ -661,7 +664,7 @@ class AiImageController extends Controller
             ];
         }
 
-        return [
+        $payload = [
             'model' => trim((string) $data['model']),
             'messages' => [
                 [
@@ -671,8 +674,17 @@ class AiImageController extends Controller
             ],
             'metadata' => [
                 'reasoning_mode' => (string) ($data['reasoning_mode'] ?? 'low'),
+                'web_search' => (bool) ($data['web_search'] ?? false),
             ],
         ];
+
+        if ((bool) ($data['web_search'] ?? false)) {
+            $payload['tools'] = [
+                ['type' => 'web_search_preview'],
+            ];
+        }
+
+        return $payload;
     }
 
     private function extractChatText(array $payload): string

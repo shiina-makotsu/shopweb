@@ -307,12 +307,14 @@ it('syncs a published custom page into a selected storefront menu', function ():
     PageMenuPublication::sync($page, [
         'placement' => NavigationMenuItem::PLACEMENT_HOME_INFO,
         'label' => '菜单发布入口',
+        'tooltip_text' => '从页面发布时写入的提示',
         'sort_order' => 30,
     ]);
 
     $this->assertDatabaseHas('navigation_menu_items', [
         'placement' => NavigationMenuItem::PLACEMENT_HOME_INFO,
         'label' => '菜单发布入口',
+        'tooltip_text' => '从页面发布时写入的提示',
         'route_name' => 'pages.show',
         'sort_order' => 30,
     ]);
@@ -322,13 +324,15 @@ it('syncs a published custom page into a selected storefront menu', function ():
     PageMenuPublication::sync($page, [
         'placement' => NavigationMenuItem::PLACEMENT_TOP_NAV,
         'label' => '更新后的菜单',
+        'tooltip_text' => '更新后的提示',
         'sort_order' => 40,
     ], 'published-menu-page');
 
     $menu = NavigationMenuItem::query()->where('label', '更新后的菜单')->firstOrFail();
 
     expect($menu->placement)->toBe(NavigationMenuItem::PLACEMENT_TOP_NAV)
-        ->and($menu->route_parameters['page'])->toBe('published-menu-page-new');
+        ->and($menu->route_parameters['page'])->toBe('published-menu-page-new')
+        ->and($menu->tooltip_text)->toBe('更新后的提示');
 });
 
 it('renders custom page cover images from the media library', function (): void {
@@ -599,6 +603,7 @@ it('renders configurable top navigation and home information menu items separate
     NavigationMenuItem::query()->create([
         'placement' => NavigationMenuItem::PLACEMENT_TOP_NAV,
         'label' => '自定义关于',
+        'tooltip_text' => '查看关于页面说明',
         'route_name' => 'pages.show',
         'route_parameters' => ['page' => $page->slug],
         'sort_order' => 10,
@@ -616,6 +621,7 @@ it('renders configurable top navigation and home information menu items separate
     NavigationMenuItem::query()->create([
         'placement' => NavigationMenuItem::PLACEMENT_HOME_INFO,
         'label' => '商店声明',
+        'tooltip_text' => '阅读商店声明',
         'route_name' => 'pages.show',
         'route_parameters' => ['page' => $page->slug],
         'sort_order' => 5,
@@ -627,12 +633,16 @@ it('renders configurable top navigation and home information menu items separate
         ->assertSee('自定义关于')
         ->assertSee('论坛入口')
         ->assertSee('商店声明')
+        ->assertSee('title="查看关于页面说明"', false)
+        ->assertSee('title="阅读商店声明"', false)
         ->assertSee('/p/maple-birch-about', false);
 
     $html = $response->getContent();
 
+    preg_match_all('/>\s*商店声明\s*<\/a>/u', $html, $storeInfoMatches);
+
     expect(strpos($html, '自定义关于'))->toBeLessThan(strpos($html, '论坛入口'))
-        ->and(substr_count($html, '商店声明'))->toBe(2);
+        ->and(count($storeInfoMatches[0]))->toBe(2);
 });
 
 it('keeps store information menu managed and hides empty placeholder menus', function (): void {
@@ -1729,6 +1739,7 @@ it('renders friend links from the homepage and friend link listing', function ()
     FriendLink::query()->create([
         'site_name' => '伙伴站点',
         'url' => 'https://example.test',
+        'image_path' => 'https://cdn.example.test/friend.png',
         'description' => '一个友情链接。',
         'is_active' => true,
     ]);
@@ -1740,6 +1751,11 @@ it('renders friend links from the homepage and friend link listing', function ()
 
     $this->get(route('friend-links.index'))
         ->assertOk()
+        ->assertSee('md:grid-cols-3', false)
+        ->assertSee('gap-4', false)
+        ->assertSee('https://cdn.example.test/friend.png', false)
+        ->assertSee('data-friend-link-placeholder', false)
+        ->assertSee('onerror=', false)
         ->assertSee('伙伴站点')
         ->assertSee('一个友情链接。');
 });

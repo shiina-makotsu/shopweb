@@ -2,9 +2,9 @@
 
 namespace App\Models;
 
+use App\Support\MediaPath;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Storage;
 
 class FriendLink extends Model
 {
@@ -35,10 +35,6 @@ class FriendLink extends Model
             return null;
         }
 
-        if (MediaAsset::isExternalUrl($this->image_path)) {
-            return $this->image_path;
-        }
-
-        return Storage::disk('public_uploads')->url($this->image_path);
+        return MediaPath::url($this->image_path);
     }
 }

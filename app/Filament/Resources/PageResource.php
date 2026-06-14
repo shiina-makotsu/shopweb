@@ -107,6 +107,21 @@ class PageResource extends Resource
                     ->maxLength(2048)
                     ->columnSpanFull(),
                 TextInput::make('sort_order')->label('排序')->numeric()->default(0),
+                TextInput::make('views_count')
+                    ->label('阅读量')
+                    ->numeric()
+                    ->default(0)
+                    ->visible(fn (callable $get): bool => PageTemplate::normalize($get('template') ?? null) === PageTemplate::ARTICLE),
+                Toggle::make('comments_enabled')
+                    ->label('允许评论')
+                    ->default(false)
+                    ->visible(fn (callable $get): bool => PageTemplate::normalize($get('template') ?? null) === PageTemplate::ARTICLE),
+                TextInput::make('reward_qr_path')
+                    ->label('赞赏码图片')
+                    ->maxLength(2048)
+                    ->helperText('仅文章模板显示。可填写站内相对路径、/uploads 路径或 http/https 图片地址；留空则不显示赞赏码。')
+                    ->visible(fn (callable $get): bool => PageTemplate::normalize($get('template') ?? null) === PageTemplate::ARTICLE)
+                    ->columnSpanFull(),
                 ToggleButtons::make('editor_mode')
                     ->label('编辑模式')
                     ->options([
@@ -153,6 +168,11 @@ class PageResource extends Resource
                     ->maxLength(255)
                     ->visible(fn (callable $get): bool => ($get('menu_placement') ?? 'none') !== 'none')
                     ->helperText('留空时使用页面标题。'),
+                TextInput::make('menu_tooltip_text')
+                    ->label('菜单提示文本')
+                    ->maxLength(500)
+                    ->visible(fn (callable $get): bool => ($get('menu_placement') ?? 'none') !== 'none')
+                    ->helperText('鼠标悬停在菜单链接上时显示；留空则不显示。'),
                 TextInput::make('menu_sort_order')
                     ->label('菜单排序')
                     ->numeric()
@@ -185,83 +205,7 @@ class PageResource extends Resource
                 Builder::make('blocks')
                     ->label('页面区块')
                     ->helperText('传统模式可作为附加区块；交互式模式会将这里作为主编辑器。添加模块后可以拖拽调整顺序。')
-                    ->blocks([
-                        Block::make('heading')
-                            ->label(fn (?array $state): string => filled($state['text'] ?? null) ? '标题：'.$state['text'] : '标题')
-                            ->schema([
-                                TextInput::make('text')->label('标题文字')->required()->maxLength(255),
-                                Select::make('level')
-                                    ->label('标题级别')
-                                    ->options([
-                                        'h2' => '二级标题',
-                                        'h3' => '三级标题',
-                                        'h4' => '四级标题',
-                                    ])
-                                    ->default('h2')
-                                    ->required(),
-                            ])->columns(2),
-                        Block::make('paragraph')
-                            ->label('段落 / Markdown')
-                            ->schema([
-                                Textarea::make('content')
-                                    ->label('内容')
-                                    ->rows(6)
-                                    ->required()
-                                    ->columnSpanFull(),
-                            ]),
-                        Block::make('quote')
-                            ->label('引用')
-                            ->schema([
-                                Textarea::make('content')->label('引用内容')->rows(4)->required()->columnSpanFull(),
-                                TextInput::make('author')->label('来源 / 作者')->maxLength(255),
-                            ]),
-                        Block::make('image')
-                            ->label(fn (?array $state): string => filled($state['caption'] ?? null) ? '图片：'.$state['caption'] : '图片')
-                            ->schema([
-                                TextInput::make('url')
-                                    ->label('图片地址')
-                                    ->required()
-                                    ->maxLength(2048)
-                                    ->helperText('支持站内相对路径或 http/https 图片地址。'),
-                                TextInput::make('alt')->label('替代文字')->maxLength(255),
-                                TextInput::make('caption')->label('图片说明')->maxLength(255)->columnSpanFull(),
-                            ])->columns(2),
-                        Block::make('button')
-                            ->label(fn (?array $state): string => filled($state['label'] ?? null) ? '按钮：'.$state['label'] : '按钮')
-                            ->schema([
-                                TextInput::make('label')->label('按钮文字')->required()->maxLength(80),
-                                TextInput::make('url')->label('链接地址')->required()->maxLength(2048),
-                                Select::make('style')
-                                    ->label('样式')
-                                    ->options([
-                                        'primary' => '主按钮',
-                                        'secondary' => '次按钮',
-                                    ])
-                                    ->default('primary')
-                                    ->required(),
-                            ])->columns(3),
-                        Block::make('notice')
-                            ->label('提示框')
-                            ->schema([
-                                Select::make('type')
-                                    ->label('类型')
-                                    ->options([
-                                        'info' => '信息',
-                                        'success' => '成功',
-                                        'warning' => '提醒',
-                                        'danger' => '警告',
-                                    ])
-                                    ->default('info')
-                                    ->required(),
-                                Textarea::make('content')->label('内容')->rows(4)->required()->columnSpanFull(),
-                            ]),
-                        Block::make('columns')
-                            ->label('双栏内容')
-                            ->schema([
-                                Textarea::make('left')->label('左栏')->rows(5),
-                                Textarea::make('right')->label('右栏')->rows(5),
-                            ])->columns(2),
-                    ])
+                    ->blocks(self::pageBlocks())
                     ->addActionLabel('添加区块')
                     ->blockNumbers(false)
                     ->blockIcons(false)
@@ -332,5 +276,156 @@ class PageResource extends Resource
             ->get()
             ->mapWithKeys(fn (MediaAsset $asset): array => [$asset->id => $asset->name ?: basename($asset->path)])
             ->all();
+    }
+
+    /**
+     * @return array<int, Block>
+     */
+    private static function pageBlocks(): array
+    {
+        return [
+            Block::make('heading')
+                ->label(fn (?array $state): string => filled($state['text'] ?? null) ? '标题：'.$state['text'] : '标题')
+                ->schema([
+                    TextInput::make('text')->label('标题文字')->required()->maxLength(255),
+                    Select::make('level')
+                        ->label('标题级别')
+                        ->options([
+                            'h2' => '二级标题',
+                            'h3' => '三级标题',
+                            'h4' => '四级标题',
+                        ])
+                        ->default('h2')
+                        ->required(),
+                ])->columns(2),
+            Block::make('paragraph')
+                ->label('段落 / Markdown')
+                ->schema([
+                    Textarea::make('content')
+                        ->label('内容')
+                        ->rows(6)
+                        ->required()
+                        ->columnSpanFull(),
+                ]),
+            Block::make('quote')
+                ->label('引用')
+                ->schema([
+                    Textarea::make('content')->label('引用内容')->rows(4)->required()->columnSpanFull(),
+                    TextInput::make('author')->label('来源 / 作者')->maxLength(255),
+                ]),
+            Block::make('image')
+                ->label(fn (?array $state): string => filled($state['caption'] ?? null) ? '图片：'.$state['caption'] : '图片')
+                ->schema([
+                    TextInput::make('url')
+                        ->label('图片地址')
+                        ->required()
+                        ->maxLength(2048)
+                        ->helperText('支持站内相对路径或 http/https 图片地址。'),
+                    TextInput::make('alt')->label('替代文字')->maxLength(255),
+                    TextInput::make('caption')->label('图片说明')->maxLength(255)->columnSpanFull(),
+                ])->columns(2),
+            Block::make('button')
+                ->label(fn (?array $state): string => filled($state['label'] ?? null) ? '按钮：'.$state['label'] : '按钮')
+                ->schema([
+                    TextInput::make('label')->label('按钮文字')->required()->maxLength(80),
+                    TextInput::make('url')->label('链接地址')->required()->maxLength(2048),
+                    Select::make('style')
+                        ->label('样式')
+                        ->options([
+                            'primary' => '主按钮',
+                            'secondary' => '次按钮',
+                        ])
+                        ->default('primary')
+                        ->required(),
+                ])->columns(3),
+            Block::make('notice')
+                ->label('提示框')
+                ->schema([
+                    Select::make('type')
+                        ->label('类型')
+                        ->options([
+                            'info' => '信息',
+                            'success' => '成功',
+                            'warning' => '提醒',
+                            'danger' => '警告',
+                        ])
+                        ->default('info')
+                        ->required(),
+                    Textarea::make('content')->label('内容')->rows(4)->required()->columnSpanFull(),
+                ]),
+            Block::make('columns')
+                ->label('双栏内容')
+                ->schema([
+                    Textarea::make('left')->label('左栏')->rows(5),
+                    Textarea::make('right')->label('右栏')->rows(5),
+                ])->columns(2),
+            Block::make('hero')
+                ->label('头图横幅')
+                ->schema([
+                    TextInput::make('title')->label('标题')->required()->maxLength(255),
+                    Textarea::make('subtitle')->label('副标题')->rows(3),
+                    TextInput::make('image_url')->label('背景图')->maxLength(2048),
+                    TextInput::make('button_label')->label('按钮文字')->maxLength(80),
+                    TextInput::make('button_url')->label('按钮链接')->maxLength(2048),
+                ])->columns(2),
+            Block::make('cards')
+                ->label('卡片组')
+                ->schema([
+                    Textarea::make('items')
+                        ->label('卡片内容')
+                        ->rows(8)
+                        ->helperText('每行一个卡片，格式：标题|说明|链接，可只写标题。')
+                        ->required(),
+                ]),
+            Block::make('menu')
+                ->label('菜单模块')
+                ->schema([
+                    Select::make('placement')
+                        ->label('菜单位置')
+                        ->options(NavigationMenuItem::placementOptions())
+                        ->default(NavigationMenuItem::PLACEMENT_TOP_NAV)
+                        ->required(),
+                ]),
+            Block::make('friend_links')
+                ->label('友情链接模块')
+                ->schema([
+                    TextInput::make('limit')->label('显示数量')->numeric()->default(6),
+                ]),
+            Block::make('search')
+                ->label('搜索模块')
+                ->schema([
+                    TextInput::make('placeholder')->label('占位提示')->default('搜索商品、文章或用户')->maxLength(255),
+                ]),
+            Block::make('products')
+                ->label('商品模块')
+                ->schema([
+                    TextInput::make('title')->label('模块标题')->default('推荐商品')->maxLength(255),
+                    TextInput::make('limit')->label('显示数量')->numeric()->default(6),
+                ])->columns(2),
+            Block::make('articles')
+                ->label('文章模块')
+                ->schema([
+                    TextInput::make('title')->label('模块标题')->default('最新文章')->maxLength(255),
+                    TextInput::make('limit')->label('显示数量')->numeric()->default(6),
+                    Select::make('sort')
+                        ->label('排序')
+                        ->options([
+                            'latest' => '最新',
+                            'views' => '阅读量',
+                        ])
+                        ->default('latest'),
+                ])->columns(3),
+            Block::make('resources')
+                ->label('资源模块')
+                ->schema([
+                    TextInput::make('title')->label('模块标题')->default('资源发布')->maxLength(255),
+                    TextInput::make('limit')->label('显示数量')->numeric()->default(6),
+                ])->columns(2),
+            Block::make('divider')
+                ->label('分隔线')
+                ->schema([
+                    TextInput::make('label')->label('分隔文字')->maxLength(120),
+                ]),
+        ];
     }
 }

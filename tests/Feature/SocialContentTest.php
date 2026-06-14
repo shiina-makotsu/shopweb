@@ -704,6 +704,27 @@ it('browses forum sections before posting and supports search sorting and locked
         'slug' => 'section-browse',
         'is_active' => true,
     ]);
+    foreach (range(2, 7) as $index) {
+        ForumSection::query()->create([
+            'name' => '版块分页 '.$index,
+            'slug' => 'section-page-'.$index,
+            'sort_order' => $index,
+            'is_active' => true,
+        ]);
+    }
+
+    $this->actingAs($user)
+        ->get(route('forum.index'))
+        ->assertOk()
+        ->assertSee('md:grid-cols-3', false)
+        ->assertSee('sections_page=2', false)
+        ->assertSee('版块分页 6')
+        ->assertDontSee('版块分页 7');
+
+    $this->actingAs($user)
+        ->get(route('forum.index', ['sections_page' => 2]))
+        ->assertOk()
+        ->assertSee('版块分页 7');
 
     $this->actingAs($user)
         ->get(route('forum.sections.show', $section))

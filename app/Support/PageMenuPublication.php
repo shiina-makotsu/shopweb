@@ -14,6 +14,7 @@ class PageMenuPublication
         'menu_placement',
         'menu_parent_id',
         'menu_label',
+        'menu_tooltip_text',
         'menu_sort_order',
     ];
 
@@ -27,6 +28,7 @@ class PageMenuPublication
             'placement' => $data['menu_placement'] ?? 'none',
             'parent_id' => $data['menu_parent_id'] ?? null,
             'label' => $data['menu_label'] ?? null,
+            'tooltip_text' => $data['menu_tooltip_text'] ?? null,
             'sort_order' => $data['menu_sort_order'] ?? null,
         ];
 
@@ -50,6 +52,7 @@ class PageMenuPublication
             'menu_placement' => $menu?->placement ?? 'none',
             'menu_parent_id' => $menu?->parent_id,
             'menu_label' => $menu?->label,
+            'menu_tooltip_text' => $menu?->tooltip_text,
             'menu_sort_order' => $menu?->sort_order ?? 0,
         ];
     }
@@ -82,6 +85,7 @@ class PageMenuPublication
             'placement' => $placement,
             'parent_id' => filled($menu['parent_id'] ?? null) ? (int) $menu['parent_id'] : null,
             'label' => filled($menu['label'] ?? null) ? (string) $menu['label'] : $page->title,
+            'tooltip_text' => filled($menu['tooltip_text'] ?? null) ? (string) $menu['tooltip_text'] : null,
             'route_name' => 'pages.show',
             'route_parameters' => ['page' => $page->slug],
             'url' => null,

@@ -3,8 +3,52 @@
         trees,
         dragged: null,
         saved: false,
+        scrollTimer: null,
         dragStart(placement, id) {
             this.dragged = { placement, id };
+        },
+        dragMove(event) {
+            if (! this.dragged) {
+                return;
+            }
+
+            const threshold = 96;
+            const speed = 18;
+            const y = event.clientY;
+            const height = window.innerHeight;
+            let delta = 0;
+
+            if (y < threshold) {
+                delta = -speed;
+            } else if (y > height - threshold) {
+                delta = speed;
+            }
+
+            if (delta === 0) {
+                this.stopAutoScroll();
+                return;
+            }
+
+            if (this.scrollTimer) {
+                return;
+            }
+
+            this.scrollTimer = window.setInterval(() => window.scrollBy({ top: delta, behavior: 'auto' }), 16);
+        },
+        dragWheel(event) {
+            if (! this.dragged) {
+                return;
+            }
+
+            window.scrollBy({ top: event.deltaY, behavior: 'auto' });
+        },
+        stopAutoScroll() {
+            if (! this.scrollTimer) {
+                return;
+            }
+
+            window.clearInterval(this.scrollTimer);
+            this.scrollTimer = null;
         },
         findAndRemove(items, id) {
             for (let index = 0; index < items.length; index += 1) {
@@ -46,6 +90,7 @@
             if (parentId === null) {
                 root.push(item);
                 this.dragged = null;
+                this.stopAutoScroll();
                 this.saveTree(placement);
 
                 return;
@@ -56,6 +101,7 @@
             if (! parent || parent.id === item.id || this.contains(item.children_recursive, parent.id)) {
                 root.push(item);
                 this.dragged = null;
+                this.stopAutoScroll();
 
                 return;
             }
@@ -63,6 +109,7 @@
             parent.children_recursive = parent.children_recursive || [];
             parent.children_recursive.push(item);
             this.dragged = null;
+            this.stopAutoScroll();
             this.saveTree(placement);
         },
         dropOnItem(placement, targetId) {
@@ -84,6 +131,7 @@
             }
 
             this.dragged = null;
+            this.stopAutoScroll();
             this.saveTree(placement);
         },
         findItem(items, id) {
@@ -137,6 +185,10 @@
         save: (placement, items) => $wire.saveNavigationMenuTree(placement, items),
     })"
     x-on:navigation-menu-tree-saved.window="saved = true; setTimeout(() => saved = false, 1800)"
+    x-on:dragover.window="dragMove($event)"
+    x-on:wheel.window="dragWheel($event)"
+    x-on:dragend.window="stopAutoScroll(); dragged = null"
+    x-on:drop.window="stopAutoScroll()"
 >
     <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>

@@ -17,6 +17,7 @@ use App\Http\Controllers\FriendLinkController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\InstallController;
 use App\Http\Controllers\OrderController;
+use App\Http\Controllers\PageCommentController;
 use App\Http\Controllers\PageController;
 use App\Http\Controllers\PrivateMessageController;
 use App\Http\Controllers\ProductCommentController;
@@ -68,6 +69,7 @@ Route::post('/forum/threads', [ForumController::class, 'storeThreadFromIndex'])-
 Route::get('/forum/{section:slug}/threads/create', [ForumController::class, 'createThread'])->middleware('auth')->name('forum.sections.threads.create');
 Route::get('/forum/{section:slug}', [ForumController::class, 'section'])->name('forum.sections.show');
 Route::get('/forum/{section:slug}/{thread:slug}', [ForumController::class, 'show'])->scopeBindings()->name('forum.threads.show');
+Route::get('/articles', [PageController::class, 'articles'])->name('articles.index');
 Route::get('/p/{page:slug}', [PageController::class, 'show'])->name('pages.show');
 Route::get('/shipments', [ShipmentController::class, 'show'])->middleware('auth')->name('shipments.show');
 Route::get('/support', [SupportTicketController::class, 'index'])->name('support.index');
@@ -110,6 +112,7 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/orders/{order}/confirm-receipt', [OrderController::class, 'confirmReceipt'])->name('orders.confirm-receipt');
     Route::post('/orders/{order}/digital-delivery/copied', [OrderController::class, 'markDigitalCopied'])->name('orders.digital-delivery.copied');
     Route::get('/orders/{order}/digital-delivery/{index}', [OrderController::class, 'downloadDigitalAttachment'])->name('orders.digital-delivery.download');
+    Route::post('/p/{page:slug}/comments', [PageCommentController::class, 'store'])->name('page-comments.store');
     Route::post('/products/{product:slug}/comments', [ProductCommentController::class, 'store'])->name('product-comments.store');
     Route::post('/products/{product:slug}/wishlist', [ProductPreferenceController::class, 'toggleWishlist'])->name('products.wishlist.toggle');
     Route::post('/products/{product:slug}/favorite', [ProductPreferenceController::class, 'toggleFavorite'])->name('products.favorite.toggle');

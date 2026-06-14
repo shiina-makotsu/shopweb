@@ -199,10 +199,19 @@
                                 </select>
                             </label>
 
+                            <button class="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-400 transition hover:bg-zinc-200" type="button" data-chat-web-search aria-label="联网搜索" title="联网搜索" aria-pressed="false">
+                                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <path d="M2 12h20"/>
+                                    <path d="M12 2a15.3 15.3 0 0 1 0 20"/>
+                                    <path d="M12 2a15.3 15.3 0 0 0 0 20"/>
+                                </svg>
+                            </button>
+
                             <label class="ml-auto min-w-48 flex-1 text-xs font-medium text-zinc-400 sm:max-w-64 sm:flex-none">
                                 模型
                                 <select class="mt-1 h-9 w-full rounded-2xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-900" name="chat_model" data-chat-model-select>
-                                    <option value="">默认模型</option>
+                                    <option value="">默认模型 gpt-5.5</option>
                                 </select>
                             </label>
                         </div>
@@ -256,8 +265,8 @@
 
                         <label class="block text-sm">
                             <span class="font-medium text-zinc-700">图片模型</span>
-                            <select class="mt-1 w-full rounded-lg border border-zinc-200 px-4 py-3 text-sm outline-none focus:border-zinc-400" name="model" data-ai-model-select required>
-                                <option value="">先获取模型或手动填写</option>
+                            <select class="mt-1 w-full rounded-lg border border-zinc-200 px-4 py-3 text-sm outline-none focus:border-zinc-400" name="model" data-ai-model-select>
+                                <option value="">默认模型 gpt-image-2</option>
                             </select>
                         </label>
 
@@ -476,8 +485,11 @@
                 const chatFilesPreview = root.querySelector('[data-chat-files-preview]');
                 const chatModelSelect = root.querySelector('[data-chat-model-select]');
                 const chatReasoning = root.querySelector('[data-chat-reasoning]');
+                const chatWebSearch = root.querySelector('[data-chat-web-search]');
                 const csrf = form.querySelector('input[name="_token"]')?.value ?? document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
 
+                const defaultImageModel = 'gpt-image-2';
+                const defaultChatModel = 'gpt-5.5';
                 const tasks = new Map();
                 const chatStore = new Map();
                 const chatFileItems = [];
@@ -487,14 +499,15 @@
                 let modelFetchTimer = null;
                 let activeChatId = null;
                 let currentMode = 'gallery';
+                let webSearchEnabled = false;
 
                 const setStatus = (message, tone = 'zinc') => {
                     status.textContent = message;
                     status.className = `mt-3 text-xs ${tone === 'red' ? 'text-red-600' : tone === 'green' ? 'text-emerald-600' : 'text-zinc-500'}`;
                 };
 
-                const activeModel = () => manualModel.value.trim() || modelSelect.value;
-                const selectedChatModel = () => chatModelSelect.value || manualModel.value.trim();
+                const activeModel = () => manualModel.value.trim() || modelSelect.value || (configMode.value === 'default' ? defaultImageModel : '');
+                const selectedChatModel = () => chatModelSelect.value || manualModel.value.trim() || (configMode.value === 'default' ? defaultChatModel : '');
 
                 const setMode = (mode) => {
                     currentMode = mode === 'chat' ? 'chat' : 'gallery';
@@ -575,6 +588,18 @@
                     clearPromptButton?.classList.toggle('flex', Boolean(promptInput.value.trim()));
                 };
 
+                const updateWebSearchButton = () => {
+                    if (!chatWebSearch) return;
+
+                    chatWebSearch.setAttribute('aria-pressed', webSearchEnabled ? 'true' : 'false');
+                    chatWebSearch.classList.toggle('bg-blue-100', webSearchEnabled);
+                    chatWebSearch.classList.toggle('text-blue-700', webSearchEnabled);
+                    chatWebSearch.classList.toggle('ring-1', webSearchEnabled);
+                    chatWebSearch.classList.toggle('ring-blue-200', webSearchEnabled);
+                    chatWebSearch.classList.toggle('bg-zinc-100', !webSearchEnabled);
+                    chatWebSearch.classList.toggle('text-zinc-400', !webSearchEnabled);
+                };
+
                 promptInput.addEventListener('input', autoGrowPrompt);
                 clearPromptButton?.addEventListener('click', () => {
                     promptInput.value = '';
@@ -588,10 +613,15 @@
                     form.requestSubmit();
                 });
                 autoGrowPrompt();
+                chatWebSearch?.addEventListener('click', () => {
+                    webSearchEnabled = !webSearchEnabled;
+                    updateWebSearchButton();
+                });
+                updateWebSearchButton();
 
                 const syncChatModelOptions = () => {
                     const current = chatModelSelect.value;
-                    chatModelSelect.innerHTML = '<option value="">默认模型</option>';
+                    chatModelSelect.innerHTML = `<option value="">默认模型 ${defaultChatModel}</option>`;
 
                     Array.from(modelSelect.options).forEach((option) => {
                         if (!option.value) return;
@@ -969,7 +999,7 @@
                         if (!response.ok) throw new Error(data.message || '模型列表获取失败。');
 
                         const targetSelect = currentMode === 'chat' ? chatModelSelect : modelSelect;
-                        targetSelect.innerHTML = currentMode === 'chat' ? '<option value="">默认模型</option>' : '';
+                        targetSelect.innerHTML = currentMode === 'chat' ? `<option value="">默认模型 ${defaultChatModel}</option>` : `<option value="">默认模型 ${defaultImageModel}</option>`;
                         if (!data.models?.length && currentMode !== 'chat') {
                             targetSelect.insertAdjacentHTML('beforeend', '<option value="">没有识别到模型，请手动填写</option>');
                         } else {
@@ -1056,7 +1086,7 @@
 
                 const buildChatPayload = () => {
                     const model = selectedChatModel();
-                    if (!model || model === '默认模型') {
+                    if (!model) {
                         openSettings();
                         throw new Error('请先在右下角或右上角设置里选择聊天模型。');
                     }
@@ -1067,6 +1097,7 @@
                     payload.set('model', model);
                     payload.set('prompt', promptInput.value.trim());
                     payload.set('reasoning_mode', chatReasoning.value || 'low');
+                    payload.set('web_search', webSearchEnabled ? '1' : '0');
                     payload.set('timeout_seconds', form.timeout_seconds?.value || '600');
 
                     if (configMode.value === 'custom') {

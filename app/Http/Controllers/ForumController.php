@@ -32,7 +32,8 @@ class ForumController extends Controller
                 ->withCount(['threads' => fn ($query) => $query->visible()])
                 ->orderBy('sort_order')
                 ->orderBy('name')
-                ->get(),
+                ->paginate(6, ['*'], 'sections_page')
+                ->withQueryString(),
             'threads' => $threads,
             'sort' => $sort,
             'search' => $search,

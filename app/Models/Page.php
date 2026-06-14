@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Page extends Model
 {
@@ -24,6 +25,9 @@ class Page extends Model
         'seo_description',
         'is_published',
         'sort_order',
+        'views_count',
+        'comments_enabled',
+        'reward_qr_path',
     ];
 
     protected function casts(): array
@@ -31,6 +35,7 @@ class Page extends Model
         return [
             'blocks' => 'array',
             'is_published' => 'boolean',
+            'comments_enabled' => 'boolean',
         ];
     }
 
@@ -51,6 +56,21 @@ class Page extends Model
     public function coverMediaAsset(): BelongsTo
     {
         return $this->belongsTo(MediaAsset::class, 'cover_media_asset_id');
+    }
+
+    public function comments(): HasMany
+    {
+        return $this->hasMany(PageComment::class);
+    }
+
+    public function topLevelComments(): HasMany
+    {
+        return $this->comments()->whereNull('parent_id')->visible()->latest();
+    }
+
+    public function isArticle(): bool
+    {
+        return $this->template === \App\Support\PageTemplate::ARTICLE;
     }
 
     public function getRouteKeyName(): string

@@ -8,15 +8,18 @@ use App\Filament\Resources\FriendLinkResource\Pages\EditFriendLink;
 use App\Filament\Resources\FriendLinkResource\Pages\ListFriendLinks;
 use App\Models\FriendLink;
 use App\Models\MediaAsset;
+use App\Support\MediaPath;
 use App\Support\RegexSearch;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
@@ -24,6 +27,7 @@ use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\HtmlString;
 
 class FriendLinkResource extends Resource
 {
@@ -56,7 +60,12 @@ class FriendLinkResource extends Resource
                 TextInput::make('image_url')
                     ->label('链接图像 URL')
                     ->url()
+                    ->live(debounce: 500)
                     ->maxLength(2048),
+                Placeholder::make('image_url_preview')
+                    ->label('图像预览')
+                    ->content(fn (Get $get): HtmlString => static::imagePreviewHtml($get('image_url') ?: $get('image_path')))
+                    ->html(),
                 TextInput::make('sort_order')->label('排序')->numeric()->default(0),
                 Toggle::make('is_active')->label('启用')->default(true),
                 Textarea::make('description')->label('链接介绍')->rows(3)->columnSpanFull(),
@@ -125,6 +134,22 @@ class FriendLinkResource extends Resource
         }
 
         return $data;
+    }
+
+    private static function imagePreviewHtml(mixed $path): HtmlString
+    {
+        $path = is_array($path) ? reset($path) : $path;
+        $url = MediaPath::url(is_string($path) ? $path : null);
+
+        if (! $url) {
+            return new HtmlString('<p style="margin:0;color:#64748b;font-size:12px;">粘贴图片 URL 或上传图片后显示预览。</p>');
+        }
+
+        $escapedUrl = e($url);
+
+        return new HtmlString(<<<HTML
+<img src="{$escapedUrl}" alt="友情链接图像预览" style="width:72px;height:72px;object-fit:cover;border:1px solid #cbd5e1;border-radius:4px;background:#f8fafc;">
+HTML);
     }
 
     public static function getPages(): array

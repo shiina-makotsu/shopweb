@@ -4,6 +4,7 @@ use App\Models\Category;
 use App\Models\FriendLink;
 use App\Models\MediaAsset;
 use App\Models\Page;
+use App\Models\PageComment;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\User;
@@ -156,6 +157,170 @@ it('renders drag and drop page blocks after markdown content', function (): void
         ->assertSee('回到首页')
         ->assertSee('左栏内容')
         ->assertSee('右栏内容');
+});
+
+it('renders article pages with table of contents views rewards and comments', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+    $page = Page::query()->create([
+        'title' => '自由文章',
+        'slug' => 'free-article',
+        'template' => PageTemplate::ARTICLE,
+        'body' => "# 第一章\n\n正文。\n\n## 第二节\n\n更多内容。",
+        'excerpt' => '文章摘要',
+        'is_published' => true,
+        'comments_enabled' => true,
+        'reward_qr_path' => 'https://cdn.example.test/reward.png',
+    ]);
+    $comment = PageComment::query()->create([
+        'page_id' => $page->id,
+        'user_id' => $user->id,
+        'body' => '已有评论',
+    ]);
+    PageComment::query()->create([
+        'page_id' => $page->id,
+        'user_id' => $user->id,
+        'parent_id' => $comment->id,
+        'body' => '评论回复',
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('pages.show', $page))
+        ->assertOk()
+        ->assertSee('页面目录')
+        ->assertSee('href="#第一章"', false)
+        ->assertSee('href="#第二节"', false)
+        ->assertSee('1 次阅读')
+        ->assertSee('https://cdn.example.test/reward.png', false)
+        ->assertSee('已有评论')
+        ->assertSee('评论回复')
+        ->assertSee(route('page-comments.store', $page, absolute: false), false);
+
+    expect($page->fresh()->views_count)->toBe(1);
+
+    $this->actingAs($user)
+        ->post(route('page-comments.store', $page), [
+            'body' => '新评论',
+        ])
+        ->assertRedirect();
+
+    $this->assertDatabaseHas('page_comments', [
+        'page_id' => $page->id,
+        'user_id' => $user->id,
+        'body' => '新评论',
+    ]);
+});
+
+it('lists article template pages with user selectable sorting', function (): void {
+    $lowView = Page::query()->create([
+        'title' => '低阅读新文章',
+        'slug' => 'new-low-view',
+        'template' => PageTemplate::ARTICLE,
+        'body' => '内容',
+        'is_published' => true,
+        'views_count' => 3,
+    ]);
+    $lowView->forceFill(['created_at' => now()->subDay(), 'updated_at' => now()->subDay()])->save();
+
+    $highView = Page::query()->create([
+        'title' => '高阅读旧文章',
+        'slug' => 'old-high-view',
+        'template' => PageTemplate::ARTICLE,
+        'body' => '内容',
+        'is_published' => true,
+        'views_count' => 99,
+    ]);
+    $highView->forceFill(['created_at' => now()->subDays(2), 'updated_at' => now()->subDays(2)])->save();
+    Page::query()->create([
+        'title' => '普通页面',
+        'slug' => 'normal-page',
+        'template' => PageTemplate::DEFAULT,
+        'body' => '内容',
+        'is_published' => true,
+    ]);
+
+    $latest = $this->get(route('articles.index'))
+        ->assertOk()
+        ->assertSee('文章')
+        ->assertSee('低阅读新文章')
+        ->assertSee('高阅读旧文章')
+        ->assertDontSee('普通页面')
+        ->getContent();
+
+    expect(strpos($latest, '低阅读新文章'))->toBeLessThan(strpos($latest, '高阅读旧文章'));
+
+    $byViews = $this->get(route('articles.index', ['sort' => 'views', 'direction' => 'desc']))
+        ->assertOk()
+        ->getContent();
+
+    expect(strpos($byViews, '高阅读旧文章'))->toBeLessThan(strpos($byViews, '低阅读新文章'));
+});
+
+it('renders functional page blocks for wordpress style composition', function (): void {
+    $category = Category::query()->create(['name' => '区块分类', 'slug' => 'block-category']);
+    $product = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => '区块商品',
+        'slug' => 'block-product',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_LOGISTICS,
+    ]);
+    ProductVariant::query()->create([
+        'product_id' => $product->id,
+        'sku' => 'BLOCK-1',
+        'price_cents' => 1200,
+        'stock' => 10,
+        'is_active' => true,
+    ]);
+    Page::query()->create([
+        'title' => '区块文章',
+        'slug' => 'block-article',
+        'template' => PageTemplate::ARTICLE,
+        'body' => '内容',
+        'is_published' => true,
+        'views_count' => 10,
+    ]);
+    FriendLink::query()->create([
+        'site_name' => '区块友链',
+        'url' => 'https://friend.example.test',
+        'is_active' => true,
+    ]);
+    MediaAsset::query()->create([
+        'name' => '区块资源',
+        'path' => 'resources/block.pdf',
+        'disk' => 'public_uploads',
+        'mime_type' => 'application/pdf',
+        'usage' => MediaAsset::USAGE_RESOURCE,
+        'library' => MediaAsset::LIBRARY_SITE,
+    ]);
+
+    $page = Page::query()->create([
+        'title' => '功能区块页',
+        'slug' => 'functional-block-page',
+        'template' => PageTemplate::DEFAULT,
+        'body' => '',
+        'blocks' => [
+            ['type' => 'hero', 'data' => ['title' => '页面头图', 'subtitle' => '欢迎说明']],
+            ['type' => 'cards', 'data' => ['items' => "卡片一|说明一|/\n卡片二|说明二|"]],
+            ['type' => 'search', 'data' => ['placeholder' => '搜索内容']],
+            ['type' => 'friend_links', 'data' => ['limit' => 3]],
+            ['type' => 'products', 'data' => ['title' => '商品模块', 'limit' => 3]],
+            ['type' => 'articles', 'data' => ['title' => '文章模块', 'limit' => 3, 'sort' => 'views']],
+            ['type' => 'resources', 'data' => ['title' => '资源模块', 'limit' => 3]],
+            ['type' => 'divider', 'data' => ['label' => '分隔']],
+        ],
+        'is_published' => true,
+    ]);
+
+    $this->get(route('pages.show', $page))
+        ->assertOk()
+        ->assertSee('页面头图')
+        ->assertSee('卡片一')
+        ->assertSee('搜索内容')
+        ->assertSee('区块友链')
+        ->assertSee('区块商品')
+        ->assertSee('区块文章')
+        ->assertSee('区块资源')
+        ->assertSee('分隔');
 });
 
 it('uses a published 404 template page when no page with slug 404 exists', function (): void {

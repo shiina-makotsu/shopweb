@@ -4,6 +4,7 @@
     $homeInfoLabel = fn ($item): string => $item->label;
     $homeInfoUrl = fn ($item): string => $item->resolvedUrl();
     $homeInfoTarget = fn ($item): ?string => $item instanceof \App\Models\NavigationMenuItem && $item->opens_new_tab ? '_blank' : null;
+    $homeInfoTooltip = fn ($item): ?string => filled($item->tooltip_text) ? (string) $item->tooltip_text : null;
     $homeInfoChildren = fn ($item) => $item->children ?? collect();
     $homeInfoHasDestination = fn ($item): bool => $item->hasDestination();
     $homeInfoVisible = fn ($item): bool => $homeInfoHasDestination($item) || $homeInfoChildren($item)->isNotEmpty();
@@ -23,6 +24,7 @@
                                 <a
                                     href="{{ $homeInfoUrl($link) }}"
                                     class="rounded-sm border border-slate-300 bg-white px-2 py-1 hover:bg-blue-50 hover:text-blue-800"
+                                    @if($homeInfoTooltip($link)) title="{{ $homeInfoTooltip($link) }}" @endif
                                     @if($homeInfoTarget($link)) target="{{ $homeInfoTarget($link) }}" rel="noopener noreferrer" @endif
                                 >
                                     {{ $homeInfoLabel($link) }}
@@ -35,6 +37,7 @@
                                 <a
                                     href="{{ $homeInfoUrl($child) }}"
                                     class="rounded-sm border border-slate-300 bg-white px-2 py-1 hover:bg-blue-50 hover:text-blue-800"
+                                    @if($homeInfoTooltip($child)) title="{{ $homeInfoTooltip($child) }}" @endif
                                     @if($homeInfoTarget($child)) target="{{ $homeInfoTarget($child) }}" rel="noopener noreferrer" @endif
                                 >
                                     {{ $homeInfoLabel($child) }}
@@ -72,6 +75,7 @@
                             <a
                                 href="{{ $homeInfoUrl($link) }}"
                                 class="rounded-sm border border-slate-300 bg-white px-2 py-1 hover:bg-blue-50 hover:text-blue-800"
+                                @if($homeInfoTooltip($link)) title="{{ $homeInfoTooltip($link) }}" @endif
                                 @if($homeInfoTarget($link)) target="{{ $homeInfoTarget($link) }}" rel="noopener noreferrer" @endif
                             >
                                 {{ $homeInfoLabel($link) }}
@@ -84,6 +88,7 @@
                             <a
                                 href="{{ $homeInfoUrl($child) }}"
                                 class="rounded-sm border border-slate-300 bg-white px-2 py-1 hover:bg-blue-50 hover:text-blue-800"
+                                @if($homeInfoTooltip($child)) title="{{ $homeInfoTooltip($child) }}" @endif
                                 @if($homeInfoTarget($child)) target="{{ $homeInfoTarget($child) }}" rel="noopener noreferrer" @endif
                             >
                                 {{ $homeInfoLabel($child) }}
