@@ -133,7 +133,7 @@ class AdminPanelProvider extends PanelProvider
 
                                 button.type = 'button';
                                 button.tabIndex = -1;
-                                button.className = `shop-md-tool-btn shop-md-tool-${name}`;
+                                button.className = `shop-md-tool-btn shop-md-tool-${name} no-disable`;
                                 button.title = label;
                                 button.setAttribute('aria-label', label);
                                 button.innerHTML = `${icon}<span>${label}</span>`;
@@ -145,38 +145,274 @@ class AdminPanelProvider extends PanelProvider
                                 return button;
                             };
 
-                            const renderMarkdownPreview = (editor) => {
-                                const wrapper = editor?.codemirror?.getWrapperElement();
+                            const noopMarkdownToolbarButton = {
+                                classList: {
+                                    add: () => {},
+                                    remove: () => {},
+                                    toggle: () => {},
+                                },
+                            };
 
-                                if (! wrapper) {
+                            const prepareMarkdownEditorForCustomPreview = (editor) => {
+                                if (! editor) {
                                     return;
                                 }
 
+                                if (! editor.toolbarElements) {
+                                    editor.toolbarElements = {};
+                                }
+
+                                editor.toolbarElements.preview = editor.toolbarElements.preview || noopMarkdownToolbarButton;
+                                editor.toolbarElements['side-by-side'] = editor.toolbarElements['side-by-side'] || noopMarkdownToolbarButton;
+                                editor.toolbar_div = editor.toolbar_div || noopMarkdownToolbarButton;
+                            };
+
+                            const getMarkdownPreviewClassNames = (editor) => {
+                                const classNames = ['editor-preview'];
+                                const configured = editor?.options?.previewClass;
+
+                                if (Array.isArray(configured)) {
+                                    classNames.push(...configured);
+                                } else if (typeof configured === 'string') {
+                                    classNames.push(...configured.split(' ').filter(Boolean));
+                                }
+
+                                return [...new Set(classNames)];
+                            };
+
+                            const ensureFullMarkdownPreview = (editor) => {
+                                const wrapper = editor?.codemirror?.getWrapperElement();
+
+                                if (! wrapper) {
+                                    return null;
+                                }
+
+                                let preview = Array.from(wrapper.children)
+                                    .find((element) => element.classList?.contains('editor-preview-full'));
+
+                                if (! preview) {
+                                    preview = document.createElement('div');
+                                    preview.className = 'editor-preview-full';
+                                    wrapper.appendChild(preview);
+                                }
+
+                                preview.classList.add(...getMarkdownPreviewClassNames(editor));
+
+                                return preview;
+                            };
+
+                            const ensureSideMarkdownPreview = (editor) => {
+                                const wrapper = editor?.codemirror?.getWrapperElement();
+
+                                if (! wrapper) {
+                                    return null;
+                                }
+
+                                let preview = Array.from(wrapper.parentElement?.children ?? [])
+                                    .find((element) => element.classList?.contains('editor-preview-side'));
+
+                                if (! preview) {
+                                    preview = document.createElement('div');
+                                    preview.className = 'editor-preview-side';
+                                    wrapper.insertAdjacentElement('afterend', preview);
+                                }
+
+                                preview.classList.add(...getMarkdownPreviewClassNames(editor));
+
+                                return preview;
+                            };
+
+                            const escapeMarkdownHtml = (value) => String(value ?? '')
+                                .replaceAll('&', '&amp;')
+                                .replaceAll('<', '&lt;')
+                                .replaceAll('>', '&gt;')
+                                .replaceAll('"', '&quot;')
+                                .replaceAll("'", '&#039;');
+
+                            const renderSimpleMarkdownFallback = (markdown) => {
+                                const lines = String(markdown ?? '').replace(/\r\n?/g, '\n').split('\n');
+                                const blocks = [];
+                                let paragraph = [];
+                                let list = [];
+                                let quote = [];
+                                let code = [];
+                                let inCode = false;
+
+                                const renderInline = (value) => escapeMarkdownHtml(value)
+                                    .replace(/!\[([^\]]*)\]\((https?:\/\/[^)\s]+|\/[^)\s]+)\)/g, '<img src="$2" alt="$1">')
+                                    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+|\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
+                                    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+                                    .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+                                    .replace(/`([^`]+)`/g, '<code>$1</code>');
+
+                                const flushParagraph = () => {
+                                    if (paragraph.length) {
+                                        blocks.push(`<p>${renderInline(paragraph.join(' '))}</p>`);
+                                        paragraph = [];
+                                    }
+                                };
+
+                                const flushList = () => {
+                                    if (list.length) {
+                                        blocks.push(`<ul>${list.map((item) => `<li>${renderInline(item)}</li>`).join('')}</ul>`);
+                                        list = [];
+                                    }
+                                };
+
+                                const flushQuote = () => {
+                                    if (quote.length) {
+                                        blocks.push(`<blockquote>${quote.map((item) => `<p>${renderInline(item)}</p>`).join('')}</blockquote>`);
+                                        quote = [];
+                                    }
+                                };
+
+                                const flushAll = () => {
+                                    flushParagraph();
+                                    flushList();
+                                    flushQuote();
+                                };
+
+                                lines.forEach((line) => {
+                                    if (line.trim().startsWith('```')) {
+                                        if (inCode) {
+                                            blocks.push(`<pre><code>${escapeMarkdownHtml(code.join('\n'))}</code></pre>`);
+                                            code = [];
+                                        } else {
+                                            flushAll();
+                                        }
+
+                                        inCode = ! inCode;
+
+                                        return;
+                                    }
+
+                                    if (inCode) {
+                                        code.push(line);
+
+                                        return;
+                                    }
+
+                                    const trimmed = line.trim();
+
+                                    if (trimmed === '') {
+                                        flushAll();
+
+                                        return;
+                                    }
+
+                                    const heading = trimmed.match(/^(#{1,6})\s+(.+)$/);
+
+                                    if (heading) {
+                                        flushAll();
+                                        const level = Math.min(heading[1].length, 6);
+                                        blocks.push(`<h${level}>${renderInline(heading[2])}</h${level}>`);
+
+                                        return;
+                                    }
+
+                                    const listItem = trimmed.match(/^[-*+]\s+(.+)$/);
+
+                                    if (listItem) {
+                                        flushParagraph();
+                                        flushQuote();
+                                        list.push(listItem[1]);
+
+                                        return;
+                                    }
+
+                                    const quoteLine = trimmed.match(/^>\s?(.+)$/);
+
+                                    if (quoteLine) {
+                                        flushParagraph();
+                                        flushList();
+                                        quote.push(quoteLine[1]);
+
+                                        return;
+                                    }
+
+                                    flushList();
+                                    flushQuote();
+                                    paragraph.push(line);
+                                });
+
+                                if (inCode) {
+                                    blocks.push(`<pre><code>${escapeMarkdownHtml(code.join('\n'))}</code></pre>`);
+                                }
+
+                                flushAll();
+
+                                return blocks.join('\n');
+                            };
+
+                            const getMarkdownPreviewTargets = (editor) => {
+                                const wrapper = editor?.codemirror?.getWrapperElement();
+
+                                if (! wrapper) {
+                                    return [];
+                                }
+
                                 const targets = [];
-                                const fullPreview = wrapper.querySelector('.editor-preview-full.editor-preview-active, .editor-preview.editor-preview-active');
-                                const sidePreview = wrapper.nextElementSibling?.classList?.contains('editor-preview-active-side')
-                                    ? wrapper.nextElementSibling
-                                    : null;
+                                const fullPreview = wrapper.lastElementChild?.classList?.contains('editor-preview-active')
+                                    ? wrapper.lastElementChild
+                                    : wrapper.querySelector('.editor-preview-full.editor-preview-active, .editor-preview.editor-preview-active');
+                                const sidePreview = Array.from(wrapper.parentElement?.children ?? [])
+                                    .find((element) => element.classList?.contains('editor-preview-side'));
 
                                 if (fullPreview) {
                                     targets.push(fullPreview);
                                 }
 
-                                if (sidePreview) {
+                                if (sidePreview?.classList?.contains('editor-preview-active-side')) {
                                     targets.push(sidePreview);
                                 }
 
-                                targets.forEach((preview) => {
-                                    const rendered = editor.options.previewRender(editor.value(), preview);
+                                return targets;
+                            };
 
-                                    if (rendered !== null) {
+                            const renderMarkdownIntoPreview = (editor, preview) => {
+                                if (! editor || ! preview) {
+                                    return;
+                                }
+
+                                const value = editor.value();
+                                let rendered = null;
+
+                                try {
+                                    if (typeof editor.options?.previewRender === 'function') {
+                                        rendered = editor.options.previewRender.call(editor.options, value, preview);
+                                    }
+
+                                    if ((rendered === null || rendered === undefined || (rendered === '' && value.trim() !== '')) && typeof editor.markdown === 'function') {
+                                        rendered = editor.markdown(value);
+                                    }
+
+                                    if ((rendered === null || rendered === undefined || (rendered === '' && value.trim() !== ''))) {
+                                        rendered = renderSimpleMarkdownFallback(value);
+                                    }
+
+                                    if (rendered !== null && rendered !== undefined) {
                                         preview.innerHTML = rendered;
                                     }
+                                } catch (error) {
+                                    console.error('Markdown preview rendering failed.', error);
+
+                                    preview.innerHTML = renderSimpleMarkdownFallback(value);
+                                }
+                            };
+
+                            const renderMarkdownPreview = (editor) => {
+                                prepareMarkdownEditorForCustomPreview(editor);
+
+                                const targets = getMarkdownPreviewTargets(editor);
+
+                                targets.forEach((preview) => {
+                                    renderMarkdownIntoPreview(editor, preview);
                                 });
                             };
 
                             const refreshMarkdownMode = (editor, toolbar) => {
                                 window.setTimeout(() => {
+                                    toolbar?.classList?.remove('disabled-for-preview');
                                     editor.codemirror.refresh();
                                     renderMarkdownPreview(editor);
 
@@ -189,39 +425,46 @@ class AdminPanelProvider extends PanelProvider
                             };
 
                             const setMarkdownMode = (editor, mode) => {
-                                if (mode === 'edit') {
-                                    if (editor.isPreviewActive()) {
-                                        window.EasyMDE.togglePreview(editor);
-                                    }
+                                prepareMarkdownEditorForCustomPreview(editor);
 
-                                    if (editor.isSideBySideActive()) {
-                                        window.EasyMDE.toggleSideBySide(editor);
-                                    }
+                                const wrapper = editor?.codemirror?.getWrapperElement();
+                                const container = wrapper?.parentElement;
+                                const toolbar = editor?.toolbar_div;
+                                const fullPreview = ensureFullMarkdownPreview(editor);
+                                const sidePreview = ensureSideMarkdownPreview(editor);
+
+                                if (! wrapper || ! container) {
+                                    return;
+                                }
+
+                                toolbar?.classList?.remove('disabled-for-preview');
+
+                                if (mode === 'edit') {
+                                    fullPreview?.classList?.remove('editor-preview-active');
+                                    sidePreview?.classList?.remove('editor-preview-active-side');
+                                    wrapper.classList.remove('CodeMirror-sided');
+                                    container.classList.remove('sided--no-fullscreen');
+                                    editor.codemirror.refresh();
 
                                     return;
                                 }
 
                                 if (mode === 'preview') {
-                                    if (editor.isSideBySideActive()) {
-                                        window.EasyMDE.toggleSideBySide(editor);
-                                    }
-
-                                    if (! editor.isPreviewActive()) {
-                                        window.EasyMDE.togglePreview(editor);
-                                    }
+                                    sidePreview?.classList?.remove('editor-preview-active-side');
+                                    wrapper.classList.remove('CodeMirror-sided');
+                                    container.classList.remove('sided--no-fullscreen');
+                                    fullPreview?.classList?.add('editor-preview-active');
+                                    renderMarkdownIntoPreview(editor, fullPreview);
 
                                     return;
                                 }
 
-                                if (editor.isPreviewActive()) {
-                                    window.EasyMDE.togglePreview(editor);
-                                }
-
-                                editor.options.sideBySideFullscreen = false;
-
-                                if (! editor.isSideBySideActive()) {
-                                    window.EasyMDE.toggleSideBySide(editor);
-                                }
+                                fullPreview?.classList?.remove('editor-preview-active');
+                                wrapper.classList.add('CodeMirror-sided');
+                                container.classList.add('sided--no-fullscreen');
+                                sidePreview?.classList?.add('editor-preview-active-side');
+                                renderMarkdownIntoPreview(editor, sidePreview);
+                                editor.codemirror.refresh();
                             };
 
                             const enhanceMarkdownEditors = () => {
@@ -237,6 +480,8 @@ class AdminPanelProvider extends PanelProvider
                                         if (! editor || ! window.EasyMDE) {
                                             return;
                                         }
+
+                                        prepareMarkdownEditorForCustomPreview(editor);
 
                                         toolbar.dataset.shopEnhanced = '1';
 

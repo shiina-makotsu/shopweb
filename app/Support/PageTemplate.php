@@ -152,6 +152,7 @@ class PageTemplate
                 ->get(),
             'publishedPages' => Page::query()
                 ->published()
+                ->menuable()
                 ->whereKeyNot($page->id)
                 ->orderBy('sort_order')
                 ->orderBy('title')

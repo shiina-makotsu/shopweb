@@ -807,6 +807,11 @@
     white-space: nowrap;
 }
 
+.fi-fo-markdown-editor .editor-toolbar.disabled-for-preview .shop-md-tool-btn {
+    opacity: 1;
+    pointer-events: auto;
+}
+
 .fi-fo-markdown-editor .editor-toolbar .shop-md-tool-btn::before {
     display: none;
 }
@@ -858,6 +863,10 @@
     border-left: 1px solid #dcdcde;
     display: none;
     min-height: 24rem;
+}
+
+.fi-fo-markdown-editor .editor-preview-side.editor-preview-active-side {
+    display: block;
 }
 
 .fi-fo-markdown-editor .editor-preview h1,

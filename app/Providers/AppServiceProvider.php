@@ -60,7 +60,7 @@ class AppServiceProvider extends ServiceProvider
 
             $view->with([
                 'storeCategories' => Category::query()->active()->orderBy('sort_order')->orderBy('name')->get(),
-                'storePages' => Page::query()->published()->orderBy('sort_order')->orderBy('title')->limit(8)->get(),
+                'storePages' => Page::query()->published()->menuable()->orderBy('sort_order')->orderBy('title')->limit(8)->get(),
                 'storeMenuItems' => $this->navigationMenuItems(NavigationMenuItem::PLACEMENT_TOP_NAV),
                 'storeTopNavItems' => $this->navigationMenuItems(NavigationMenuItem::PLACEMENT_TOP_NAV),
                 'storeHomeInfoMenuItems' => $this->navigationMenuItems(NavigationMenuItem::PLACEMENT_HOME_INFO),

@@ -116,6 +116,110 @@ it('uses backend default ai config for signed in users and records usage', funct
     ]);
 });
 
+it('lets backoffice users call managed ai beyond quota while still recording usage', function (): void {
+    $admin = User::factory()->create([
+        'role' => 'admin',
+        'ai_quota_k' => 1,
+    ]);
+
+    AiUsageLog::query()->create([
+        'user_id' => $admin->id,
+        'feature' => 'image',
+        'config_name' => '历史记录',
+        'provider_source' => 'site_default',
+        'model' => 'gpt-image-1',
+        'token_count' => 5000,
+        'status' => 'success',
+    ]);
+
+    SiteSetting::query()->create([
+        'site_name' => 'ShopWeb',
+        'ai_default_image_endpoint' => 'https://backend.example.test/v1',
+        'ai_default_image_api_key' => 'backend-image-key',
+        'ai_default_user_quota_k' => 1,
+    ]);
+
+    Http::fake([
+        'https://backend.example.test/v1/images/generations' => Http::response([
+            'usage' => [
+                'total_tokens' => 2222,
+                'prompt_tokens' => 222,
+                'completion_tokens' => 2000,
+            ],
+            'data' => [
+                ['url' => 'https://cdn.example.test/admin.png'],
+            ],
+        ]),
+    ]);
+
+    $this->actingAs($admin)
+        ->postJson(route('ai-image.generate'), [
+            'config_mode' => 'default',
+            'model' => 'gpt-image-1',
+            'prompt' => '后台用户不限额生成',
+            'count' => 1,
+            'size_mode' => 'auto',
+            'quality' => 'auto',
+            'output_format' => 'png',
+            'timeout_seconds' => 600,
+        ])
+        ->assertOk()
+        ->assertJsonPath('images.0.url', 'https://cdn.example.test/admin.png');
+
+    $this->assertDatabaseHas('ai_usage_logs', [
+        'user_id' => $admin->id,
+        'model' => 'gpt-image-1',
+        'token_count' => 2222,
+        'provider_source' => 'site_default',
+    ]);
+
+    expect(AiUsageLog::query()->sum('token_count'))->toBe(7222);
+});
+
+it('records backoffice custom ai calls without applying storefront quota', function (): void {
+    $support = User::factory()->create([
+        'role' => 'support',
+        'ai_quota_k' => 0,
+    ]);
+
+    Http::fake([
+        'https://custom.example.test/v1/chat/completions' => Http::response([
+            'usage' => [
+                'total_tokens' => 88,
+                'prompt_tokens' => 30,
+                'completion_tokens' => 58,
+            ],
+            'choices' => [
+                ['message' => ['content' => '后台自定义 key 回复']],
+            ],
+        ]),
+    ]);
+
+    $this->actingAs($support)
+        ->postJson(route('ai-image.chat'), [
+            'config_mode' => 'custom',
+            'config_name' => 'support custom',
+            'endpoint' => 'https://custom.example.test/v1',
+            'api_key' => 'custom-key',
+            'model' => 'gpt-4.1-mini',
+            'prompt' => '你好',
+            'reasoning_mode' => 'low',
+            'timeout_seconds' => 600,
+        ])
+        ->assertOk()
+        ->assertJsonPath('message', '后台自定义 key 回复')
+        ->assertJsonPath('meta.provider_source', 'backoffice_custom');
+
+    $this->assertDatabaseHas('ai_usage_logs', [
+        'user_id' => $support->id,
+        'feature' => 'chat',
+        'model' => 'gpt-4.1-mini',
+        'token_count' => 88,
+        'provider_source' => 'backoffice_custom',
+        'config_name' => 'support custom',
+    ]);
+});
+
 it('renders ai quota dashboards for storefront users and admins', function (): void {
     $user = User::factory()->create([
         'role' => 'customer',

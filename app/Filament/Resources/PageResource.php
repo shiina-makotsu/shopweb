@@ -7,8 +7,10 @@ use App\Filament\Resources\PageResource\Pages\CreatePage;
 use App\Filament\Resources\PageResource\Pages\EditPage;
 use App\Filament\Resources\PageResource\Pages\ListPages;
 use App\Models\MediaAsset;
+use App\Models\NavigationMenuItem;
 use App\Models\Page;
 use App\Support\PageTemplate;
+use App\Support\PageMenuPublication;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
@@ -20,6 +22,7 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
+use Filament\Forms\Components\ToggleButtons;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
@@ -104,8 +107,57 @@ class PageResource extends Resource
                     ->maxLength(2048)
                     ->columnSpanFull(),
                 TextInput::make('sort_order')->label('排序')->numeric()->default(0),
+                ToggleButtons::make('editor_mode')
+                    ->label('编辑模式')
+                    ->options([
+                        'traditional' => '传统 Markdown',
+                        'interactive' => '交互式区块',
+                    ])
+                    ->default('traditional')
+                    ->required()
+                    ->inline()
+                    ->live(),
                 Toggle::make('is_published')->label('发布')->default(false),
                 Textarea::make('excerpt')->label('摘要')->rows(3)->maxLength(1000)->columnSpanFull(),
+            ])->columns(2)->columnSpanFull(),
+
+            Section::make('菜单发布')->schema([
+                Select::make('menu_placement')
+                    ->label('发布到菜单')
+                    ->options(['none' => '不添加到菜单'] + NavigationMenuItem::placementOptions())
+                    ->default('none')
+                    ->live()
+                    ->helperText('发布页面前可以选择是否同步创建前台菜单项；404 模板页不会进入前台菜单。'),
+                Select::make('menu_parent_id')
+                    ->label('上级菜单')
+                    ->options(fn (callable $get, ?Page $record): array => NavigationMenuItem::query()
+                        ->whereNull('parent_id')
+                        ->where('placement', $get('menu_placement') ?: NavigationMenuItem::PLACEMENT_TOP_NAV)
+                        ->when($record, function ($query) use ($record): void {
+                            $menu = PageMenuPublication::findForPage($record);
+
+                            if ($menu) {
+                                $query->whereKeyNot($menu->getKey());
+                            }
+                        })
+                        ->orderBy('sort_order')
+                        ->orderBy('label')
+                        ->pluck('label', 'id')
+                        ->all())
+                    ->searchable()
+                    ->preload()
+                    ->visible(fn (callable $get): bool => ($get('menu_placement') ?? 'none') !== 'none')
+                    ->helperText('留空时作为一级菜单；选择无页面上级菜单时会作为其二级菜单显示。'),
+                TextInput::make('menu_label')
+                    ->label('菜单文字')
+                    ->maxLength(255)
+                    ->visible(fn (callable $get): bool => ($get('menu_placement') ?? 'none') !== 'none')
+                    ->helperText('留空时使用页面标题。'),
+                TextInput::make('menu_sort_order')
+                    ->label('菜单排序')
+                    ->numeric()
+                    ->default(0)
+                    ->visible(fn (callable $get): bool => ($get('menu_placement') ?? 'none') !== 'none'),
             ])->columns(2)->columnSpanFull(),
 
             Section::make('Markdown 正文')->schema([
@@ -125,12 +177,14 @@ class PageResource extends Resource
                     ->minHeight('24rem')
                     ->helperText('支持标题、列表、表格、链接和图片。前台会安全渲染 Markdown，不直接执行原始 HTML。')
                     ->columnSpanFull(),
-            ])->columnSpanFull(),
+            ])
+                ->visible(fn (callable $get): bool => ($get('editor_mode') ?? 'traditional') === 'traditional')
+                ->columnSpanFull(),
 
-            Section::make('拖拽式页面区块')->schema([
+            Section::make('交互式区块编辑')->schema([
                 Builder::make('blocks')
                     ->label('页面区块')
-                    ->helperText('像页面编辑器一样添加、拖动和排序区块；区块会渲染在 Markdown 正文后方。')
+                    ->helperText('传统模式可作为附加区块；交互式模式会将这里作为主编辑器。添加模块后可以拖拽调整顺序。')
                     ->blocks([
                         Block::make('heading')
                             ->label(fn (?array $state): string => filled($state['text'] ?? null) ? '标题：'.$state['text'] : '标题')
@@ -238,6 +292,10 @@ class PageResource extends Resource
                 TextColumn::make('template')
                     ->label('模板')
                     ->formatStateUsing(fn (?string $state): string => PageTemplate::label($state))
+                    ->badge(),
+                TextColumn::make('editor_mode')
+                    ->label('编辑模式')
+                    ->formatStateUsing(fn (?string $state): string => $state === 'interactive' ? '交互式' : '传统')
                     ->badge(),
                 IconColumn::make('is_published')->label('发布')->boolean(),
                 TextColumn::make('sort_order')->label('排序')->sortable(),

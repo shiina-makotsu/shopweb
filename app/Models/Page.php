@@ -16,6 +16,7 @@ class Page extends Model
         'slug',
         'template',
         'cover_media_asset_id',
+        'editor_mode',
         'body',
         'blocks',
         'excerpt',
@@ -36,6 +37,15 @@ class Page extends Model
     public function scopePublished(Builder $query): Builder
     {
         return $query->where('is_published', true);
+    }
+
+    public function scopeMenuable(Builder $query): Builder
+    {
+        return $query
+            ->where('slug', '!=', '404')
+            ->where(fn (Builder $query): Builder => $query
+                ->whereNull('template')
+                ->orWhere('template', '!=', 'not_found'));
     }
 
     public function coverMediaAsset(): BelongsTo

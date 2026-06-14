@@ -291,13 +291,55 @@ it('renders direct page cover upload field for admins', function (): void {
         ->get('/admin/pages/create')
         ->assertOk()
         ->assertSee('cover_upload', false)
+        ->assertSee('shop-md-tool-preview', false)
+        ->assertSee('renderMarkdownIntoPreview', false)
         ->assertSee('上传新封面图')
-        ->assertSee('拖拽式页面区块')
-        ->assertSee('添加区块');
+        ->assertSee('编辑模式')
+        ->assertSee('传统 Markdown')
+        ->assertSee('交互式区块')
+        ->assertSee('交互式区块编辑')
+        ->assertSee('添加区块')
+        ->assertSee('发布到菜单')
+        ->assertSee('不添加到菜单')
+        ->assertSee('顶部导航')
+        ->assertSee('首页商店信息');
+});
+
+it('stores the preferred custom page editor mode', function (): void {
+    $page = Page::query()->create([
+        'title' => '交互式页面',
+        'slug' => 'interactive-page',
+        'editor_mode' => 'interactive',
+        'body' => '传统正文',
+        'blocks' => [
+            [
+                'type' => 'heading',
+                'data' => ['text' => '拖拽模块', 'level' => 'h2'],
+            ],
+        ],
+        'is_published' => true,
+    ]);
+
+    expect($page->fresh()->editor_mode)->toBe('interactive');
+
+    $admin = User::factory()->create(['role' => 'admin']);
+
+    $this->actingAs($admin)
+        ->get('/admin/pages')
+        ->assertOk()
+        ->assertSee('交互式页面')
+        ->assertSee('交互式');
 });
 
 it('renders configurable storefront navigation menu fields for admins', function (): void {
     $admin = User::factory()->create(['role' => 'admin']);
+
+    $this->actingAs($admin)
+        ->get('/admin/navigation-menu-items')
+        ->assertOk()
+        ->assertSee('菜单目录树')
+        ->assertSee('保存排序')
+        ->assertSee('拖动菜单项可调整显示顺序');
 
     $this->actingAs($admin)
         ->get('/admin/navigation-menu-items/create')
@@ -305,7 +347,8 @@ it('renders configurable storefront navigation menu fields for admins', function
         ->assertSee('显示位置')
         ->assertSee('首页商店信息')
         ->assertSee('内置功能')
-        ->assertSee('自定义页面');
+        ->assertSee('自定义页面')
+        ->assertSee('没有子菜单的无页面菜单不会在前台显示');
 });
 
 it('creates a media asset when a page cover upload path is submitted', function (): void {

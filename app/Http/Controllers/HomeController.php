@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Page;
 use App\Models\FlashSale;
 use App\Models\NavigationMenuItem;
 use App\Models\Product;
@@ -55,7 +54,6 @@ class HomeController extends Controller
                 ->orderBy('starts_at')
                 ->limit(8)
                 ->get(),
-            'pages' => Page::query()->published()->orderBy('sort_order')->limit(6)->get(),
             'homeInfoMenuItems' => $this->homeInfoMenuItems(),
         ]);
     }
@@ -70,6 +68,11 @@ class HomeController extends Controller
             ->active()
             ->placement(NavigationMenuItem::PLACEMENT_HOME_INFO)
             ->whereNull('parent_id')
+            ->with(['children' => fn ($query) => $query
+                ->active()
+                ->placement(NavigationMenuItem::PLACEMENT_HOME_INFO)
+                ->orderBy('sort_order')
+                ->orderBy('label')])
             ->orderBy('sort_order')
             ->orderBy('label')
             ->get();

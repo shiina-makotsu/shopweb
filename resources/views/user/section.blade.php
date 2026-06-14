@@ -431,16 +431,17 @@
             @php
                 $breakdown = collect($aiQuota['model_breakdown'] ?? []);
                 $maxTokens = max(1, (int) $breakdown->max('total_tokens'));
+                $quotaUnlimited = (bool) ($aiQuota['quota_unlimited'] ?? false);
             @endphp
             <div class="space-y-5 px-4 py-5">
                 <div class="grid gap-3 md:grid-cols-4">
                     <div class="rounded-sm border border-slate-200 bg-slate-50 px-4 py-3">
                         <p class="text-xs text-slate-500">AI 余额</p>
-                        <p class="mt-1 text-2xl font-semibold">{{ number_format((int) ($aiQuota['remaining_k'] ?? 0)) }}k</p>
+                        <p class="mt-1 text-2xl font-semibold">{{ $quotaUnlimited ? '不限额' : number_format((int) ($aiQuota['remaining_k'] ?? 0)).'k' }}</p>
                     </div>
                     <div class="rounded-sm border border-slate-200 bg-white px-4 py-3">
                         <p class="text-xs text-slate-500">配额上限</p>
-                        <p class="mt-1 text-2xl font-semibold">{{ number_format((int) ($aiQuota['limit_k'] ?? 0)) }}k</p>
+                        <p class="mt-1 text-2xl font-semibold">{{ $quotaUnlimited ? '不限额' : number_format((int) ($aiQuota['limit_k'] ?? 0)).'k' }}</p>
                     </div>
                     <div class="rounded-sm border border-slate-200 bg-white px-4 py-3">
                         <p class="text-xs text-slate-500">总用量</p>

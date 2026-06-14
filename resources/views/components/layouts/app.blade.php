@@ -5,7 +5,7 @@
     $errors = $errors ?? new \Illuminate\Support\ViewErrorBag;
     $storeName = $siteSettings?->site_name ?? config('app.name');
     $categories = $storeCategories ?? collect();
-    $pages = $storePages ?? collect();
+    $infoMenuItems = $storeHomeInfoMenuItems ?? collect();
     $menuItems = $storeTopNavItems ?? $storeMenuItems ?? collect();
     $path = fn (string $name, mixed $parameters = []): string => \App\Support\Url::route($name, $parameters);
     $topNavItems = $menuItems->isNotEmpty()
@@ -27,6 +27,8 @@
     $menuUrl = fn ($item): string => is_array($item) ? $item['url'] : $item->resolvedUrl();
     $menuTarget = fn ($item): ?string => (is_array($item) ? ($item['opens_new_tab'] ?? false) : $item->opens_new_tab) ? '_blank' : null;
     $menuChildren = fn ($item) => is_array($item) ? collect($item['children'] ?? []) : ($item->children ?? collect());
+    $menuHasDestination = fn ($item): bool => is_array($item) ? filled($item['url'] ?? null) : $item->hasDestination();
+    $menuVisible = fn ($item): bool => $menuHasDestination($item) || $menuChildren($item)->isNotEmpty();
     $cartCount = $cartItemCount ?? 0;
     $cartSubtotal = $cartSubtotalCents ?? 0;
     $appearance = $siteSettings?->appearance() ?? [
@@ -71,7 +73,7 @@
         }
     </style>
 </head>
-<body id="top" class="min-h-screen bg-fixed bg-center bg-cover text-slate-900 theme-{{ $appearance['theme_template'] }}" style="background-color: var(--shop-background); background-image: var(--shop-page-background-image), var(--shop-page-gradient)">
+<body id="top" class="min-h-screen overflow-x-hidden bg-fixed bg-center bg-cover text-slate-900 theme-{{ $appearance['theme_template'] }}" style="background-color: var(--shop-background); background-image: var(--shop-page-background-image), var(--shop-page-gradient)">
     <header class="border-b border-slate-300 bg-white">
         <div class="border-b border-slate-200 bg-slate-100 text-xs text-slate-700">
             <div class="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 px-4 py-2">
@@ -153,24 +155,39 @@
             <div class="mx-auto hidden max-w-7xl flex-wrap px-4 md:flex">
                 @foreach($topNavItems as $menuItem)
                     @php($children = $menuChildren($menuItem))
+                    @continue(! $menuVisible($menuItem))
                     <div class="group relative">
-                        <a
-                            class="block px-4 py-3 hover:bg-blue-900"
-                            href="{{ $menuUrl($menuItem) }}"
-                            @if($menuTarget($menuItem)) target="{{ $menuTarget($menuItem) }}" rel="noopener noreferrer" @endif
-                        >
-                            {{ $menuLabel($menuItem) }}
-                        </a>
+                        @if($menuHasDestination($menuItem))
+                            <a
+                                class="block px-4 py-3 hover:bg-blue-900"
+                                href="{{ $menuUrl($menuItem) }}"
+                                @if($menuTarget($menuItem)) target="{{ $menuTarget($menuItem) }}" rel="noopener noreferrer" @endif
+                            >
+                                {{ $menuLabel($menuItem) }}
+                            </a>
+                        @else
+                            <button class="block px-4 py-3 text-left hover:bg-blue-900" type="button" aria-haspopup="true">
+                                {{ $menuLabel($menuItem) }}
+                            </button>
+                        @endif
                         @if($children->isNotEmpty())
                             <div class="absolute left-0 top-full z-30 hidden min-w-44 border border-slate-300 bg-white text-slate-900 shadow-lg group-hover:block group-focus-within:block">
+                                @if(! $menuHasDestination($menuItem))
+                                    <span class="block border-b border-slate-100 px-4 py-2 text-xs text-slate-500">请选择下方子菜单</span>
+                                @endif
                                 @foreach($children as $child)
-                                    <a
-                                        class="block whitespace-nowrap px-4 py-2 text-sm hover:bg-blue-50 hover:text-blue-800"
-                                        href="{{ $menuUrl($child) }}"
-                                        @if($menuTarget($child)) target="{{ $menuTarget($child) }}" rel="noopener noreferrer" @endif
-                                    >
-                                        {{ $menuLabel($child) }}
-                                    </a>
+                                    @continue(! $menuVisible($child))
+                                    @if($menuHasDestination($child))
+                                        <a
+                                            class="block max-w-[18rem] truncate px-4 py-2 text-sm hover:bg-blue-50 hover:text-blue-800"
+                                            href="{{ $menuUrl($child) }}"
+                                            @if($menuTarget($child)) target="{{ $menuTarget($child) }}" rel="noopener noreferrer" @endif
+                                        >
+                                            {{ $menuLabel($child) }}
+                                        </a>
+                                    @else
+                                        <span class="block max-w-[18rem] truncate px-4 py-2 text-sm text-slate-500">{{ $menuLabel($child) }}</span>
+                                    @endif
                                 @endforeach
                             </div>
                         @endif
@@ -189,24 +206,39 @@
                 <nav class="flex-1 overflow-y-auto px-3 py-3 text-sm">
                     @foreach($topNavItems as $menuItem)
                         @php($children = $menuChildren($menuItem))
+                        @continue(! $menuVisible($menuItem))
                         <div class="border-b border-slate-100 py-1">
-                            <a
-                                class="block rounded-sm px-3 py-2 font-medium hover:bg-blue-50 hover:text-blue-800"
-                                href="{{ $menuUrl($menuItem) }}"
-                                @if($menuTarget($menuItem)) target="{{ $menuTarget($menuItem) }}" rel="noopener noreferrer" @endif
-                            >
-                                {{ $menuLabel($menuItem) }}
-                            </a>
+                            @if($menuHasDestination($menuItem))
+                                <a
+                                    class="block rounded-sm px-3 py-2 font-medium hover:bg-blue-50 hover:text-blue-800"
+                                    href="{{ $menuUrl($menuItem) }}"
+                                    @if($menuTarget($menuItem)) target="{{ $menuTarget($menuItem) }}" rel="noopener noreferrer" @endif
+                                >
+                                    {{ $menuLabel($menuItem) }}
+                                </a>
+                            @else
+                                <button class="block w-full rounded-sm px-3 py-2 text-left font-medium text-slate-900" type="button">
+                                    {{ $menuLabel($menuItem) }}
+                                </button>
+                            @endif
                             @if($children->isNotEmpty())
                                 <div class="pb-2 pl-4">
+                                    @if(! $menuHasDestination($menuItem))
+                                        <span class="block px-3 py-1 text-xs text-slate-500">请选择下方子菜单</span>
+                                    @endif
                                     @foreach($children as $child)
-                                        <a
-                                            class="block rounded-sm px-3 py-2 text-slate-600 hover:bg-blue-50 hover:text-blue-800"
-                                            href="{{ $menuUrl($child) }}"
-                                            @if($menuTarget($child)) target="{{ $menuTarget($child) }}" rel="noopener noreferrer" @endif
-                                        >
-                                            {{ $menuLabel($child) }}
-                                        </a>
+                                        @continue(! $menuVisible($child))
+                                        @if($menuHasDestination($child))
+                                            <a
+                                                class="block rounded-sm px-3 py-2 text-slate-600 hover:bg-blue-50 hover:text-blue-800"
+                                                href="{{ $menuUrl($child) }}"
+                                                @if($menuTarget($child)) target="{{ $menuTarget($child) }}" rel="noopener noreferrer" @endif
+                                            >
+                                                {{ $menuLabel($child) }}
+                                            </a>
+                                        @else
+                                            <span class="block rounded-sm px-3 py-2 text-slate-500">{{ $menuLabel($child) }}</span>
+                                        @endif
                                     @endforeach
                                 </div>
                             @endif
@@ -217,7 +249,7 @@
         </div>
     </header>
 
-    <main class="mx-auto max-w-7xl px-4 py-4">
+    <main class="mx-auto w-full max-w-7xl min-w-0 px-4 py-4">
         @if(session('status'))
             <div class="mb-4 rounded-sm border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">{{ session('status') }}</div>
         @endif
@@ -244,7 +276,7 @@
             </div>
         @endif
 
-        <div class="{{ $wide ? '' : 'grid gap-4 lg:grid-cols-[230px_1fr]' }}">
+        <div class="min-w-0 {{ $wide ? '' : 'grid gap-4 lg:grid-cols-[230px_1fr]' }}">
             @unless($wide)
                 <aside class="space-y-4">
                     <section class="rounded-sm border border-slate-300 bg-white">
@@ -291,13 +323,40 @@
                         </nav>
                     </section>
 
-                    @if($pages->isNotEmpty() || $siteSettings?->contact_info)
+                    @if($infoMenuItems->isNotEmpty() || $siteSettings?->contact_info)
                         <section class="rounded-sm border border-slate-300 bg-white">
                             <h2 class="border-b border-slate-200 bg-slate-100 px-3 py-2 text-sm font-semibold">信息</h2>
-                            @if($pages->isNotEmpty())
+                            @if($infoMenuItems->isNotEmpty())
                                 <nav class="divide-y divide-slate-100 text-sm">
-                                    @foreach($pages as $page)
-                                        <a class="block px-3 py-2 hover:bg-blue-50 hover:text-blue-800" href="{{ $path('pages.show', $page) }}">{{ $page->title }}</a>
+                                    @foreach($infoMenuItems as $infoItem)
+                                        @php($children = $menuChildren($infoItem))
+                                        @continue(! $menuVisible($infoItem))
+                                        @if($menuHasDestination($infoItem))
+                                            <a
+                                                class="block px-3 py-2 hover:bg-blue-50 hover:text-blue-800"
+                                                href="{{ $menuUrl($infoItem) }}"
+                                                @if($menuTarget($infoItem)) target="{{ $menuTarget($infoItem) }}" rel="noopener noreferrer" @endif
+                                            >
+                                                {{ $menuLabel($infoItem) }}
+                                            </a>
+                                        @else
+                                            <div class="px-3 py-2">
+                                                <p class="font-medium text-slate-700">{{ $menuLabel($infoItem) }}</p>
+                                                <p class="mt-1 text-xs text-slate-500">请选择下方子菜单</p>
+                                            </div>
+                                        @endif
+                                        @foreach($children as $child)
+                                            @continue(! $menuVisible($child))
+                                            @if($menuHasDestination($child))
+                                                <a
+                                                    class="block px-6 py-2 text-slate-600 hover:bg-blue-50 hover:text-blue-800"
+                                                    href="{{ $menuUrl($child) }}"
+                                                    @if($menuTarget($child)) target="{{ $menuTarget($child) }}" rel="noopener noreferrer" @endif
+                                                >
+                                                    {{ $menuLabel($child) }}
+                                                </a>
+                                            @endif
+                                        @endforeach
                                     @endforeach
                                 </nav>
                             @endif
@@ -323,6 +382,6 @@
             @endif
         </div>
     </footer>
-    <a href="#top" onclick="window.scrollTo({ top: 0, behavior: 'smooth' }); return false;" class="fixed bottom-5 right-5 z-40 inline-flex h-10 w-10 items-center justify-center rounded-sm border border-blue-700 bg-white text-blue-800 shadow hover:bg-blue-50" aria-label="回到顶部">↑</a>
+    <a href="#top" onclick="window.scrollTo({ top: 0, behavior: 'smooth' }); return false;" class="fixed bottom-5 right-5 z-40 inline-flex h-10 w-10 items-center justify-center rounded-full border border-blue-700 bg-white text-blue-800 shadow hover:bg-blue-50" aria-label="回到顶部">↑</a>
 </body>
 </html>

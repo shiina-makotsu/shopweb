@@ -39,8 +39,8 @@
         : false;
 @endphp
 
-<article class="bg-white">
-    <a href="{{ route('products.show', $product) }}" class="relative block border-b border-slate-100 bg-white p-3">
+<article class="min-w-0 overflow-hidden bg-white">
+    <a href="{{ route('products.show', $product) }}" class="relative block border-b border-slate-100 bg-white p-2 sm:p-3">
         @if($isSoldOut)
             <span class="absolute left-4 top-4 z-10 rounded-sm bg-slate-950/85 px-2 py-1 text-xs font-semibold text-white shadow">售罄</span>
         @endif
@@ -57,16 +57,16 @@
             <div class="flex aspect-square items-center justify-center rounded-sm bg-slate-100 text-sm text-slate-500">暂无图片</div>
         @endif
     </a>
-    <div class="shop-product-card-body space-y-2">
+    <div class="shop-product-card-body min-w-0 space-y-2">
         @if($product->category)
             <p class="text-xs text-slate-500">{{ $product->category->name }}</p>
         @endif
-        <a href="{{ route('products.show', $product) }}" class="block min-h-10 text-sm font-medium leading-5 hover:text-blue-800">{{ $product->title }}</a>
+        <a href="{{ route('products.show', $product) }}" class="block min-h-10 min-w-0 break-words text-sm font-medium leading-5 hover:text-blue-800">{{ $product->title }}</a>
         @if($product->summary)
             <p class="line-clamp-2 min-h-10 text-xs leading-5 text-slate-600">{{ $product->summary }}</p>
         @endif
-        <div class="flex items-end justify-between gap-3">
-            <div>
+        <div class="flex min-w-0 items-end justify-between gap-3">
+            <div class="min-w-0">
                 <p class="text-base font-semibold text-red-700">{{ $product->priceRangeLabel() }}</p>
                 @if($variant?->hasActiveDiscount())
                     <p class="text-xs text-slate-500 line-through">@money($variant->price_cents)</p>

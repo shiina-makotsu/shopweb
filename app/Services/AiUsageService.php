@@ -39,9 +39,9 @@ class AiUsageService
             return [
                 'endpoint' => $endpoint,
                 'api_key' => $apiKey !== '' ? $apiKey : null,
-                'source' => 'front_custom',
+                'source' => ($user?->isBackofficeUser() ?? false) ? 'backoffice_custom' : 'front_custom',
                 'config_name' => $configName !== '' ? $configName : '自定义配置',
-                'tracked' => false,
+                'tracked' => $user?->isBackofficeUser() ?? false,
                 'feature' => $feature,
             ];
         }
@@ -259,6 +259,10 @@ class AiUsageService
 
     public function assertWithinQuota(User $user): void
     {
+        if (! $this->shouldEnforceQuota($user)) {
+            return;
+        }
+
         if ($this->quotaLimitK($user) <= 0) {
             throw ValidationException::withMessages([
                 'quota' => '当前 AI 配额未启用，请联系管理员。',
@@ -270,6 +274,11 @@ class AiUsageService
                 'quota' => 'AI 配额已用完，请联系管理员增加配额。',
             ]);
         }
+    }
+
+    public function shouldEnforceQuota(User $user): bool
+    {
+        return ! $user->isBackofficeUser();
     }
 
     public function record(

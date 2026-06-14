@@ -49,14 +49,17 @@ class NavigationMenuItemResource extends Resource
                     ->live(),
                 Select::make('parent_id')
                     ->label('上级菜单')
-                    ->options(fn (callable $get): array => NavigationMenuItem::query()
+                    ->options(fn (callable $get, ?NavigationMenuItem $record): array => NavigationMenuItem::query()
                         ->whereNull('parent_id')
                         ->where('placement', $get('placement') ?: NavigationMenuItem::PLACEMENT_TOP_NAV)
+                        ->when($record, fn (Builder $query): Builder => $query->whereKeyNot($record->getKey()))
                         ->orderBy('sort_order')
+                        ->orderBy('label')
                         ->pluck('label', 'id')
                         ->all())
                     ->searchable()
-                    ->preload(),
+                    ->preload()
+                    ->helperText('可创建没有页面/链接的上级菜单，用来承载二级菜单。没有子菜单的无页面菜单不会在前台显示。'),
                 TextInput::make('label')->label('显示文字')->required()->maxLength(255),
                 Select::make('route_name')
                     ->label('内置功能')
@@ -65,7 +68,7 @@ class NavigationMenuItemResource extends Resource
                     ->helperText('选择内置功能后会自动生成站内相对路径；需要链接到自定义页面时选择“自定义页面”并填写页面 Slug。'),
                 Select::make('route_parameters.page')
                     ->label('自定义页面')
-                    ->options(fn (): array => Page::query()->orderBy('sort_order')->orderBy('title')->pluck('title', 'slug')->all())
+                    ->options(fn (): array => Page::query()->menuable()->orderBy('sort_order')->orderBy('title')->pluck('title', 'slug')->all())
                     ->searchable()
                     ->preload()
                     ->visible(fn (callable $get): bool => $get('route_name') === 'pages.show')
@@ -90,6 +93,7 @@ class NavigationMenuItemResource extends Resource
             ->columns([
                 TextColumn::make('label')
                     ->label('菜单')
+                    ->state(fn (NavigationMenuItem $record): string => $record->treeLabel())
                     ->searchable(query: fn (Builder $query, string $search): Builder => RegexSearch::where($query, ['label', 'url', 'route_name'], $search))
                     ->sortable(),
                 TextColumn::make('placement')
@@ -98,13 +102,19 @@ class NavigationMenuItemResource extends Resource
                     ->badge()
                     ->sortable(),
                 TextColumn::make('parent.label')->label('上级')->toggleable(),
-                TextColumn::make('route_name')->label('路由')->toggleable(),
+                TextColumn::make('route_name')->label('类型')->state(fn (NavigationMenuItem $record): string => $record->typeLabel())->toggleable(),
                 TextColumn::make('url')->label('URL')->limit(36)->toggleable(),
                 TextColumn::make('sort_order')->label('排序')->sortable(),
                 TextColumn::make('is_active')->label('状态')->formatStateUsing(fn (bool $state): string => $state ? '启用' : '停用')->badge(),
                 TextColumn::make('updated_at')->label('更新')->dateTime('Y-m-d H:i')->sortable(),
             ])
-            ->defaultSort('sort_order')
+            ->defaultSort(fn (Builder $query): Builder => $query
+                ->orderBy('placement')
+                ->orderByRaw('coalesce(parent_id, id)')
+                ->orderByRaw('case when parent_id is null then 0 else 1 end')
+                ->orderBy('sort_order')
+                ->orderBy('label'))
+            ->reorderable('sort_order')
             ->recordActions([EditAction::make(), DeleteAction::make()])
             ->toolbarActions([DeleteBulkAction::make()]);
     }

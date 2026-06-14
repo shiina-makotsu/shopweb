@@ -77,6 +77,7 @@ class UserCenterController extends Controller
                 : collect(),
             'aiQuota' => $section === 'ai'
                 ? [
+                    'quota_unlimited' => ! $aiUsage->shouldEnforceQuota($user),
                     'limit_k' => $aiUsage->quotaLimitK($user),
                     'remaining_k' => $aiUsage->remainingK($user),
                     'total_tokens' => $aiUsage->usedTokens($user),

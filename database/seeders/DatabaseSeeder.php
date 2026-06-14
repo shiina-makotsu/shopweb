@@ -153,7 +153,7 @@ class DatabaseSeeder extends Seeder
             );
         }
 
-        Page::query()->firstOrCreate(
+        $aboutPage = Page::query()->firstOrCreate(
             ['slug' => 'about'],
             [
                 'title' => '关于我们',
@@ -212,5 +212,19 @@ class DatabaseSeeder extends Seeder
                 ],
             );
         }
+
+        NavigationMenuItem::query()->firstOrCreate(
+            [
+                'placement' => NavigationMenuItem::PLACEMENT_HOME_INFO,
+                'label' => '关于我们',
+            ],
+            [
+                'route_name' => 'pages.show',
+                'route_parameters' => ['page' => $aboutPage->slug],
+                'sort_order' => 10,
+                'is_active' => true,
+                'opens_new_tab' => false,
+            ],
+        );
     }
 }

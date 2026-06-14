@@ -1,9 +1,12 @@
 @php
     $homeInfoMenuItems = $homeInfoMenuItems ?? collect();
-    $homeInfoLinks = $homeInfoMenuItems->isNotEmpty() ? $homeInfoMenuItems : $pages;
-    $homeInfoLabel = fn ($item): string => $item instanceof \App\Models\NavigationMenuItem ? $item->label : $item->title;
-    $homeInfoUrl = fn ($item): string => $item instanceof \App\Models\NavigationMenuItem ? $item->resolvedUrl() : route('pages.show', $item);
+    $homeInfoLinks = $homeInfoMenuItems;
+    $homeInfoLabel = fn ($item): string => $item->label;
+    $homeInfoUrl = fn ($item): string => $item->resolvedUrl();
     $homeInfoTarget = fn ($item): ?string => $item instanceof \App\Models\NavigationMenuItem && $item->opens_new_tab ? '_blank' : null;
+    $homeInfoChildren = fn ($item) => $item->children ?? collect();
+    $homeInfoHasDestination = fn ($item): bool => $item->hasDestination();
+    $homeInfoVisible = fn ($item): bool => $homeInfoHasDestination($item) || $homeInfoChildren($item)->isNotEmpty();
 @endphp
 
 <x-layouts.app :title="$settings?->site_name ?? config('app.name')" :settings="$settings">
@@ -15,13 +18,28 @@
                     <nav class="flex flex-wrap items-center gap-2 text-xs">
                         <span class="text-slate-500">商店信息</span>
                         @foreach($homeInfoLinks as $link)
-                            <a
-                                href="{{ $homeInfoUrl($link) }}"
-                                class="rounded-sm border border-slate-300 bg-white px-2 py-1 hover:bg-blue-50 hover:text-blue-800"
-                                @if($homeInfoTarget($link)) target="{{ $homeInfoTarget($link) }}" rel="noopener noreferrer" @endif
-                            >
-                                {{ $homeInfoLabel($link) }}
-                            </a>
+                            @continue(! $homeInfoVisible($link))
+                            @if($homeInfoHasDestination($link))
+                                <a
+                                    href="{{ $homeInfoUrl($link) }}"
+                                    class="rounded-sm border border-slate-300 bg-white px-2 py-1 hover:bg-blue-50 hover:text-blue-800"
+                                    @if($homeInfoTarget($link)) target="{{ $homeInfoTarget($link) }}" rel="noopener noreferrer" @endif
+                                >
+                                    {{ $homeInfoLabel($link) }}
+                                </a>
+                            @else
+                                <span class="rounded-sm border border-slate-200 bg-slate-50 px-2 py-1 text-slate-500" title="请选择下方子菜单">{{ $homeInfoLabel($link) }}</span>
+                            @endif
+                            @foreach($homeInfoChildren($link) as $child)
+                                @continue(! $homeInfoVisible($child) || ! $homeInfoHasDestination($child))
+                                <a
+                                    href="{{ $homeInfoUrl($child) }}"
+                                    class="rounded-sm border border-slate-300 bg-white px-2 py-1 hover:bg-blue-50 hover:text-blue-800"
+                                    @if($homeInfoTarget($child)) target="{{ $homeInfoTarget($child) }}" rel="noopener noreferrer" @endif
+                                >
+                                    {{ $homeInfoLabel($child) }}
+                                </a>
+                            @endforeach
                         @endforeach
                     </nav>
                 @endif
@@ -49,13 +67,28 @@
                 <h1 class="text-base font-semibold">商店信息</h1>
                 <nav class="flex flex-wrap gap-2 text-xs">
                     @foreach($homeInfoLinks as $link)
-                        <a
-                            href="{{ $homeInfoUrl($link) }}"
-                            class="rounded-sm border border-slate-300 bg-white px-2 py-1 hover:bg-blue-50 hover:text-blue-800"
-                            @if($homeInfoTarget($link)) target="{{ $homeInfoTarget($link) }}" rel="noopener noreferrer" @endif
-                        >
-                            {{ $homeInfoLabel($link) }}
-                        </a>
+                        @continue(! $homeInfoVisible($link))
+                        @if($homeInfoHasDestination($link))
+                            <a
+                                href="{{ $homeInfoUrl($link) }}"
+                                class="rounded-sm border border-slate-300 bg-white px-2 py-1 hover:bg-blue-50 hover:text-blue-800"
+                                @if($homeInfoTarget($link)) target="{{ $homeInfoTarget($link) }}" rel="noopener noreferrer" @endif
+                            >
+                                {{ $homeInfoLabel($link) }}
+                            </a>
+                        @else
+                            <span class="rounded-sm border border-slate-200 bg-slate-50 px-2 py-1 text-slate-500" title="请选择下方子菜单">{{ $homeInfoLabel($link) }}</span>
+                        @endif
+                        @foreach($homeInfoChildren($link) as $child)
+                            @continue(! $homeInfoVisible($child) || ! $homeInfoHasDestination($child))
+                            <a
+                                href="{{ $homeInfoUrl($child) }}"
+                                class="rounded-sm border border-slate-300 bg-white px-2 py-1 hover:bg-blue-50 hover:text-blue-800"
+                                @if($homeInfoTarget($child)) target="{{ $homeInfoTarget($child) }}" rel="noopener noreferrer" @endif
+                            >
+                                {{ $homeInfoLabel($child) }}
+                            </a>
+                        @endforeach
                     @endforeach
                 </nav>
             </div>
@@ -87,7 +120,7 @@
                 <h2 class="text-base font-semibold">推荐商品</h2>
                 <a class="text-sm text-blue-700 hover:text-blue-900" href="{{ route('products.index', ['featured' => 1]) }}">查看全部</a>
             </div>
-            <div class="grid gap-px bg-slate-200 sm:grid-cols-2 xl:grid-cols-4">
+            <div class="grid grid-cols-2 gap-px bg-slate-200 xl:grid-cols-4">
                 @foreach($featuredProducts as $product)
                     <x-product-card :product="$product" />
                 @endforeach
@@ -100,7 +133,7 @@
             <h2 class="text-base font-semibold">最新商品</h2>
             <a class="text-sm text-blue-700 hover:text-blue-900" href="{{ route('products.index') }}">商品列表</a>
         </div>
-        <div class="grid gap-px bg-slate-200 sm:grid-cols-2 xl:grid-cols-4">
+        <div class="grid grid-cols-2 gap-px bg-slate-200 xl:grid-cols-4">
             @forelse($latestProducts as $product)
                 <x-product-card :product="$product" />
             @empty
@@ -114,7 +147,7 @@
             <h2 class="text-base font-semibold">折扣商品</h2>
             <a class="text-sm text-blue-700 hover:text-blue-900" href="{{ route('products.index', ['discount' => 1]) }}">查看全部</a>
         </div>
-        <div class="grid gap-px bg-slate-200 sm:grid-cols-2 xl:grid-cols-4">
+        <div class="grid grid-cols-2 gap-px bg-slate-200 xl:grid-cols-4">
             @forelse($discountProducts as $product)
                 <x-product-card :product="$product" />
             @empty
@@ -128,7 +161,7 @@
             <h2 class="text-base font-semibold">秒杀商品</h2>
             <a class="text-sm text-blue-700 hover:text-blue-900" href="{{ route('products.index') }}">查看全部</a>
         </div>
-        <div class="grid gap-px bg-slate-200 sm:grid-cols-2 xl:grid-cols-4">
+        <div class="grid grid-cols-2 gap-px bg-slate-200 xl:grid-cols-4">
             @forelse($flashSales as $flashSale)
                 @php($product = $flashSale->product)
                 <article class="bg-white p-3">
@@ -185,7 +218,7 @@
             <h2 class="text-base font-semibold">概念商品</h2>
             <a class="text-sm text-blue-700 hover:text-blue-900" href="{{ route('products.index', ['status' => \App\Models\Product::STATUS_CONCEPT]) }}">查看全部</a>
         </div>
-        <div class="grid gap-px bg-slate-200 sm:grid-cols-2 xl:grid-cols-4">
+        <div class="grid grid-cols-2 gap-px bg-slate-200 xl:grid-cols-4">
             @forelse($conceptProducts as $product)
                 <x-product-card :product="$product" />
             @empty

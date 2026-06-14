@@ -20,12 +20,25 @@
         </div>
         <div class="divide-y divide-slate-100">
             @forelse($menuItems as $item)
+                @continue($item->isPlaceholder() && $item->children->isEmpty())
                 <div class="px-4 py-3 text-sm">
-                    <a class="font-medium hover:text-blue-800" href="{{ $item->resolvedUrl() }}">{{ $item->label }}</a>
+                    @if($item->hasDestination())
+                        <a class="font-medium hover:text-blue-800" href="{{ $item->resolvedUrl() }}">{{ $item->label }}</a>
+                    @else
+                        <div>
+                            <p class="font-medium text-slate-900">{{ $item->label }}</p>
+                            <p class="mt-1 text-xs text-slate-500">请选择下方子菜单</p>
+                        </div>
+                    @endif
                     @if($item->children->isNotEmpty())
                         <div class="mt-2 flex flex-wrap gap-2">
                             @foreach($item->children as $child)
-                                <a class="rounded-sm border border-slate-300 px-3 py-1 text-xs hover:bg-blue-50 hover:text-blue-800" href="{{ $child->resolvedUrl() }}">{{ $child->label }}</a>
+                                @continue($child->isPlaceholder() && $child->children->isEmpty())
+                                @if($child->hasDestination())
+                                    <a class="rounded-sm border border-slate-300 px-3 py-1 text-xs hover:bg-blue-50 hover:text-blue-800" href="{{ $child->resolvedUrl() }}">{{ $child->label }}</a>
+                                @else
+                                    <span class="rounded-sm border border-slate-200 px-3 py-1 text-xs text-slate-500">{{ $child->label }}</span>
+                                @endif
                             @endforeach
                         </div>
                     @endif

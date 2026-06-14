@@ -21,6 +21,7 @@ use App\Models\WarehouseShippingRate;
 use App\Models\WarehouseStock;
 use App\Services\OrderService;
 use App\Support\Money;
+use App\Support\PageMenuPublication;
 use App\Support\Url;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
@@ -293,6 +294,41 @@ it('renders custom pages from markdown safely', function (): void {
         ->assertSee('人工确认付款')
         ->assertDontSee('<script>', false)
         ->assertDontSee('alert', false);
+});
+
+it('syncs a published custom page into a selected storefront menu', function (): void {
+    $page = Page::query()->create([
+        'title' => '发布菜单页面',
+        'slug' => 'published-menu-page',
+        'body' => '页面正文',
+        'is_published' => true,
+    ]);
+
+    PageMenuPublication::sync($page, [
+        'placement' => NavigationMenuItem::PLACEMENT_HOME_INFO,
+        'label' => '菜单发布入口',
+        'sort_order' => 30,
+    ]);
+
+    $this->assertDatabaseHas('navigation_menu_items', [
+        'placement' => NavigationMenuItem::PLACEMENT_HOME_INFO,
+        'label' => '菜单发布入口',
+        'route_name' => 'pages.show',
+        'sort_order' => 30,
+    ]);
+
+    $page->update(['slug' => 'published-menu-page-new']);
+
+    PageMenuPublication::sync($page, [
+        'placement' => NavigationMenuItem::PLACEMENT_TOP_NAV,
+        'label' => '更新后的菜单',
+        'sort_order' => 40,
+    ], 'published-menu-page');
+
+    $menu = NavigationMenuItem::query()->where('label', '更新后的菜单')->firstOrFail();
+
+    expect($menu->placement)->toBe(NavigationMenuItem::PLACEMENT_TOP_NAV)
+        ->and($menu->route_parameters['page'])->toBe('published-menu-page-new');
 });
 
 it('renders custom page cover images from the media library', function (): void {
@@ -596,7 +632,76 @@ it('renders configurable top navigation and home information menu items separate
     $html = $response->getContent();
 
     expect(strpos($html, '自定义关于'))->toBeLessThan(strpos($html, '论坛入口'))
-        ->and(substr_count($html, '商店声明'))->toBe(1);
+        ->and(substr_count($html, '商店声明'))->toBe(2);
+});
+
+it('keeps store information menu managed and hides empty placeholder menus', function (): void {
+    $this->seed();
+
+    NavigationMenuItem::query()->delete();
+
+    $page = Page::query()->create([
+        'title' => '菜单中的关于我们',
+        'slug' => 'menu-managed-about',
+        'body' => '关于页面正文',
+        'is_published' => true,
+    ]);
+    Page::query()->create([
+        'title' => '404 页面文案',
+        'slug' => '404',
+        'template' => 'not_found',
+        'body' => '404 正文',
+        'is_published' => true,
+    ]);
+    Page::query()->create([
+        'title' => '未挂菜单页面',
+        'slug' => 'not-in-menu',
+        'body' => '不应该自动进入信息菜单',
+        'is_published' => true,
+    ]);
+
+    $emptyParent = NavigationMenuItem::query()->create([
+        'placement' => NavigationMenuItem::PLACEMENT_TOP_NAV,
+        'label' => '空目录',
+        'sort_order' => 5,
+        'is_active' => true,
+    ]);
+    $parent = NavigationMenuItem::query()->create([
+        'placement' => NavigationMenuItem::PLACEMENT_TOP_NAV,
+        'label' => '有子目录',
+        'sort_order' => 10,
+        'is_active' => true,
+    ]);
+    NavigationMenuItem::query()->create([
+        'placement' => NavigationMenuItem::PLACEMENT_TOP_NAV,
+        'parent_id' => $parent->id,
+        'label' => '子菜单页面',
+        'route_name' => 'pages.show',
+        'route_parameters' => ['page' => $page->slug],
+        'sort_order' => 10,
+        'is_active' => true,
+    ]);
+    NavigationMenuItem::query()->create([
+        'placement' => NavigationMenuItem::PLACEMENT_HOME_INFO,
+        'label' => '信息菜单关于',
+        'route_name' => 'pages.show',
+        'route_parameters' => ['page' => $page->slug],
+        'sort_order' => 10,
+        'is_active' => true,
+    ]);
+
+    $response = $this->get(route('home'))
+        ->assertOk()
+        ->assertSee('信息菜单关于')
+        ->assertSee('有子目录')
+        ->assertSee('子菜单页面')
+        ->assertSee('请选择下方子菜单')
+        ->assertDontSee('空目录')
+        ->assertDontSee('404 页面文案')
+        ->assertDontSee('未挂菜单页面');
+
+    expect($emptyParent->hasDestination())->toBeFalse()
+        ->and($response->getContent())->toContain('/p/menu-managed-about');
 });
 
 it('always renders home discount and concept sections with empty states', function (): void {

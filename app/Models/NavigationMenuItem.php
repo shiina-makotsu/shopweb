@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Route;
 
 class NavigationMenuItem extends Model
 {
@@ -44,6 +45,11 @@ class NavigationMenuItem extends Model
         return $this->hasMany(self::class, 'parent_id')->orderBy('sort_order')->orderBy('label');
     }
 
+    public function childrenRecursive(): HasMany
+    {
+        return $this->children()->with('childrenRecursive');
+    }
+
     public function scopeActive(Builder $query): Builder
     {
         return $query->where('is_active', true);
@@ -56,11 +62,54 @@ class NavigationMenuItem extends Model
 
     public function resolvedUrl(): string
     {
-        if ($this->route_name && \Route::has($this->route_name)) {
+        if ($this->route_name && Route::has($this->route_name)) {
             return Url::route($this->route_name, $this->route_parameters ?? []);
         }
 
         return $this->url ?: '#';
+    }
+
+    public function hasDestination(): bool
+    {
+        return filled($this->url) || (filled($this->route_name) && Route::has($this->route_name));
+    }
+
+    public function isPlaceholder(): bool
+    {
+        return ! $this->hasDestination();
+    }
+
+    public function treeDepth(): int
+    {
+        $depth = 0;
+        $parent = $this->parent;
+
+        while ($parent && $depth < 8) {
+            $depth++;
+            $parent = $parent->parent;
+        }
+
+        return $depth;
+    }
+
+    public function treeLabel(): string
+    {
+        $depth = $this->treeDepth();
+
+        return ($depth > 0 ? str_repeat('— ', $depth).' ' : '').$this->label;
+    }
+
+    public function typeLabel(): string
+    {
+        if ($this->isPlaceholder()) {
+            return '无页面上级菜单';
+        }
+
+        if ($this->route_name === 'pages.show') {
+            return '自定义页面';
+        }
+
+        return static::routeOptions()[$this->route_name] ?? ($this->route_name ?: '自定义 URL');
     }
 
     /**
