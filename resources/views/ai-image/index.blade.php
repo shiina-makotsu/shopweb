@@ -111,7 +111,7 @@
 
                     <div class="mt-2 flex flex-wrap items-end gap-2">
                         <input class="hidden" type="file" name="reference_images[]" accept="image/png,image/jpeg,image/gif,image/webp" multiple data-reference-input>
-                        <input class="hidden" type="file" name="chat_files[]" multiple data-chat-files-input>
+                        <input class="hidden" type="file" name="chat_files" multiple data-chat-files-input>
 
                         <div class="flex flex-wrap items-end gap-2" data-image-controls>
                             <button class="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-600 hover:bg-zinc-200" type="button" data-reference-button title="添加参考图" aria-label="添加参考图">
@@ -216,7 +216,7 @@
                             </label>
                         </div>
 
-                        <button class="ml-auto inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-700 text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-zinc-200" type="submit" data-generate-button title="生成" aria-label="生成">
+                        <button class="ml-auto inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-700 text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-zinc-200" type="button" data-generate-button title="生成" aria-label="生成">
                             <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
                         </button>
                     </div>
@@ -501,6 +501,12 @@
                 let currentMode = 'gallery';
                 let webSearchEnabled = false;
 
+                const formData = () => new FormData(form);
+                const formValue = (name, fallback = '') => String(formData().get(name) ?? fallback);
+                const formNumber = (name, fallback = 0) => Number(formValue(name, String(fallback)) || fallback);
+                const isChecked = (name) => Boolean(formData().get(name));
+                const generationCount = () => Math.max(1, Math.min(8, formNumber('count', 1) || 1));
+
                 const setStatus = (message, tone = 'zinc') => {
                     status.textContent = message;
                     status.className = `mt-3 text-xs ${tone === 'red' ? 'text-red-600' : tone === 'green' ? 'text-emerald-600' : 'text-zinc-500'}`;
@@ -610,7 +616,7 @@
                     if (currentMode !== 'chat' || event.key !== 'Enter' || event.shiftKey || event.isComposing) return;
 
                     event.preventDefault();
-                    form.requestSubmit();
+                    submitWorkbench();
                 });
                 autoGrowPrompt();
                 chatWebSearch?.addEventListener('click', () => {
@@ -1098,7 +1104,7 @@
                     payload.set('prompt', promptInput.value.trim());
                     payload.set('reasoning_mode', chatReasoning.value || 'low');
                     payload.set('web_search', webSearchEnabled ? '1' : '0');
-                    payload.set('timeout_seconds', form.timeout_seconds?.value || '600');
+                    payload.set('timeout_seconds', formValue('timeout_seconds', '600'));
 
                     if (configMode.value === 'custom') {
                         payload.set('endpoint', endpointInput.value);
@@ -1110,9 +1116,7 @@
                     return payload;
                 };
 
-                form.addEventListener('submit', async (event) => {
-                    event.preventDefault();
-
+                const submitWorkbench = async () => {
                     if (!promptInput.value.trim()) {
                         setStatus(currentMode === 'chat' ? '请先输入聊天消息。' : '请先填写提示词。', 'red');
                         return;
@@ -1128,8 +1132,8 @@
                             return;
                         }
 
-                        const count = Math.max(1, Math.min(8, Number(form.count.value || 1)));
-                        const stream = form.stream?.checked ?? false;
+                        const count = generationCount();
+                        const stream = isChecked('stream');
                         generateButton.disabled = true;
 
                         if (stream) {
@@ -1142,10 +1146,16 @@
                     } finally {
                         generateButton.disabled = false;
                     }
+                };
+
+                form.addEventListener('submit', (event) => {
+                    event.preventDefault();
+                    submitWorkbench();
                 });
+                generateButton.addEventListener('click', submitWorkbench);
 
                 const generateNormal = async () => {
-                    const count = Math.max(1, Math.min(8, Number(form.count.value || 1)));
+                    const count = generationCount();
                     const placeholders = Array.from({ length: count }, () => createTask({ status: 'running' }));
                     renderTasks();
                     placeholders.forEach((task) => startTimer(task.id));
@@ -1385,23 +1395,24 @@
                     configMode: configMode.value,
                     configName: configName.value.trim() || (configMode.value === 'default' ? '默认配置' : '自定义配置'),
                     model: activeModel(),
-                    sizeMode: form.size_mode.value,
-                    ratio: form.ratio.value,
+                    sizeMode: formValue('size_mode', 'auto'),
+                    ratio: formValue('ratio', '1:1'),
                     requestedSize: requestedSizeLabel(),
-                    quality: form.quality.value,
-                    format: form.output_format.value,
-                    count: Number(form.count.value || 1),
-                    width: Number(form.width.value || 0),
-                    height: Number(form.height.value || 0),
-                    transparent: form.transparent.value === '1',
-                    partialImages: Number(form.partial_images.value || 0),
-                    timeout: Number(form.timeout_seconds.value || 600),
+                    quality: formValue('quality', 'auto'),
+                    format: formValue('output_format', 'png'),
+                    count: generationCount(),
+                    width: formNumber('width', 0),
+                    height: formNumber('height', 0),
+                    transparent: formValue('transparent', '0') === '1',
+                    partialImages: formNumber('partial_images', 0),
+                    timeout: formNumber('timeout_seconds', 600),
                 });
 
                 const requestedSizeLabel = () => {
-                    if (form.size_mode.value === 'auto') return 'auto';
-                    if (form.size_mode.value === 'custom') return `${form.width.value}x${form.height.value}`;
-                    return form.ratio.value;
+                    const mode = formValue('size_mode', 'auto');
+                    if (mode === 'auto') return 'auto';
+                    if (mode === 'custom') return `${formValue('width', '1024')}x${formValue('height', '1024')}`;
+                    return formValue('ratio', '1:1');
                 };
 
                 const startTimer = (taskId) => {
@@ -1494,8 +1505,29 @@
 
                         saved.forEach((task) => {
                             if (!task?.id) return;
+                            const config = {
+                                source: task.config?.source ?? '历史任务',
+                                configMode: task.config?.configMode ?? 'default',
+                                configName: task.config?.configName ?? '历史任务',
+                                model: task.config?.model ?? '默认',
+                                sizeMode: task.config?.sizeMode ?? 'auto',
+                                ratio: task.config?.ratio ?? 'auto',
+                                requestedSize: task.config?.requestedSize ?? 'auto',
+                                quality: task.config?.quality ?? 'auto',
+                                format: task.config?.format ?? 'png',
+                                count: Number(task.config?.count || 1),
+                                width: Number(task.config?.width || 0),
+                                height: Number(task.config?.height || 0),
+                                transparent: Boolean(task.config?.transparent),
+                                partialImages: Number(task.config?.partialImages || 0),
+                                timeout: Number(task.config?.timeout || 600),
+                            };
+
                             tasks.set(task.id, {
                                 ...task,
+                                prompt: task.prompt ?? '',
+                                submittedPrompt: task.submittedPrompt ?? task.prompt ?? '',
+                                config,
                                 status: task.status === 'running' ? 'failed' : task.status,
                                 images: Array.isArray(task.images) ? task.images : [],
                                 partials: Array.isArray(task.partials) ? task.partials : [],
@@ -1527,7 +1559,7 @@
                     const selectedStatus = statusFilter.value;
                     const filtered = Array.from(tasks.values()).filter((task) => {
                         const matchesStatus = selectedStatus === 'all' || task.status === selectedStatus;
-                        const haystack = `${task.prompt} ${task.config.model} ${task.config.requestedSize} ${task.config.quality}`.toLowerCase();
+                        const haystack = `${task.prompt ?? ''} ${task.config?.model ?? ''} ${task.config?.requestedSize ?? ''} ${task.config?.quality ?? ''}`.toLowerCase();
 
                         return matchesStatus && (!query || haystack.includes(query));
                     });

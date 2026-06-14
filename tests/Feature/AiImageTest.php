@@ -58,7 +58,12 @@ it('renders the storefront ai image page and entry links', function (): void {
         ->assertSee('lg:grid-cols-3', false)
         ->assertSee('data-edit-output', false)
         ->assertSee('data-detail-error', false)
-        ->assertSee('PNG');
+        ->assertSee('PNG')
+        ->assertSee('submitWorkbench', false)
+        ->assertSee('generationCount', false)
+        ->assertDontSee('form.count', false)
+        ->assertDontSee('form.stream', false)
+        ->assertDontSee('form.size_mode', false);
 
     $this->get(route('home'))
         ->assertOk()
