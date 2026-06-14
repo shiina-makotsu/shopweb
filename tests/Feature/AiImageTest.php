@@ -424,6 +424,54 @@ it('returns detailed provider errors for disabled image capability', function ()
         );
 });
 
+it('retries image generation with a listed model when the default model has no channel', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+
+    Http::fake([
+        'https://api.example.test/v1/images/generations' => Http::sequence()
+            ->push([
+                'error' => [
+                    'message' => 'No available channel for model gpt-image-2 under group 企业生图专线',
+                    'type' => 'new_api_error',
+                ],
+            ], 503)
+            ->push([
+                'data' => [
+                    ['url' => 'https://cdn.example.test/fallback.png'],
+                ],
+            ]),
+        'https://api.example.test/v1/models' => Http::response([
+            'data' => [
+                ['id' => 'gpt-4.1-mini'],
+                ['id' => 'gpt-image-1'],
+            ],
+        ]),
+    ]);
+
+    $this->actingAs($user)->postJson(route('ai-image.generate'), [
+        'endpoint' => 'https://api.example.test/v1',
+        'api_key' => 'test-key',
+        'model' => 'gpt-image-2',
+        'prompt' => '测试自动切换可用图片模型',
+        'count' => 1,
+        'size_mode' => 'auto',
+        'quality' => 'auto',
+        'output_format' => 'png',
+        'timeout_seconds' => 600,
+    ])
+        ->assertOk()
+        ->assertJsonPath('images.0.url', 'https://cdn.example.test/fallback.png')
+        ->assertJsonPath('meta.model', 'gpt-image-1')
+        ->assertJsonPath('meta.fallback_model', 'gpt-image-1');
+
+    Http::assertSentCount(3);
+    Http::assertSent(fn ($request): bool => $request->url() === 'https://api.example.test/v1/models');
+    Http::assertSent(fn ($request): bool => $request->url() === 'https://api.example.test/v1/images/generations'
+        && str_contains($request->body(), '"model":"gpt-image-2"'));
+    Http::assertSent(fn ($request): bool => $request->url() === 'https://api.example.test/v1/images/generations'
+        && str_contains($request->body(), '"model":"gpt-image-1"'));
+});
+
 it('generates images with prompt dimensions and references', function (): void {
     $user = User::factory()->create(['role' => 'customer']);
 

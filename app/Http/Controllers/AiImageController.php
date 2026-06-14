@@ -81,37 +81,13 @@ class AiImageController extends Controller
         $references = $request->file('reference_images', []);
         $mask = $request->file('mask_image');
 
-        $pendingRequest = Http::timeout((int) ($data['timeout_seconds'] ?? 600))
+        $makePendingRequest = fn () => Http::timeout((int) ($data['timeout_seconds'] ?? 600))
             ->acceptJson()
             ->withHeaders($this->apiHeaders($config['api_key'] ?? null));
 
         $startedAt = microtime(true);
         try {
-            if ($references !== []) {
-                foreach (array_values($references) as $index => $file) {
-                    if (! $file instanceof UploadedFile) {
-                        continue;
-                    }
-
-                    $pendingRequest = $pendingRequest->attach(
-                        count($references) === 1 ? 'image' : 'image[]',
-                        file_get_contents($file->getRealPath()),
-                        $file->getClientOriginalName() ?: 'reference-'.$index.'.png',
-                    );
-                }
-
-                if ($mask instanceof UploadedFile) {
-                    $pendingRequest = $pendingRequest->attach(
-                        'mask',
-                        file_get_contents($mask->getRealPath()),
-                        $mask->getClientOriginalName() ?: 'mask.png',
-                    );
-                }
-
-                $response = $pendingRequest->post($baseUrl.'/images/edits', $payload);
-            } else {
-                $response = $pendingRequest->post($baseUrl.'/images/generations', $payload);
-            }
+            $response = $this->sendImageGenerationRequest($makePendingRequest(), $baseUrl, $payload, $references, $mask);
         } catch (ConnectionException $exception) {
             return response()->json([
                 'message' => '图片生成失败：'.$exception->getMessage(),
@@ -120,6 +96,32 @@ class AiImageController extends Controller
 
         $requestMs = (int) round((microtime(true) - $startedAt) * 1000);
         $providerPayload = (array) $response->json();
+
+        if ($response->failed()) {
+            $fallbackModel = $this->fallbackImageModel($baseUrl, $config['api_key'] ?? null, $providerPayload, trim((string) $data['model']));
+
+            if ($fallbackModel !== null) {
+                $data['model'] = $fallbackModel;
+                $payload['model'] = $fallbackModel;
+                $startedAt = microtime(true);
+
+                try {
+                    $response = $this->sendImageGenerationRequest($makePendingRequest(), $baseUrl, $payload, $references, $mask);
+                } catch (ConnectionException $exception) {
+                    return response()->json([
+                        'message' => '图片生成失败：'.$exception->getMessage(),
+                    ], 502);
+                }
+
+                $requestMs = (int) round((microtime(true) - $startedAt) * 1000);
+                $providerPayload = (array) $response->json();
+
+                if (! $response->failed()) {
+                    $config['fallback_model'] = $fallbackModel;
+                    $providerPayload['_shopweb_fallback_model'] = $fallbackModel;
+                }
+            }
+        }
 
         if ($response->failed()) {
             return $this->providerErrorResponse($providerPayload, $response->status(), '图片生成失败。');
@@ -527,6 +529,122 @@ class AiImageController extends Controller
 
     /**
      * @param  array<string, mixed>  $payload
+     * @param  array<int, UploadedFile>|UploadedFile|null  $references
+     */
+    private function sendImageGenerationRequest(
+        \Illuminate\Http\Client\PendingRequest $request,
+        string $baseUrl,
+        array $payload,
+        array|UploadedFile|null $references,
+        mixed $mask,
+    ): \Illuminate\Http\Client\Response {
+        $references = $references instanceof UploadedFile ? [$references] : array_values($references ?? []);
+
+        if ($references !== []) {
+            foreach ($references as $index => $file) {
+                if (! $file instanceof UploadedFile) {
+                    continue;
+                }
+
+                $request = $request->attach(
+                    count($references) === 1 ? 'image' : 'image[]',
+                    file_get_contents($file->getRealPath()),
+                    $file->getClientOriginalName() ?: 'reference-'.$index.'.png',
+                );
+            }
+
+            if ($mask instanceof UploadedFile) {
+                $request = $request->attach(
+                    'mask',
+                    file_get_contents($mask->getRealPath()),
+                    $mask->getClientOriginalName() ?: 'mask.png',
+                );
+            }
+
+            return $request->post($baseUrl.'/images/edits', $payload);
+        }
+
+        return $request->post($baseUrl.'/images/generations', $payload);
+    }
+
+    private function fallbackImageModel(string $baseUrl, ?string $apiKey, array $payload, string $failedModel): ?string
+    {
+        if (! $this->shouldRetryWithListedModel($payload)) {
+            return null;
+        }
+
+        try {
+            $response = Http::timeout(30)
+                ->acceptJson()
+                ->withHeaders($this->apiHeaders($apiKey))
+                ->get($baseUrl.'/models');
+        } catch (ConnectionException) {
+            return null;
+        }
+
+        if ($response->failed()) {
+            return null;
+        }
+
+        return collect($this->extractModels((array) $response->json(), 'image'))
+            ->pluck('id')
+            ->first(fn (string $model): bool => $model !== $failedModel);
+    }
+
+    private function shouldRetryWithListedModel(array $payload): bool
+    {
+        $message = Str::lower($this->rawProviderErrorDetail($payload));
+
+        if ($message === '') {
+            return false;
+        }
+
+        foreach ([
+            'no available channel',
+            'channel',
+            'model_not_found',
+            'model not found',
+            'model_not_supported',
+            'model not supported',
+            'model unavailable',
+            'model is not available',
+            '模型不存在',
+            '模型无权限',
+            '无可用渠道',
+            '没有可用渠道',
+            '未启用',
+        ] as $needle) {
+            if (str_contains($message, $needle)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function rawProviderErrorDetail(?array $payload): string
+    {
+        if ($payload === null) {
+            return '';
+        }
+
+        $candidates = [
+            data_get($payload, 'error.message'),
+            data_get($payload, 'error.detail'),
+            data_get($payload, 'error.type'),
+            data_get($payload, 'message'),
+            data_get($payload, 'detail'),
+            data_get($payload, 'msg'),
+        ];
+
+        return collect($candidates)
+            ->filter(fn (mixed $value): bool => is_string($value) && trim($value) !== '')
+            ->map(fn (string $value): string => trim($value))
+            ->implode('；');
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
      * @return array<int, array<string, string>>
      */
     private function extractImages(array $payload): array
@@ -765,6 +883,7 @@ class AiImageController extends Controller
             'transparent' => (bool) ($data['transparent'] ?? false),
             'stream' => (bool) ($data['stream'] ?? false),
             'partial_images' => (int) ($data['partial_images'] ?? 0),
+            'fallback_model' => (string) ($config['fallback_model'] ?? ''),
         ];
     }
 

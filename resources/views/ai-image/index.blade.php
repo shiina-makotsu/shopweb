@@ -514,6 +514,8 @@
 
                 const activeModel = () => manualModel.value.trim() || modelSelect.value || (configMode.value === 'default' ? defaultImageModel : '');
                 const selectedChatModel = () => chatModelSelect.value || manualModel.value.trim() || (configMode.value === 'default' ? defaultChatModel : '');
+                const modelOptionExists = (select, model) => Array.from(select.options).some((option) => option.value === model);
+                const firstConcreteModel = (select) => Array.from(select.options).find((option) => option.value)?.value || '';
 
                 const setMode = (mode) => {
                     currentMode = mode === 'chat' ? 'chat' : 'gallery';
@@ -1016,6 +1018,15 @@
                                 targetSelect.appendChild(option);
                             });
                         }
+
+                        if (currentMode !== 'chat') {
+                            if (!modelOptionExists(targetSelect, defaultImageModel)) {
+                                targetSelect.value = firstConcreteModel(targetSelect);
+                            }
+                        } else if (!modelOptionExists(targetSelect, defaultChatModel)) {
+                            targetSelect.value = firstConcreteModel(targetSelect);
+                        }
+
                         if (currentMode !== 'chat') syncChatModelOptions();
 
                         setStatus(`已获取 ${data.models?.length ?? 0} 个模型。`, 'green');
