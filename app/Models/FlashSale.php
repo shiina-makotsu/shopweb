@@ -14,6 +14,8 @@ class FlashSale extends Model
 
     protected $fillable = [
         'product_id',
+        'flash_sale_campaign_id',
+        'flash_sale_campaign_item_id',
         'product_variant_ids',
         'name',
         'sale_price_cents',
@@ -37,6 +39,16 @@ class FlashSale extends Model
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);
+    }
+
+    public function campaign(): BelongsTo
+    {
+        return $this->belongsTo(FlashSaleCampaign::class, 'flash_sale_campaign_id');
+    }
+
+    public function campaignItem(): BelongsTo
+    {
+        return $this->belongsTo(FlashSaleCampaignItem::class, 'flash_sale_campaign_item_id');
     }
 
     public function orderItems(): HasMany

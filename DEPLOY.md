@@ -149,6 +149,28 @@ After changing permissions or PHP/Nginx settings, clear Laravel caches:
 php artisan optimize:clear
 ```
 
+## Scheduled tasks
+
+ShopWeb uses Laravel Scheduler for recurring maintenance. Production servers
+should run the scheduler every minute; otherwise daily currency snapshots,
+gold-price snapshots, recurring flash-sale session generation, and AI recycle
+bin pruning will not run automatically.
+
+Linux cron example:
+
+```cron
+* * * * * cd /var/www/shopweb && php artisan schedule:run >> /dev/null 2>&1
+```
+
+Current scheduled commands:
+
+- `shop:currency-refresh`: refreshes international exchange rates and gold
+  price once per day.
+- `shop:flash-sale-sync`: generates upcoming flash-sale sessions from active
+  one-time or recurring flash-sale campaigns.
+- `shop:ai-trash-prune`: deletes expired AI gallery/chat items from recycle
+  bins.
+
 AI provider requests are sent from the Laravel server. On Windows or some
 minimal Linux hosts, PHP/cURL may not have a CA bundle configured and can fail
 with `cURL error 60`. ShopWeb enables native OS CA verification by default:
@@ -164,6 +186,14 @@ If your host does not expose native CA certificates, download a trusted
 `cacert.pem` file and set `AI_HTTP_CA_BUNDLE=/absolute/path/to/cacert.pem` or a
 project-relative path. Do not set `AI_HTTP_VERIFY_SSL=false` in production
 unless you fully understand the risk to API keys.
+
+The same HTTP certificate settings are also used by currency and gold snapshot
+refreshes. If the currency page can update exchange rates but gold stays empty,
+check PHP/cURL CA configuration first and run:
+
+```bash
+php artisan shop:currency-refresh --force
+```
 
 `AI_RESPONSES_IMAGE_MODEL` is only used when image generation falls back to the
 Responses image tool. Keep Image API models such as `gpt-image-2` on the image

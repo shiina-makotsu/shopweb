@@ -4,6 +4,8 @@ use App\Filament\Resources\ProductResource\Pages\EditProduct;
 use App\Models\Category;
 use App\Models\Coupon;
 use App\Models\FlashSale;
+use App\Models\FlashSaleCampaign;
+use App\Models\FlashSaleCampaignItem;
 use App\Models\FriendLink;
 use App\Models\MediaAsset;
 use App\Models\NavigationMenuItem;
@@ -19,10 +21,12 @@ use App\Models\UserCoupon;
 use App\Models\Warehouse;
 use App\Models\WarehouseShippingRate;
 use App\Models\WarehouseStock;
+use App\Services\FlashSaleCampaignService;
 use App\Services\OrderService;
 use App\Support\Money;
 use App\Support\PageMenuPublication;
 use App\Support\Url;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 
@@ -1850,6 +1854,89 @@ it('allows presale products to join flash sales without stock limits', function 
         'unit_price_cents' => 1990,
         'flash_sale_id' => $flashSale->id,
     ]);
+});
+
+it('generates recurring flash sale sessions with multiple campaign products', function (): void {
+    $category = Category::query()->create(['name' => '周期秒杀', 'slug' => 'recurring-flash', 'is_active' => true]);
+    $productA = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => '每日秒杀 A',
+        'slug' => 'daily-flash-a',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_ONLINE,
+    ]);
+    $productB = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => '每日秒杀 B',
+        'slug' => 'daily-flash-b',
+        'status' => Product::STATUS_PRESALE,
+        'fulfillment_type' => Product::FULFILLMENT_LOGISTICS,
+    ]);
+    $variantA = ProductVariant::query()->create([
+        'product_id' => $productA->id,
+        'sku' => 'DAILY-A',
+        'price_cents' => 5000,
+        'stock' => 10,
+        'is_active' => true,
+    ]);
+    $variantB = ProductVariant::query()->create([
+        'product_id' => $productB->id,
+        'sku' => 'DAILY-B',
+        'price_cents' => 8000,
+        'stock' => 0,
+        'is_active' => true,
+    ]);
+
+    $campaign = FlashSaleCampaign::query()->create([
+        'name' => '每日固定秒杀',
+        'schedule_type' => FlashSaleCampaign::TYPE_DAILY,
+        'starts_on' => '2026-06-15',
+        'ends_on' => '2026-06-16',
+        'starts_at_time' => '10:00:00',
+        'ends_at_time' => '11:00:00',
+        'generate_days_ahead' => 3,
+        'is_active' => true,
+    ]);
+
+    FlashSaleCampaignItem::query()->create([
+        'flash_sale_campaign_id' => $campaign->id,
+        'product_id' => $productA->id,
+        'product_variant_ids' => [$variantA->id],
+        'sale_price_cents' => 990,
+        'quantity_limit' => 5,
+        'is_active' => true,
+    ]);
+    FlashSaleCampaignItem::query()->create([
+        'flash_sale_campaign_id' => $campaign->id,
+        'product_id' => $productB->id,
+        'product_variant_ids' => [$variantB->id],
+        'sale_price_cents' => 1990,
+        'quantity_limit' => 3,
+        'is_active' => true,
+    ]);
+
+    $created = app(FlashSaleCampaignService::class)->syncCampaign($campaign, CarbonImmutable::parse('2026-06-15'), CarbonImmutable::parse('2026-06-17'));
+
+    expect($created)->toBe(4)
+        ->and(FlashSale::query()->where('flash_sale_campaign_id', $campaign->id)->count())->toBe(4);
+
+    $this->assertDatabaseHas('flash_sales', [
+        'flash_sale_campaign_id' => $campaign->id,
+        'product_id' => $productA->id,
+        'sale_price_cents' => 990,
+        'quantity_limit' => 5,
+    ]);
+    $this->assertDatabaseHas('flash_sales', [
+        'flash_sale_campaign_id' => $campaign->id,
+        'product_id' => $productB->id,
+        'sale_price_cents' => 1990,
+        'quantity_limit' => 3,
+    ]);
+
+    $createdAgain = app(FlashSaleCampaignService::class)->syncCampaign($campaign, CarbonImmutable::parse('2026-06-15'), CarbonImmutable::parse('2026-06-17'));
+
+    expect($createdAgain)->toBe(0)
+        ->and(FlashSale::query()->where('flash_sale_campaign_id', $campaign->id)->count())->toBe(4);
 });
 
 it('renders friend links from the homepage and friend link listing', function (): void {
