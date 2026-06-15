@@ -204,7 +204,7 @@ class SupportChatSessionResource extends Resource
                     && ! AdminAccess::canAction('after_sales.refund')
                     && AdminAccess::canAction('after_sales.request_refund'))
                 ->form([
-                    MoneyInput::cents(TextInput::make('refund_amount_cents')->label('退款金额（元）')->required()),
+                    ...MoneyInput::convertedCents(TextInput::make('refund_amount_cents')->label('退款金额')->required()),
                     Textarea::make('note')->label('申请说明')->rows(4)->required(),
                 ])
                 ->action(fn (array $data, ?SupportChatSession $record = null) => app(BackofficeApprovalService::class)->requestRefundFromChat(
@@ -222,7 +222,7 @@ class SupportChatSessionResource extends Resource
                     && (bool) static::resolveActionRecord($record, $fixedRecord)?->order_id
                     && AdminAccess::canAction('after_sales.refund'))
                 ->form([
-                    MoneyInput::cents(TextInput::make('refund_amount_cents')->label('退款金额（元）')->required()),
+                    ...MoneyInput::convertedCents(TextInput::make('refund_amount_cents')->label('退款金额')->required()),
                     Textarea::make('note')->label('退款说明')->rows(4),
                 ])
                 ->action(fn (array $data, ?SupportChatSession $record = null) => app(BackofficeApprovalService::class)->approveRefundForChat(

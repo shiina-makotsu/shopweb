@@ -65,6 +65,17 @@
                             <span class="mt-1 block text-sm text-red-600">{{ $message }}</span>
                         @enderror
                     </label>
+                    <label class="block">
+                        <span class="text-sm font-medium text-slate-700">生日</span>
+                        <input class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" type="date" name="birthday" value="{{ old('birthday', $user->birthday?->format('Y-m-d')) }}" max="{{ now()->format('Y-m-d') }}">
+                        @error('birthday')
+                            <span class="mt-1 block text-sm text-red-600">{{ $message }}</span>
+                        @enderror
+                    </label>
+                    <label class="flex items-center gap-2 rounded-sm border border-slate-200 px-3 py-2 text-sm text-slate-700">
+                        <input class="rounded border-slate-300" type="checkbox" name="has_diagnosis_certificate" value="1" @checked(old('has_diagnosis_certificate', $user->has_diagnosis_certificate))>
+                        <span>已持有诊断证明</span>
+                    </label>
                 </div>
 
                 <label class="block">

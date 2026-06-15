@@ -1793,6 +1793,65 @@ it('reserves flash sale quota before selecting a variant and never returns cance
     expect($flashSale->fresh()->sold_quantity)->toBe(1);
 });
 
+it('allows presale products to join flash sales without stock limits', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+    $category = Category::query()->create(['name' => '预售秒杀', 'slug' => 'presale-flash', 'is_active' => true]);
+    $product = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => '预售秒杀商品',
+        'slug' => 'presale-flash-product',
+        'status' => Product::STATUS_PRESALE,
+        'fulfillment_type' => Product::FULFILLMENT_LOGISTICS,
+    ]);
+    $variant = ProductVariant::query()->create([
+        'product_id' => $product->id,
+        'sku' => 'PRESALE-FLASH',
+        'price_cents' => 5000,
+        'stock' => 0,
+        'is_active' => true,
+    ]);
+    $flashSale = FlashSale::query()->create([
+        'product_id' => $product->id,
+        'product_variant_ids' => [$variant->id],
+        'name' => '预售也秒杀',
+        'sale_price_cents' => 1990,
+        'quantity_limit' => 3,
+        'starts_at' => now()->subMinute(),
+        'ends_at' => now()->addHour(),
+        'is_active' => true,
+    ]);
+
+    expect($flashSale->availableQuantity())->toBe(3);
+
+    $this->get(route('home'))
+        ->assertOk()
+        ->assertSee('预售秒杀商品');
+
+    $this->actingAs($user)
+        ->post(route('flash-sales.reserve', $flashSale), ['quantity' => 1])
+        ->assertRedirect();
+
+    $order = Order::query()->where('user_id', $user->id)->firstOrFail();
+
+    $this->actingAs($user)
+        ->post(route('flash-sales.store', $order), [
+            'product_variant_id' => $variant->id,
+            'contact_name' => '预售用户',
+            'contact_phone' => '13800000000',
+            'contact_email' => 'presale@example.com',
+            'shipping_address' => '预售地址',
+        ])
+        ->assertRedirect(route('orders.show', $order));
+
+    $this->assertDatabaseHas('order_items', [
+        'order_id' => $order->id,
+        'product_variant_id' => $variant->id,
+        'product_status' => Product::STATUS_PRESALE,
+        'unit_price_cents' => 1990,
+        'flash_sale_id' => $flashSale->id,
+    ]);
+});
+
 it('renders friend links from the homepage and friend link listing', function (): void {
     FriendLink::query()->create([
         'site_name' => '伙伴站点',

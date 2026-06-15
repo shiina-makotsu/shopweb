@@ -21,8 +21,8 @@ class EditCostEntry extends EditRecord
 
     protected function mutateFormDataBeforeFill(array $data): array
     {
-        $data['currency_code'] ??= 'CNY';
-        $data['currency_unit'] ??= 'yuan';
+        $data['currency_code'] ??= CurrencyUnit::baseCurrency();
+        $data['currency_unit'] ??= CurrencyUnit::defaultUnit($data['currency_code']);
         $data['exchange_rate'] ??= 1;
 
         if (! isset($data['original_amount'])) {
@@ -36,10 +36,11 @@ class EditCostEntry extends EditRecord
     {
         $data['amount_cents'] = CurrencyUnit::toSettlementCents(
             $data['original_amount'] ?? 0,
-            $data['currency_code'] ?? 'CNY',
-            $data['currency_unit'] ?? 'yuan',
-            $data['exchange_rate'] ?? 1,
+            $currency = ($data['currency_code'] ?? CurrencyUnit::baseCurrency()),
+            $data['currency_unit'] ?? CurrencyUnit::defaultUnit($currency),
+            CurrencyUnit::exchangeRateFor($currency),
         );
+        $data['exchange_rate'] = CurrencyUnit::exchangeRateFor($currency);
 
         return $data;
     }

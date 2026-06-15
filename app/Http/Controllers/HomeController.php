@@ -47,7 +47,7 @@ class HomeController extends Controller
                 ->get(),
             'flashSales' => FlashSale::query()
                 ->with(['product.coverMedia', 'product.variants'])
-                ->whereHas('product', fn ($query) => $query->where('status', Product::STATUS_PUBLISHED))
+                ->whereHas('product', fn ($query) => $query->whereIn('status', [Product::STATUS_PUBLISHED, Product::STATUS_PRESALE]))
                 ->where('is_active', true)
                 ->where(fn ($query) => $query->whereNull('ends_at')->orWhere('ends_at', '>', now()))
                 ->orderByRaw('case when starts_at <= ? then 0 else 1 end', [now()])

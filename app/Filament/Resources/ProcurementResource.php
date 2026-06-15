@@ -64,8 +64,8 @@ class ProcurementResource extends Resource
                     ->default(fn (): ?int => Warehouse::query()->where('is_active', true)->orderBy('sort_order')->orderBy('id')->value('id'))
                     ->required(),
                 TextInput::make('quantity')->label('采购数量')->numeric()->minValue(0)->default(0)->required(),
-                TextInput::make('purchase_amount_cents')->label('采购金额（分）')->numeric()->minValue(0)->default(0)->required(),
-                TextInput::make('shipping_amount_cents')->label('运输成本（分）')->numeric()->minValue(0)->default(0),
+                \App\Support\MoneyInput::currencyAmountSection(TextInput::make('purchase_amount_cents')->label('采购金额')->default(0)->required(), label: '采购金额'),
+                \App\Support\MoneyInput::currencyAmountSection(TextInput::make('shipping_amount_cents')->label('运输成本')->default(0), label: '运输成本'),
                 Select::make('shipping_country')->label('海关国家/地区')->options([
                     'CN' => '中国',
                     'JP' => '日本',
@@ -77,7 +77,7 @@ class ProcurementResource extends Resource
                     'AU' => '澳大利亚',
                     'OTHER' => '其他',
                 ])->searchable(),
-                TextInput::make('customs_tax_rate')->label('海关税率')->numeric()->step('0.0001')->helperText('留空或 0 时按国家/地区预设税率计算。'),
+                TextInput::make('customs_tax_rate')->label('海关税率')->numeric()->step('0.0001')->helperText('国家/地区留空时按内地进货处理，不计算海关税；填写国家/地区且税率留空或 0 时，按该国家/地区预设税率计算。'),
                 TextInput::make('international_tracking_number')->label('国际物流订单号')->maxLength(255),
                 TextInput::make('tracking_url')->label('物流查询链接')->maxLength(500)->columnSpanFull(),
                 Select::make('status')->label('状态')->options([
@@ -198,5 +198,17 @@ class ProcurementResource extends Resource
             'create' => CreateProcurement::route('/create'),
             'edit' => EditProcurement::route('/{record}/edit'),
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    public static function normalizeFormData(array $data): array
+    {
+        $data['shipping_country'] = blank($data['shipping_country'] ?? null) ? null : strtoupper((string) $data['shipping_country']);
+        $data['customs_tax_rate'] = blank($data['customs_tax_rate'] ?? null) ? 0 : (float) $data['customs_tax_rate'];
+
+        return $data;
     }
 }

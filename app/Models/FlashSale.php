@@ -59,6 +59,10 @@ class FlashSale extends Model
 
     public function availableQuantity(): int
     {
+        if ($this->product?->hasUnlimitedStock()) {
+            return $this->remainingByPlan();
+        }
+
         $stock = $this->eligibleVariants()->sum('stock');
 
         return min($this->remainingByPlan(), $stock);

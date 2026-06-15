@@ -30,6 +30,7 @@ it('applies basic backoffice role permissions', function (): void {
 
     $this->actingAs($finance)->get('/admin/orders')->assertOk();
     $this->actingAs($finance)->get('/admin/coupons')->assertOk();
+    $this->actingAs($finance)->get('/admin/currency-settings')->assertOk();
     $this->actingAs($finance)->get('/admin/payment-verification-logs')->assertOk();
     $this->actingAs($finance)->get('/admin/products')->assertForbidden();
 
@@ -202,6 +203,12 @@ it('renders store information, cache management, and order status settings for a
         ->assertSee('设置 - 商店信息')
         ->assertSee('商店邮箱')
         ->assertSee('主色');
+
+    $this->actingAs($admin)
+        ->get('/admin/currency-settings')
+        ->assertOk()
+        ->assertSee('货币设置')
+        ->assertSee('汇率换算器');
 
     $this->actingAs($admin)
         ->get('/admin/cache-management')

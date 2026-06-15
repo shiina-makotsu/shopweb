@@ -9,6 +9,7 @@ use App\Filament\Resources\FlashSaleResource\Pages\ListFlashSales;
 use App\Models\FlashSale;
 use App\Models\Product;
 use App\Models\ProductVariant;
+use App\Support\MoneyInput;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
@@ -45,7 +46,7 @@ class FlashSaleResource extends Resource
                 Select::make('product_id')
                     ->label('商品')
                     ->options(fn (): array => Product::query()
-                        ->where('status', Product::STATUS_PUBLISHED)
+                        ->whereIn('status', [Product::STATUS_PUBLISHED, Product::STATUS_PRESALE])
                         ->orderBy('title')
                         ->limit(200)
                         ->pluck('title', 'id')
@@ -66,7 +67,7 @@ class FlashSaleResource extends Resource
                         ->get()
                         ->mapWithKeys(fn (ProductVariant $variant): array => [$variant->id => $variant->sku.' / '.$variant->specLabel().' / 库存 '.$variant->stock])
                         ->all()),
-                TextInput::make('sale_price_cents')->label('秒杀价（分）')->numeric()->required()->minValue(1),
+                ...MoneyInput::convertedCents(TextInput::make('sale_price_cents')->label('秒杀价')->required()->minValue(1)),
                 TextInput::make('quantity_limit')
                     ->label('秒杀名额')
                     ->numeric()

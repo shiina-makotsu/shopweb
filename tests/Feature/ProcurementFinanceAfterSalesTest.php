@@ -13,10 +13,13 @@ use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\SupportChatSession;
 use App\Models\User;
+use App\Models\SiteSetting;
+use App\Models\UserProfileChangeLog;
 use App\Models\Warehouse;
 use App\Models\WarehouseMovement;
 use App\Models\WarehouseStock;
 use App\Services\BackofficeApprovalService;
+use App\Services\CurrencyRateService;
 use App\Services\ProcurementService;
 use App\Services\CouponService;
 use App\Services\OrderService;
@@ -24,6 +27,7 @@ use App\Services\WarehouseService;
 use App\Support\AdminAccess;
 use App\Support\CurrencyUnit;
 use App\Support\ProfitMetrics;
+use Illuminate\Support\Facades\Http;
 
 it('syncs procurement into an incoming product, auto costs, and allocated presale users', function (): void {
     $admin = User::factory()->create(['role' => 'admin']);
@@ -104,6 +108,59 @@ it('syncs procurement into an incoming product, auto costs, and allocated presal
     ]);
 });
 
+it('allows blank procurement country and customs rate while using country presets when present', function (): void {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $category = Category::query()->create(['name' => '海关', 'slug' => 'customs', 'is_active' => true]);
+    $product = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => '海关商品',
+        'slug' => 'customs-product',
+        'status' => Product::STATUS_PRESALE,
+        'fulfillment_type' => Product::FULFILLMENT_LOGISTICS,
+    ]);
+    ProductVariant::query()->create([
+        'product_id' => $product->id,
+        'sku' => 'CUSTOMS-1',
+        'price_cents' => 1200,
+        'stock' => 0,
+        'is_active' => true,
+    ]);
+
+    $domestic = Procurement::query()->create([
+        'product_id' => $product->id,
+        'created_by_id' => $admin->id,
+        'name' => '内地采购',
+        'quantity' => 1,
+        'purchase_amount_cents' => 10000,
+        'shipping_amount_cents' => 1000,
+        'shipping_country' => null,
+        'customs_tax_rate' => 0,
+        'status' => Procurement::STATUS_INCOMING,
+    ]);
+
+    app(ProcurementService::class)->syncProcurement($domestic);
+
+    expect($domestic->fresh()->customs_tax_rate)->toBe('0.0000')
+        ->and($domestic->fresh()->customs_tax_cents)->toBe(0);
+
+    $foreign = Procurement::query()->create([
+        'product_id' => $product->id,
+        'created_by_id' => $admin->id,
+        'name' => '日本采购',
+        'quantity' => 1,
+        'purchase_amount_cents' => 10000,
+        'shipping_amount_cents' => 1000,
+        'shipping_country' => 'JP',
+        'customs_tax_rate' => 0,
+        'status' => Procurement::STATUS_INCOMING,
+    ]);
+
+    app(ProcurementService::class)->syncProcurement($foreign);
+
+    expect($foreign->fresh()->customs_tax_rate)->toBe('0.1000')
+        ->and($foreign->fresh()->customs_tax_cents)->toBe(1100);
+});
+
 it('calculates profit from fulfilled orders minus costs', function (): void {
     $user = User::factory()->create(['role' => 'customer']);
 
@@ -153,6 +210,89 @@ it('converts custom cost currencies and units into settlement cents', function (
         ->and(CurrencyUnit::unitOptions('ATS'))->toHaveKeys(['schilling', 'groschen'])
         ->and(CurrencyUnit::toSettlementCents(50, 'USD', 'cent', 7.2))->toBe(360)
         ->and(CurrencyUnit::toSettlementCents(12, 'CNY', 'jiao', 1))->toBe(120);
+});
+
+it('infers base currency from language unless the base currency is locked', function (): void {
+    $settings = SiteSetting::query()->firstOrCreate([], [
+        'site_name' => 'ShopWeb',
+        'default_locale_mode' => 'system',
+    ]);
+
+    $settings->update([
+        'default_locale_mode' => 'zh_HK',
+        'store_currency' => 'CNY',
+        'currency_base_unit' => 'yuan',
+        'currency_base_locked' => false,
+    ]);
+
+    expect(CurrencyUnit::currencyForLocale('zh_CN'))->toBe('CNY')
+        ->and(CurrencyUnit::currencyForLocale('zh_HK'))->toBe('HKD')
+        ->and(CurrencyUnit::currencyForLocale('en_US'))->toBe('USD')
+        ->and(CurrencyUnit::baseCurrency())->toBe('HKD')
+        ->and(CurrencyUnit::baseUnit())->toBe('dollar');
+
+    $settings->update([
+        'store_currency' => 'USD',
+        'currency_base_unit' => 'cent',
+        'currency_base_locked' => true,
+    ]);
+
+    expect(CurrencyUnit::baseCurrency())->toBe('USD')
+        ->and(CurrencyUnit::baseUnit())->toBe('cent');
+});
+
+it('stores exchange rates as selected currency to base currency and converts with units', function (): void {
+    Http::fake([
+        'https://open.er-api.com/v6/latest/CNY' => Http::response([
+            'rates' => [
+                'CNY' => 1,
+                'USD' => 0.5,
+                'JPY' => 20,
+            ],
+        ]),
+        'https://api.metals.live/v1/spot/gold' => Http::response([
+            ['gold' => 2000],
+        ]),
+        'https://open.er-api.com/v6/latest/USD' => Http::response([
+            'rates' => [
+                'USD' => 1,
+                'CNY' => 7.2,
+            ],
+        ]),
+    ]);
+
+    $settings = SiteSetting::query()->firstOrCreate([], ['site_name' => 'ShopWeb']);
+    $settings->update([
+        'store_currency' => 'CNY',
+        'currency_base_unit' => 'yuan',
+        'currency_base_locked' => true,
+    ]);
+
+    $fresh = app(CurrencyRateService::class)->refresh($settings->fresh());
+
+    expect((float) $fresh->currency_exchange_rates['CNY'])->toBe(1.0)
+        ->and((float) $fresh->currency_exchange_rates['USD'])->toBe(2.0)
+        ->and(app(CurrencyRateService::class)->convert(1, 'USD', 'CNY', $fresh->currency_exchange_rates))->toBe(2.0)
+        ->and($fresh->currency_gold_price)->not->toBeNull();
+});
+
+it('records user birthday and diagnosis certificate profile changes', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+
+    $this->actingAs($user)
+        ->patch(route('user.profile.update'), [
+            'name' => $user->name,
+            'birthday' => '2000-06-15',
+            'has_diagnosis_certificate' => '1',
+        ])
+        ->assertRedirect();
+
+    $user->refresh();
+
+    expect($user->birthday?->format('Y-m-d'))->toBe('2000-06-15')
+        ->and($user->has_diagnosis_certificate)->toBeTrue()
+        ->and(UserProfileChangeLog::query()->where('user_id', $user->id)->where('field', 'birthday')->exists())->toBeTrue()
+        ->and(UserProfileChangeLog::query()->where('user_id', $user->id)->where('field', 'has_diagnosis_certificate')->exists())->toBeTrue();
 });
 
 it('calculates gross profit and warehouse profit breakdowns', function (): void {

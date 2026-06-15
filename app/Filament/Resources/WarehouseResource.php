@@ -76,7 +76,7 @@ class WarehouseResource extends Resource
                             ->searchable()
                             ->preload()
                             ->helperText('可多选；默认规则不需要选择省份。'),
-                        MoneyInput::cents(TextInput::make('fee_cents')->label('基础邮费（元）')->required()->minValue(0)),
+                        ...MoneyInput::convertedCents(TextInput::make('fee_cents')->label('基础邮费')->required()->minValue(0)),
                         Toggle::make('is_default')->label('其他地区')->default(false)->helperText('没有匹配省份时使用此规则。'),
                         Toggle::make('is_active')->label('启用')->default(true),
                         TextInput::make('sort_order')->label('排序')->numeric()->default(0),

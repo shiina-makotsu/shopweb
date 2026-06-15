@@ -75,13 +75,15 @@ class ProductDiscountPage extends Page implements HasSchemas
                         ->default(false)
                         ->live()
                         ->helperText('默认关闭。关闭后保存会清空所选 SKU 的折扣价和折扣时间。'),
-                    MoneyInput::cents(
+                    ...collect(MoneyInput::convertedCents(
                         TextInput::make('discount_price_cents')
-                            ->label('折扣价（元）')
+                            ->label('折扣价')
                             ->required(fn (Get $get): bool => (bool) $get('discount_enabled'))
                             ->minValue(0),
                         true,
-                    )->visible(fn (Get $get): bool => (bool) $get('discount_enabled')),
+                    ))
+                        ->map(fn ($component) => $component->visible(fn (Get $get): bool => (bool) $get('discount_enabled')))
+                        ->all(),
                     DateTimePicker::make('discount_starts_at')
                         ->label('折扣开始')
                         ->seconds(false)

@@ -9,6 +9,7 @@ use App\Filament\Resources\CustomerResource\Pages\ListCustomers;
 use App\Models\Coupon;
 use App\Models\User;
 use App\Models\UserCoupon;
+use App\Models\UserProfileChangeLog;
 use App\Services\CouponService;
 use App\Support\AdminAccess;
 use App\Support\Money;
@@ -16,6 +17,7 @@ use App\Support\RegexSearch;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Actions\EditAction;
+use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Hidden;
@@ -119,6 +121,13 @@ class CustomerResource extends Resource
                     ->rows(4)
                     ->maxLength(1000)
                     ->columnSpanFull(),
+                DatePicker::make('birthday')
+                    ->label('生日')
+                    ->maxDate(now())
+                    ->native(false),
+                Toggle::make('has_diagnosis_certificate')
+                    ->label('持有诊断证明')
+                    ->default(false),
                 Select::make('account_type')->label('用户身份')->options([
                     'regular' => '普通用户',
                     'member' => '会员用户（占位）',
@@ -175,6 +184,19 @@ class CustomerResource extends Resource
                     ->label('注册邮箱')
                     ->searchable(query: fn (Builder $query, string $search): Builder => RegexSearch::where($query, ['email'], $search))
                     ->sortable(),
+                TextColumn::make('birthday')
+                    ->label('生日')
+                    ->formatStateUsing(fn ($state, User $record): string => $state ? ($record->hasBirthdayToday() ? '生日 '.$record->birthday?->format('Y-m-d') : $record->birthday?->format('Y-m-d')) : '-')
+                    ->badge(fn (User $record): bool => $record->hasBirthdayToday())
+                    ->color(fn (User $record): string => $record->hasBirthdayToday() ? 'success' : 'gray')
+                    ->sortable()
+                    ->toggleable(),
+                TextColumn::make('has_diagnosis_certificate')
+                    ->label('诊断证明')
+                    ->formatStateUsing(fn (bool $state): string => $state ? '已持有' : '未标记')
+                    ->badge()
+                    ->color(fn (bool $state): string => $state ? 'success' : 'gray')
+                    ->toggleable(),
                 TextColumn::make('account_type')
                     ->label('用户身份')
                     ->formatStateUsing(fn (?string $state): string => $state === 'member' ? '会员用户' : '普通用户')
@@ -256,5 +278,50 @@ class CustomerResource extends Resource
             'create' => CreateCustomer::route('/create'),
             'edit' => EditCustomer::route('/{record}/edit'),
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    public static function recordProfileChanges(User $record, array $data, ?User $changedBy = null): void
+    {
+        foreach (['birthday', 'has_diagnosis_certificate'] as $field) {
+            if (! array_key_exists($field, $data)) {
+                continue;
+            }
+
+            $old = static::profileLogValue($record->{$field});
+            $new = static::profileLogValue($data[$field]);
+
+            if ($old === $new) {
+                continue;
+            }
+
+            UserProfileChangeLog::query()->create([
+                'user_id' => $record->id,
+                'changed_by_id' => $changedBy?->id,
+                'field' => $field,
+                'old_value' => $old,
+                'new_value' => $new,
+                'source' => 'admin',
+            ]);
+        }
+    }
+
+    private static function profileLogValue(mixed $value): ?string
+    {
+        if ($value instanceof \DateTimeInterface) {
+            return $value->format('Y-m-d');
+        }
+
+        if (is_bool($value)) {
+            return $value ? '1' : '0';
+        }
+
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        return (string) $value;
     }
 }

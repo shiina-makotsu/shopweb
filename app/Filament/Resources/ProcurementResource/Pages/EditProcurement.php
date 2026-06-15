@@ -11,6 +11,11 @@ class EditProcurement extends EditRecord
 {
     protected static string $resource = ProcurementResource::class;
 
+    protected function mutateFormDataBeforeSave(array $data): array
+    {
+        return ProcurementResource::normalizeFormData($data);
+    }
+
     protected function afterSave(): void
     {
         app(ProcurementService::class)->syncProcurement($this->record);

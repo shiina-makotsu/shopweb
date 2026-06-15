@@ -12,6 +12,7 @@ use App\Services\BackofficeApprovalService;
 use App\Services\CouponService;
 use App\Support\AdminAccess;
 use App\Support\Money;
+use App\Support\MoneyInput;
 use App\Support\RegexSearch;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
@@ -81,7 +82,9 @@ class AfterSalesRequestResource extends Resource
                     AfterSalesRequest::STATUS_CLOSED => '已关闭',
                 ])->required(),
                 Select::make('resolution_type')->label('处理方式')->options(fn (): array => static::resolutionOptions()),
-                TextInput::make('refund_amount_cents')->label('退款金额（分）')->numeric()->minValue(0)->visible(fn (): bool => AdminAccess::canAction('after_sales.refund')),
+                ...collect(MoneyInput::convertedCents(TextInput::make('refund_amount_cents')->label('退款金额')->minValue(0)))
+                    ->map(fn ($component) => $component->visible(fn (): bool => AdminAccess::canAction('after_sales.refund')))
+                    ->all(),
                 Placeholder::make('refund_status_display')->label('退款审批')->content(fn (?AfterSalesRequest $record): string => static::refundStatusLabel($record?->refund_status)),
                 Placeholder::make('refund_requested_by')->label('申请人')->content(fn (?AfterSalesRequest $record): string => $record?->refundRequester?->displayName() ?? '-'),
                 Placeholder::make('refund_reviewed_by')->label('审批人')->content(fn (?AfterSalesRequest $record): string => $record?->refundReviewer?->displayName() ?? '-'),
@@ -134,7 +137,7 @@ class AfterSalesRequestResource extends Resource
                     ->icon(Heroicon::OutlinedReceiptRefund)
                     ->color('warning')
                     ->form([
-                        TextInput::make('refund_amount_cents')->label('退款金额（分）')->numeric()->minValue(0)->required(),
+                        ...MoneyInput::convertedCents(TextInput::make('refund_amount_cents')->label('退款金额')->minValue(0)->required()),
                         Textarea::make('admin_note')->label('申请说明')->rows(4)->required(),
                     ])
                     ->visible(fn (AfterSalesRequest $record): bool => AdminAccess::canAction('after_sales.request_refund')
@@ -176,7 +179,9 @@ class AfterSalesRequestResource extends Resource
                     ->icon(Heroicon::OutlinedCheck)
                     ->form([
                         Select::make('resolution_type')->label('处理方式')->options(fn (): array => static::resolutionOptions())->default(AfterSalesRequest::RESOLUTION_MESSAGE)->required(),
-                        TextInput::make('refund_amount_cents')->label('退款金额（分）')->numeric()->minValue(0)->visible(fn (): bool => AdminAccess::canAction('after_sales.refund')),
+                        ...collect(MoneyInput::convertedCents(TextInput::make('refund_amount_cents')->label('退款金额')->minValue(0)))
+                            ->map(fn ($component) => $component->visible(fn (): bool => AdminAccess::canAction('after_sales.refund')))
+                            ->all(),
                         Select::make('coupon_id')
                             ->label('补偿优惠券')
                             ->options(fn (): array => Coupon::query()->latest()->limit(80)->pluck('code', 'id')->all())

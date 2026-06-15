@@ -12,6 +12,7 @@ class CreateProcurement extends CreateRecord
 
     protected function mutateFormDataBeforeCreate(array $data): array
     {
+        $data = ProcurementResource::normalizeFormData($data);
         $data['created_by_id'] = auth()->id();
 
         return $data;

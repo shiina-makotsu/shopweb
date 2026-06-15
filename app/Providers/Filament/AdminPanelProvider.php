@@ -10,6 +10,7 @@ use App\Filament\Widgets\SalesRangeStats;
 use App\Filament\Pages\BackupPage;
 use App\Filament\Pages\AdminSearchPage;
 use App\Filament\Pages\CacheManagementPage;
+use App\Filament\Pages\CurrencySettingsPage;
 use App\Filament\Pages\Dashboard;
 use App\Filament\Pages\HomeContentPage;
 use App\Filament\Pages\MailSettingsPage;
@@ -88,6 +89,7 @@ class AdminPanelProvider extends PanelProvider
                 AdminSearchPage::class,
                 BackupPage::class,
                 CacheManagementPage::class,
+                CurrencySettingsPage::class,
                 HomeContentPage::class,
                 MailSettingsPage::class,
                 NotFoundContentPage::class,

@@ -6,6 +6,7 @@ use App\Models\Order;
 use App\Models\PrivateMessage;
 use App\Models\User;
 use App\Models\UserAddress;
+use App\Models\UserProfileChangeLog;
 use App\Services\AiUsageService;
 use App\Services\CouponService;
 use Illuminate\Support\Collection;
@@ -149,10 +150,13 @@ class UserCenterController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'profile_intro' => ['nullable', 'string', 'max:1000'],
+            'birthday' => ['nullable', 'date', 'before_or_equal:today'],
+            'has_diagnosis_certificate' => ['nullable', 'boolean'],
             'avatar' => ['nullable', 'image', 'max:5120'],
             'avatar_cropped' => ['nullable', 'string'],
         ]);
 
+        $data['has_diagnosis_certificate'] = (bool) ($data['has_diagnosis_certificate'] ?? false);
         $croppedAvatarPath = $this->storeCroppedAvatar((string) ($data['avatar_cropped'] ?? ''));
 
         if ($croppedAvatarPath || $request->hasFile('avatar')) {
@@ -165,9 +169,55 @@ class UserCenterController extends Controller
 
         unset($data['avatar'], $data['avatar_cropped']);
 
+        $this->recordProfileChanges($user, $data, $user, 'user');
         $user->update($data);
 
         return back()->with('status', '个人资料已更新。');
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function recordProfileChanges(User $user, array $data, ?User $changedBy, string $source): void
+    {
+        foreach (['birthday', 'has_diagnosis_certificate'] as $field) {
+            if (! array_key_exists($field, $data)) {
+                continue;
+            }
+
+            $old = $this->profileLogValue($user->{$field});
+            $new = $this->profileLogValue($data[$field]);
+
+            if ($old === $new) {
+                continue;
+            }
+
+            UserProfileChangeLog::query()->create([
+                'user_id' => $user->id,
+                'changed_by_id' => $changedBy?->id,
+                'field' => $field,
+                'old_value' => $old,
+                'new_value' => $new,
+                'source' => $source,
+            ]);
+        }
+    }
+
+    private function profileLogValue(mixed $value): ?string
+    {
+        if ($value instanceof \DateTimeInterface) {
+            return $value->format('Y-m-d');
+        }
+
+        if (is_bool($value)) {
+            return $value ? '1' : '0';
+        }
+
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        return (string) $value;
     }
 
     private function storeCroppedAvatar(string $dataUrl): ?string

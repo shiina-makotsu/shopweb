@@ -72,8 +72,9 @@ class FlashSaleService
                 ->whereKey($data['product_variant_id'])
                 ->lockForUpdate()
                 ->first();
+            $product = $flashSale->product()->firstOrFail();
 
-            if (! $variant || $variant->stock < $item->quantity) {
+            if (! $variant || ($product->usesStockLimit() && $variant->stock < $item->quantity)) {
                 throw ValidationException::withMessages(['product_variant_id' => '该规格库存不足，请换一个规格。']);
             }
 

@@ -34,6 +34,8 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
         'forum_posting_ban_reason',
         'avatar_path',
         'profile_intro',
+        'birthday',
+        'has_diagnosis_certificate',
         'preferred_locale',
         'interface_settings',
         'privacy_settings',
@@ -63,6 +65,8 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
             'privacy_settings' => 'array',
             'can_view_order_numbers' => 'boolean',
             'can_view_tracking_numbers' => 'boolean',
+            'birthday' => 'date',
+            'has_diagnosis_certificate' => 'boolean',
         ];
     }
 
@@ -234,6 +238,17 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
     public function aiChatSessions(): HasMany
     {
         return $this->hasMany(AiChatSession::class);
+    }
+
+    public function profileChangeLogs(): HasMany
+    {
+        return $this->hasMany(UserProfileChangeLog::class);
+    }
+
+    public function hasBirthdayToday(): bool
+    {
+        return $this->birthday
+            && $this->birthday->format('m-d') === now()->format('m-d');
     }
 
     public function getRouteKeyName(): string

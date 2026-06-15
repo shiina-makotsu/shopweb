@@ -9,6 +9,17 @@ class EditCustomer extends EditRecord
 {
     protected static string $resource = CustomerResource::class;
 
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    protected function mutateFormDataBeforeSave(array $data): array
+    {
+        CustomerResource::recordProfileChanges($this->getRecord(), $data, auth()->user());
+
+        return $data;
+    }
+
     protected function getRedirectUrlParameters(): array
     {
         return [

@@ -103,7 +103,7 @@ class ProductResource extends Resource
                 ])->default(Product::FULFILLMENT_LOGISTICS),
                 Select::make('delivery_status_id')->label('交付状态')->relationship('deliveryStatus', 'name')->searchable()->preload(),
                 Select::make('quantity_unit_id')->label('数量单位')->relationship('quantityUnit', 'name')->searchable()->preload(),
-                MoneyInput::cents(TextInput::make('shipping_extra_fee_cents')->label('额外邮费（元）')->helperText('可为空；体积/重量超额商品可填写追加邮费，结算时叠加仓库基础邮费。')),
+                ...MoneyInput::convertedCents(TextInput::make('shipping_extra_fee_cents')->label('额外邮费')->helperText('可为空；体积/重量超额商品可填写追加邮费，结算时叠加仓库基础邮费。')),
                 TextInput::make('sort_order')->label('排序')->numeric()->default(0),
                 Toggle::make('is_featured')->label('推荐')->default(false),
                 Toggle::make('comments_enabled')->label('开启评论')->default(true),
@@ -149,7 +149,7 @@ class ProductResource extends Resource
                             ->label('SKU 图片预览')
                             ->content(fn (Get $get): HtmlString => static::imagePreviewHtml($get('image_path')))
                             ->html(),
-                        MoneyInput::cents(TextInput::make('price_cents')->label('价格（元）')->required()),
+                        ...MoneyInput::convertedCents(TextInput::make('price_cents')->label('价格')->required()),
                         TextInput::make('stock')
                             ->label('库存')
                             ->numeric()
@@ -206,14 +206,14 @@ class ProductResource extends Resource
 
             Section::make('概念商品投票与筹款')->description('仅概念商品会在前台显示购买意愿、价格区间投票和筹款说明。')->schema([
                 Toggle::make('crowdfunding_enabled')->label('启用筹款')->default(false),
-                MoneyInput::cents(TextInput::make('crowdfunding_goal_cents')->label('筹款目标（元）'), true),
+                ...MoneyInput::convertedCents(TextInput::make('crowdfunding_goal_cents')->label('筹款目标'), true),
                 Textarea::make('crowdfunding_reward')->label('正式发布奖励')->rows(3)->columnSpanFull(),
                 Repeater::make('priceVoteOptions')->label('价格区间')
                     ->relationship()
                     ->schema([
                         TextInput::make('label')->label('标签')->required(),
-                        MoneyInput::cents(TextInput::make('min_cents')->label('最低（元）'), true),
-                        MoneyInput::cents(TextInput::make('max_cents')->label('最高（元）'), true),
+                        ...MoneyInput::convertedCents(TextInput::make('min_cents')->label('最低'), true),
+                        ...MoneyInput::convertedCents(TextInput::make('max_cents')->label('最高'), true),
                         TextInput::make('sort_order')->label('排序')->numeric()->default(0),
                         Toggle::make('is_active')->label('启用')->default(true),
                     ])

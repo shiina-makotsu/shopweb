@@ -213,6 +213,10 @@ class ProcurementService
 
     private function rateFor(?string $country): float
     {
+        if (blank($country)) {
+            return 0.0;
+        }
+
         return self::customsRateOptions()[strtoupper((string) $country)] ?? 0.0;
     }
 

@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Models\UserCoupon;
 use App\Services\CouponService;
 use App\Support\AdminAccess;
+use App\Support\CurrencyUnit;
 use App\Support\MoneyInput;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
@@ -62,14 +63,30 @@ class CouponResource extends Resource
                 ->required(fn (Get $get): bool => $get('scope') === Coupon::SCOPE_PRODUCT)
                 ->helperText('单商品优惠码可以选择多个适用商品，结算时这些商品都可使用。'),
             TextInput::make('value')
-                ->label(fn (Get $get): string => $get('type') === Coupon::TYPE_PERCENT ? '折扣百分比' : '优惠金额（元）')
+                ->label(fn (Get $get): string => $get('type') === Coupon::TYPE_PERCENT ? '折扣百分比' : '优惠金额')
                 ->numeric()
                 ->required()
                 ->minValue(0)
-                ->helperText('固定金额按元输入；百分比填写 1-100。')
+                ->helperText('固定金额按所选货币单位录入，保存时按财务货币页的自动汇率快照折算；百分比填写 1-100。')
                 ->formatStateUsing(fn ($state, $record): ?string => $record?->type === Coupon::TYPE_FIXED ? MoneyInput::fromCents($state) : ($state === null ? null : (string) $state))
-                ->dehydrateStateUsing(fn ($state, Get $get): int => $get('type') === Coupon::TYPE_FIXED ? MoneyInput::toCents($state) : max(0, min(100, (int) $state))),
-            MoneyInput::cents(TextInput::make('minimum_order_cents')->label('最低订单金额（元）')->default(0)),
+                ->dehydrateStateUsing(function ($state, Get $get): int {
+                    if ($get('type') !== Coupon::TYPE_FIXED) {
+                        return max(0, min(100, (int) $state));
+                    }
+
+                    $currency = $get('value_currency_code') ?: CurrencyUnit::baseCurrency();
+
+                    return CurrencyUnit::toSettlementCents(
+                        $state,
+                        $currency,
+                        $get('value_currency_unit') ?: CurrencyUnit::defaultUnit($currency),
+                        CurrencyUnit::exchangeRateFor($currency),
+                    );
+                }),
+            ...collect(MoneyInput::conversionControls('value'))
+                ->map(fn ($component) => $component->visible(fn (Get $get): bool => $get('type') === Coupon::TYPE_FIXED))
+                ->all(),
+            ...MoneyInput::convertedCents(TextInput::make('minimum_order_cents')->label('最低订单金额')->default(0)),
             TextInput::make('usage_limit')->label('总次数')->numeric(),
             DateTimePicker::make('starts_at')->label('开始时间'),
             DateTimePicker::make('ends_at')->label('结束时间'),
