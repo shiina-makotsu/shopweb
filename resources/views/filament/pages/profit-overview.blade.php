@@ -29,6 +29,56 @@
 
     <section class="mt-6 rounded-sm border border-slate-300 bg-white">
         <div class="border-b border-slate-200 px-4 py-3">
+            <h2 class="text-lg font-semibold">交付类型利润</h2>
+            <p class="mt-1 text-sm text-slate-600">线上交付、线下交付、物流交付分开归集销售额；成本按销售额占比分摊。公式可使用 sales、cost、purchase_cost、gross_profit、profit 与 + - * / ()。</p>
+            <form class="mt-4 flex flex-wrap items-end gap-3" wire:submit.prevent="saveProfitFormula">
+                <label class="min-w-80 flex-1">
+                    <span class="text-xs font-medium text-slate-600">自定义利润公式</span>
+                    <input class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" type="text" wire:model.defer="profit_formula" placeholder="sales - cost">
+                </label>
+                <button class="rounded-sm border border-blue-700 bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800" type="submit">保存公式</button>
+            </form>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full min-w-[980px] text-sm">
+                <thead class="bg-slate-50 text-left text-slate-600">
+                    <tr>
+                        <th class="px-4 py-3 font-medium">交付类型</th>
+                        <th class="px-4 py-3 text-right font-medium">销售额</th>
+                        <th class="px-4 py-3 text-right font-medium">采购成本</th>
+                        <th class="px-4 py-3 text-right font-medium">总成本</th>
+                        <th class="px-4 py-3 text-right font-medium">毛利润</th>
+                        <th class="px-4 py-3 text-right font-medium">默认利润</th>
+                        <th class="px-4 py-3 text-right font-medium">公式利润</th>
+                        <th class="px-4 py-3 text-right font-medium">利润率</th>
+                        <th class="px-4 py-3 text-right font-medium">完成订单</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    @forelse($this->fulfillmentRows() as $row)
+                        <tr>
+                            <td class="px-4 py-3 font-medium text-slate-950">{{ $row['label'] }}</td>
+                            <td class="px-4 py-3 text-right">{{ $row['sales'] }}</td>
+                            <td class="px-4 py-3 text-right">{{ $row['purchase_cost'] }}</td>
+                            <td class="px-4 py-3 text-right">{{ $row['cost'] }}</td>
+                            <td class="px-4 py-3 text-right">{{ $row['gross_profit'] }}</td>
+                            <td class="px-4 py-3 text-right">{{ $row['profit'] }}</td>
+                            <td class="px-4 py-3 text-right font-semibold">{{ $row['formula_profit'] }}</td>
+                            <td class="px-4 py-3 text-right">{{ $row['profit_rate'] }}</td>
+                            <td class="px-4 py-3 text-right">{{ $row['orders_count'] }}</td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td class="px-4 py-8 text-center text-slate-500" colspan="9">暂无交付类型利润数据</td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="mt-6 rounded-sm border border-slate-300 bg-white">
+        <div class="border-b border-slate-200 px-4 py-3">
             <h2 class="text-lg font-semibold">仓库利润</h2>
             <p class="mt-1 text-sm text-slate-600">按订单商品所属仓库归集销售额和邮费，按采购批次所属仓库归集成本；仓库利润率 = 仓库利润 / 仓库销售额。</p>
         </div>

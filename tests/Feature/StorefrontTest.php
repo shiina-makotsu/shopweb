@@ -46,6 +46,7 @@ it('allows a customer to add a sku to cart and create an order', function (): vo
         ?? User::factory()->create(['role' => 'customer']);
 
     $variant = ProductVariant::query()->firstOrFail();
+    $variant->product->update(['fulfillment_type' => Product::FULFILLMENT_IN_PERSON]);
 
     $this->post(route('cart.items.store'), [
         'variant_id' => $variant->id,
@@ -186,6 +187,7 @@ it('allows presale checkout and concept crowdfunding without stock deduction', f
 
     $user = User::factory()->create(['role' => 'customer']);
     $product = Product::query()->firstOrFail();
+    $product->update(['fulfillment_type' => Product::FULFILLMENT_IN_PERSON]);
     $variant = $product->variants()->firstOrFail();
 
     $product->update(['status' => Product::STATUS_CONCEPT]);
@@ -228,11 +230,67 @@ it('allows presale checkout and concept crowdfunding without stock deduction', f
         ->and($order->items()->first()->quantity)->toBe(25);
 });
 
+it('treats online delivery products as unlimited stock', function (): void {
+    $this->seed();
+
+    $user = User::factory()->create(['role' => 'customer']);
+    $category = Category::query()->firstOrFail();
+    $product = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => '线上无限库存商品',
+        'slug' => 'online-unlimited-stock-product',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_ONLINE,
+    ]);
+    $variant = ProductVariant::query()->create([
+        'product_id' => $product->id,
+        'sku' => 'ONLINE-UNLIMITED-1',
+        'price_cents' => 1800,
+        'stock' => 0,
+        'low_stock_threshold' => 5,
+        'is_active' => true,
+    ]);
+
+    $this->get(route('products.show', $product))
+        ->assertOk()
+        ->assertSee('不限库存')
+        ->assertDontSee('该商品已售罄');
+
+    $this->post(route('cart.items.store'), [
+        'variant_id' => $variant->id,
+        'quantity' => 12,
+    ])->assertRedirect(route('cart.show'));
+
+    $this->actingAs($user)->post(route('checkout.store'), [
+        'contact_name' => '线上交付用户',
+        'contact_phone' => '13800000000',
+        'contact_email' => 'online@example.com',
+    ])->assertRedirect();
+
+    $order = Order::query()->where('user_id', $user->id)->latest('id')->firstOrFail();
+    app(OrderService::class)->confirmPayment($order);
+
+    expect($variant->fresh()->stock)->toBe(0)
+        ->and($product->fresh()->status)->toBe(Product::STATUS_PUBLISHED)
+        ->and($order->fresh()->status)->toBe(Order::STATUS_PAID)
+        ->and($order->items()->first()->quantity)->toBe(12);
+
+    $this->assertDatabaseMissing('inventory_movements', [
+        'product_variant_id' => $variant->id,
+        'reason' => 'payment_confirmed',
+    ]);
+
+    app(OrderService::class)->cancel($order->fresh());
+
+    expect($variant->fresh()->stock)->toBe(0);
+});
+
 it('marks in stock products sold out after confirmed payment consumes stock', function (): void {
     $this->seed();
 
     $user = User::factory()->create(['role' => 'customer']);
     $product = Product::query()->firstOrFail();
+    $product->update(['fulfillment_type' => Product::FULFILLMENT_IN_PERSON]);
     $variant = $product->variants()->firstOrFail();
     $variant->update(['stock' => 1]);
 

@@ -150,7 +150,14 @@ class ProductResource extends Resource
                             ->content(fn (Get $get): HtmlString => static::imagePreviewHtml($get('image_path')))
                             ->html(),
                         MoneyInput::cents(TextInput::make('price_cents')->label('价格（元）')->required()),
-                        TextInput::make('stock')->label('库存')->numeric()->required()->default(0),
+                        TextInput::make('stock')
+                            ->label('库存')
+                            ->numeric()
+                            ->required()
+                            ->default(0)
+                            ->helperText(fn (Get $get): string => $get('../../fulfillment_type') === Product::FULFILLMENT_ONLINE
+                                ? '线上交付商品前台按不限库存处理，此处数值仅作备注或改成交付类型后的初始库存。'
+                                : '物流/当面交付商品会按库存限制下单。'),
                         TextInput::make('low_stock_threshold')->label('低库存阈值')->numeric()->default(5),
                         Toggle::make('is_active')->label('启用')->default(true),
                     ])
@@ -489,7 +496,11 @@ HTML);
                 TextColumn::make('manufacturer.name')->label('制造商')->toggleable(),
                 TextColumn::make('status')->label('状态')->formatStateUsing(fn (?string $state): string => Product::statusOptions()[$state] ?? (string) $state)->badge(),
                 IconColumn::make('is_featured')->label('推荐')->boolean(),
-                TextColumn::make('variants_sum_stock')->sum('variants', 'stock')->label('库存')->sortable(),
+                TextColumn::make('variants_sum_stock')
+                    ->sum('variants', 'stock')
+                    ->label('库存')
+                    ->formatStateUsing(fn ($state, Product $record): string => $record->hasUnlimitedStock() ? '不限' : (string) (int) $state)
+                    ->sortable(),
                 TextColumn::make('incoming_quantity')->label('进货数')->toggleable(),
                 TextColumn::make('quantityUnit.name')->label('单位')->toggleable(),
                 TextColumn::make('updated_at')->label('更新')->dateTime()->sortable(),

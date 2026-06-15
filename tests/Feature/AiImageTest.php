@@ -1,10 +1,14 @@
 <?php
 
+use App\Models\AiChatSession;
+use App\Models\AiImageTask;
 use App\Models\AiUsageLog;
 use App\Models\SiteSetting;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
 
 it('renders the storefront ai image page and entry links', function (): void {
     $user = User::factory()->create([
@@ -35,6 +39,9 @@ it('renders the storefront ai image page and entry links', function (): void {
         ->assertSee('shopweb.ai-image.tasks.v1', false)
         ->assertSee('获取模型')
         ->assertSee('是否透明')
+        ->assertSee('生图接口')
+        ->assertSee('Images API (/images)')
+        ->assertSee('Responses API')
         ->assertSee('流式传输')
         ->assertSee('partial_images')
         ->assertSee('参考图编辑')
@@ -338,6 +345,17 @@ it('fetches image models through the server proxy', function (): void {
         && $request->hasHeader('Authorization', 'Bearer test-key'));
 });
 
+it('uses native ca verification for ai provider requests by default', function (): void {
+    $controller = app(\App\Http\Controllers\AiImageController::class);
+    $method = new ReflectionMethod($controller, 'aiHttpOptions');
+
+    expect($method->invoke($controller))->toMatchArray([
+        'curl' => [
+            CURLOPT_SSL_OPTIONS => CURLSSLOPT_NATIVE_CA,
+        ],
+    ]);
+});
+
 it('uses separate backend keys for image and chat ai requests', function (): void {
     $user = User::factory()->create([
         'role' => 'customer',
@@ -424,7 +442,7 @@ it('returns detailed provider errors for disabled image capability', function ()
         );
 });
 
-it('retries image generation with a listed model when the default model has no channel', function (): void {
+it('can retry image generation with a listed model when forced to use the images endpoint', function (): void {
     $user = User::factory()->create(['role' => 'customer']);
 
     Http::fake([
@@ -458,6 +476,7 @@ it('retries image generation with a listed model when the default model has no c
         'quality' => 'auto',
         'output_format' => 'png',
         'timeout_seconds' => 600,
+        'image_api_mode' => 'images',
     ])
         ->assertOk()
         ->assertJsonPath('images.0.url', 'https://cdn.example.test/fallback.png')
@@ -470,6 +489,133 @@ it('retries image generation with a listed model when the default model has no c
         && str_contains($request->body(), '"model":"gpt-image-2"'));
     Http::assertSent(fn ($request): bool => $request->url() === 'https://api.example.test/v1/images/generations'
         && str_contains($request->body(), '"model":"gpt-image-1"'));
+});
+
+it('falls back to the root images endpoint when image generations has no channel', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+
+    Http::fake([
+        'https://api.example.test/v1/images/generations' => Http::response([
+            'error' => [
+                'message' => 'No available channel for model gpt-image-2 under group 企业生图专线',
+                'type' => 'new_api_error',
+            ],
+        ], 503),
+        'https://api.example.test/v1/images' => Http::response([
+            'data' => [
+                ['url' => 'https://cdn.example.test/root-images.png'],
+            ],
+        ]),
+    ]);
+
+    $this->actingAs($user)->postJson(route('ai-image.generate'), [
+        'endpoint' => 'https://api.example.test/v1/images',
+        'api_key' => 'test-key',
+        'model' => 'gpt-image-2',
+        'prompt' => '使用根 images 接口生图',
+        'count' => 1,
+        'size_mode' => 'auto',
+        'quality' => 'auto',
+        'output_format' => 'png',
+        'image_api_mode' => 'auto',
+        'timeout_seconds' => 600,
+    ])
+        ->assertOk()
+        ->assertJsonPath('images.0.url', 'https://cdn.example.test/root-images.png')
+        ->assertJsonPath('meta.image_api_mode', 'images_root');
+
+    Http::assertSent(fn ($request): bool => $request->url() === 'https://api.example.test/v1/images/generations'
+        && str_contains($request->body(), '"model":"gpt-image-2"'));
+    Http::assertSent(fn ($request): bool => $request->url() === 'https://api.example.test/v1/images'
+        && str_contains($request->body(), '"prompt"'));
+});
+
+it('falls back to responses image generation when the images endpoint has no channel', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+
+    Http::fake([
+        'https://api.example.test/v1/images/generations' => Http::response([
+            'error' => [
+                'message' => 'No available channel for model gpt-image-1 under group 企业生图专线',
+                'type' => 'new_api_error',
+            ],
+        ], 503),
+        'https://api.example.test/v1/images' => Http::response([
+            'error' => [
+                'message' => 'No available channel for model gpt-image-1 under group 企业生图专线',
+                'type' => 'new_api_error',
+            ],
+        ], 503),
+        'https://api.example.test/v1/responses' => Http::response([
+            'output' => [
+                [
+                    'type' => 'image_generation_call',
+                    'result' => base64_encode('responses-image'),
+                ],
+            ],
+        ]),
+    ]);
+
+    $this->actingAs($user)->postJson(route('ai-image.generate'), [
+        'endpoint' => 'https://api.example.test/v1',
+        'api_key' => 'test-key',
+        'model' => 'gpt-image-1',
+        'prompt' => '使用 responses 生图',
+        'count' => 1,
+        'size_mode' => 'auto',
+        'quality' => 'auto',
+        'output_format' => 'png',
+        'image_api_mode' => 'auto',
+        'timeout_seconds' => 600,
+    ])
+        ->assertOk()
+        ->assertJsonPath('images.0.data_url', 'data:image/png;base64,'.base64_encode('responses-image'))
+        ->assertJsonPath('meta.image_api_mode', 'responses');
+
+    Http::assertSent(fn ($request): bool => $request->url() === 'https://api.example.test/v1/images/generations');
+    Http::assertSent(fn ($request): bool => $request->url() === 'https://api.example.test/v1/images');
+    Http::assertSent(fn ($request): bool => $request->url() === 'https://api.example.test/v1/responses'
+        && str_contains($request->body(), '"type":"image_generation"')
+        && str_contains($request->body(), '"model":"gpt-5.5"')
+        && str_contains($request->body(), '"input":"'));
+});
+
+it('sends references through responses image generation as multimodal input', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+
+    Http::fake([
+        'https://api.example.test/v1/responses' => Http::response([
+            'output' => [
+                [
+                    'type' => 'image_generation_call',
+                    'result' => base64_encode('responses-reference-image'),
+                ],
+            ],
+        ]),
+    ]);
+
+    $this->actingAs($user)->postJson(route('ai-image.generate'), [
+        'endpoint' => 'https://api.example.test/v1',
+        'api_key' => 'test-key',
+        'model' => 'gpt-image-2',
+        'prompt' => '参考图生成',
+        'count' => 1,
+        'size_mode' => 'auto',
+        'quality' => 'auto',
+        'output_format' => 'png',
+        'image_api_mode' => 'responses',
+        'timeout_seconds' => 600,
+        'reference_images' => [
+            UploadedFile::fake()->image('reference.png', 64, 64),
+        ],
+    ])
+        ->assertOk()
+        ->assertJsonPath('meta.image_api_mode', 'responses');
+
+    Http::assertSent(fn ($request): bool => $request->url() === 'https://api.example.test/v1/responses'
+        && str_contains($request->body(), '"model":"gpt-5.5"')
+        && str_contains($request->body(), '"input_text"')
+        && str_contains($request->body(), '"input_image"'));
 });
 
 it('generates images with prompt dimensions and references', function (): void {
@@ -563,4 +709,194 @@ it('blocks localhost and private ai endpoints from the storefront proxy', functi
     ])
         ->assertUnprocessable()
         ->assertJsonValidationErrors('endpoint');
+});
+
+it('persists account ai image tasks and chat sessions with recycle bin restore', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+    $otherUser = User::factory()->create(['role' => 'customer']);
+
+    $this->actingAs($user)
+        ->postJson(route('ai-image.tasks.store'), [
+            'id' => 'task-account-1',
+            'status' => 'done',
+            'stream' => true,
+            'prompt' => 'account task',
+            'submittedPrompt' => 'account submitted task',
+            'references' => [
+                ['name' => 'ref.png', 'url' => '/uploads/ai/references/ref.png'],
+            ],
+            'config' => ['model' => 'gpt-image-2'],
+            'images' => [
+                ['url' => 'https://cdn.example.test/image.png'],
+            ],
+            'partials' => [],
+            'elapsedMs' => 2500,
+        ])
+        ->assertOk()
+        ->assertJsonPath('task.id', 'task-account-1');
+
+    $this->actingAs($user)
+        ->postJson(route('ai-image.chats.store'), [
+            'id' => 'chat-account-1',
+            'title' => '首个话题',
+            'messages' => [
+                [
+                    'role' => 'user',
+                    'content' => 'hello',
+                    'model' => 'gpt-5.5',
+                    'reasoning' => 'low',
+                    'reasoningLabel' => '低',
+                ],
+                [
+                    'role' => 'assistant',
+                    'content' => 'hi',
+                    'model' => 'gpt-5.5',
+                    'reasoning' => 'low',
+                    'reasoningLabel' => '低',
+                ],
+            ],
+        ])
+        ->assertOk()
+        ->assertJsonPath('chat.id', 'chat-account-1')
+        ->assertJsonCount(2, 'chat.messages');
+
+    $this->actingAs($otherUser)
+        ->getJson(route('ai-image.state'))
+        ->assertOk()
+        ->assertJsonCount(0, 'tasks')
+        ->assertJsonCount(0, 'chats');
+
+    $this->actingAs($user)
+        ->deleteJson(route('ai-image.tasks.destroy', 'task-account-1'))
+        ->assertOk();
+
+    $this->actingAs($user)
+        ->deleteJson(route('ai-image.chats.destroy', 'chat-account-1'))
+        ->assertOk();
+
+    $this->actingAs($user)
+        ->getJson(route('ai-image.state'))
+        ->assertOk()
+        ->assertJsonCount(0, 'tasks')
+        ->assertJsonCount(1, 'trashed_tasks')
+        ->assertJsonPath('trashed_tasks.0.id', 'task-account-1')
+        ->assertJsonCount(0, 'chats')
+        ->assertJsonCount(1, 'trashed_chats')
+        ->assertJsonPath('trashed_chats.0.id', 'chat-account-1');
+
+    $this->actingAs($user)
+        ->postJson(route('ai-image.tasks.restore', 'task-account-1'))
+        ->assertOk()
+        ->assertJsonPath('task.trashed', false);
+
+    $this->actingAs($user)
+        ->postJson(route('ai-image.chats.restore', 'chat-account-1'))
+        ->assertOk()
+        ->assertJsonPath('chat.trashed', false);
+
+    $this->actingAs($user)
+        ->getJson(route('ai-image.state'))
+        ->assertOk()
+        ->assertJsonPath('tasks.0.id', 'task-account-1')
+        ->assertJsonPath('chats.0.id', 'chat-account-1')
+        ->assertJsonCount(0, 'trashed_tasks')
+        ->assertJsonCount(0, 'trashed_chats');
+});
+
+it('prunes expired ai recycle bin records by configured retention days', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+
+    SiteSetting::query()->create([
+        'site_name' => 'ShopWeb',
+        'ai_trash_retention_days' => 2,
+    ]);
+
+    AiImageTask::query()->create([
+        'user_id' => $user->id,
+        'public_id' => 'task-expired',
+        'status' => 'failed',
+        'prompt' => 'expired',
+        'deleted_at' => now()->subDays(3),
+    ]);
+    AiImageTask::query()->create([
+        'user_id' => $user->id,
+        'public_id' => 'task-fresh-trash',
+        'status' => 'failed',
+        'prompt' => 'fresh',
+        'deleted_at' => now()->subDay(),
+    ]);
+    AiChatSession::query()->create([
+        'user_id' => $user->id,
+        'public_id' => 'chat-expired',
+        'title' => 'expired',
+        'deleted_at' => now()->subDays(3),
+    ]);
+    AiChatSession::query()->create([
+        'user_id' => $user->id,
+        'public_id' => 'chat-fresh-trash',
+        'title' => 'fresh',
+        'deleted_at' => now()->subDay(),
+    ]);
+
+    Artisan::call('shop:ai-trash-prune');
+
+    $this->assertDatabaseMissing('ai_image_tasks', ['public_id' => 'task-expired']);
+    $this->assertDatabaseHas('ai_image_tasks', ['public_id' => 'task-fresh-trash']);
+    $this->assertDatabaseMissing('ai_chat_sessions', ['public_id' => 'chat-expired']);
+    $this->assertDatabaseHas('ai_chat_sessions', ['public_id' => 'chat-fresh-trash']);
+});
+
+it('blocks managed ai calls before provider requests when shared token quota is insufficient', function (): void {
+    $user = User::factory()->create([
+        'role' => 'customer',
+        'ai_quota_k' => 1,
+    ]);
+
+    SiteSetting::query()->create([
+        'site_name' => 'ShopWeb',
+        'ai_default_image_endpoint' => 'https://image.example.test/v1',
+        'ai_default_image_api_key' => 'image-key',
+        'ai_default_chat_endpoint' => 'https://chat.example.test/v1',
+        'ai_default_chat_api_key' => 'chat-key',
+    ]);
+
+    AiUsageLog::query()->create([
+        'user_id' => $user->id,
+        'feature' => 'image',
+        'config_name' => '默认配置',
+        'provider_source' => 'site_default',
+        'model' => 'gpt-image-2',
+        'token_count' => 1000,
+        'status' => 'success',
+    ]);
+
+    Http::fake();
+
+    $this->actingAs($user)
+        ->postJson(route('ai-image.generate'), [
+            'config_mode' => 'default',
+            'model' => 'gpt-image-2',
+            'prompt' => 'quota image',
+            'count' => 1,
+            'size_mode' => 'auto',
+            'quality' => 'auto',
+            'output_format' => 'png',
+            'timeout_seconds' => 600,
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('quota')
+        ->assertJson(fn ($json) => $json->where('message', fn (string $message): bool => str_contains($message, 'AI 余额不足'))->etc());
+
+    $this->actingAs($user)
+        ->postJson(route('ai-image.chat'), [
+            'config_mode' => 'default',
+            'model' => 'gpt-5.5',
+            'prompt' => 'quota chat',
+            'reasoning_mode' => 'low',
+            'timeout_seconds' => 600,
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('quota');
+
+    Http::assertNothingSent();
 });

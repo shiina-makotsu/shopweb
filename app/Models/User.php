@@ -221,6 +221,21 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
         return $this->hasMany(AiUsageLog::class);
     }
 
+    public function aiConfigs(): HasMany
+    {
+        return $this->hasMany(AiUserConfig::class);
+    }
+
+    public function aiImageTasks(): HasMany
+    {
+        return $this->hasMany(AiImageTask::class);
+    }
+
+    public function aiChatSessions(): HasMany
+    {
+        return $this->hasMany(AiChatSession::class);
+    }
+
     public function getRouteKeyName(): string
     {
         return 'public_id';

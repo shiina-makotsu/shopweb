@@ -149,6 +149,26 @@ After changing permissions or PHP/Nginx settings, clear Laravel caches:
 php artisan optimize:clear
 ```
 
+AI provider requests are sent from the Laravel server. On Windows or some
+minimal Linux hosts, PHP/cURL may not have a CA bundle configured and can fail
+with `cURL error 60`. ShopWeb enables native OS CA verification by default:
+
+```ini
+AI_HTTP_VERIFY_SSL=true
+AI_HTTP_USE_NATIVE_CA=true
+AI_HTTP_CA_BUNDLE=
+AI_RESPONSES_IMAGE_MODEL=gpt-5.5
+```
+
+If your host does not expose native CA certificates, download a trusted
+`cacert.pem` file and set `AI_HTTP_CA_BUNDLE=/absolute/path/to/cacert.pem` or a
+project-relative path. Do not set `AI_HTTP_VERIFY_SSL=false` in production
+unless you fully understand the risk to API keys.
+
+`AI_RESPONSES_IMAGE_MODEL` is only used when image generation falls back to the
+Responses image tool. Keep Image API models such as `gpt-image-2` on the image
+endpoint, and use a tool-capable model for the Responses endpoint.
+
 ## Domain and proxy troubleshooting
 
 After pulling an update on an existing server, run migrations and clear caches:

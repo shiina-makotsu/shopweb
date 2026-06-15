@@ -1,8 +1,18 @@
-<x-layouts.app title="AI" :wide="true">
+﻿<x-layouts.app title="AI" :wide="true">
     <section
         class="relative -mx-4 -my-4 min-h-[calc(100vh-160px)] overflow-hidden bg-[#f7f7f8] text-zinc-900"
         data-ai-image-workbench
         data-models-url="{{ \App\Support\Url::route('ai-image.models') }}"
+        data-configs-url="{{ \App\Support\Url::route('ai-image.configs') }}"
+        data-config-save-url="{{ \App\Support\Url::route('ai-image.configs.store') }}"
+        data-state-url="{{ \App\Support\Url::route('ai-image.state') }}"
+        data-task-save-url="{{ \App\Support\Url::route('ai-image.tasks.store') }}"
+        data-task-delete-url-template="{{ \App\Support\Url::route('ai-image.tasks.destroy', ['task' => '__TASK__']) }}"
+        data-task-restore-url-template="{{ \App\Support\Url::route('ai-image.tasks.restore', ['task' => '__TASK__']) }}"
+        data-chat-save-url="{{ \App\Support\Url::route('ai-image.chats.store') }}"
+        data-chat-delete-url-template="{{ \App\Support\Url::route('ai-image.chats.destroy', ['session' => '__SESSION__']) }}"
+        data-chat-restore-url-template="{{ \App\Support\Url::route('ai-image.chats.restore', ['session' => '__SESSION__']) }}"
+        data-reference-upload-url="{{ \App\Support\Url::route('ai-image.references.store') }}"
         data-generate-url="{{ \App\Support\Url::route('ai-image.generate') }}"
         data-stream-url="{{ \App\Support\Url::route('ai-image.stream') }}"
         data-chat-url="{{ \App\Support\Url::route('ai-image.chat') }}"
@@ -19,10 +29,10 @@
                         <button class="inline-flex h-10 w-10 items-center justify-center rounded-full text-zinc-600 hover:bg-zinc-100" type="button" data-download-latest title="下载最近图片" aria-label="下载最近图片">
                             <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
                         </button>
-                        <button class="inline-flex h-10 w-10 items-center justify-center rounded-full text-zinc-600 hover:bg-zinc-100" type="button" data-help-toggle title="提示" aria-label="提示">
+                        <button class="inline-flex h-10 w-10 items-center justify-center rounded-full text-zinc-600 hover:bg-zinc-100" type="button" data-help-toggle title="鎻愮ず" aria-label="鎻愮ず">
                             <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.2 9a3 3 0 1 1 4.6 2.5c-.9.5-1.8 1.2-1.8 2.5"/><path d="M12 18h.01"/></svg>
                         </button>
-                        <button class="inline-flex h-10 w-10 items-center justify-center rounded-full text-zinc-600 hover:bg-zinc-100" type="button" data-settings-toggle title="设置" aria-label="设置">
+                        <button class="inline-flex h-10 w-10 items-center justify-center rounded-full text-zinc-600 hover:bg-zinc-100" type="button" data-settings-toggle title="璁剧疆" aria-label="璁剧疆">
                             <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="2"><path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1A2 2 0 1 1 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1A2 2 0 1 1 19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.5 1h.1a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>
                         </button>
                     </div>
@@ -41,6 +51,7 @@
                         <option value="done">已完成</option>
                         <option value="running">生成中</option>
                         <option value="failed">失败</option>
+                        <option value="trash">回收站</option>
                     </select>
 
                     <label class="relative block">
@@ -62,11 +73,12 @@
                 <div class="mx-auto grid min-h-[calc(100vh-260px)] max-w-6xl gap-4 lg:grid-cols-[16rem_1fr]">
                     <aside class="rounded-3xl border border-zinc-200 bg-white p-3 shadow-sm lg:sticky lg:top-20 lg:self-start">
                         <div class="flex items-center justify-between gap-2 px-2 py-1">
-                            <h2 class="text-sm font-semibold text-zinc-950">会话</h2>
+                            <h2 class="text-sm font-semibold text-zinc-950">浼氳瘽</h2>
                             <button class="inline-flex h-9 w-9 items-center justify-center rounded-full bg-zinc-950 text-white hover:bg-zinc-800" type="button" data-chat-new title="新增会话" aria-label="新增会话">
                                 <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="2"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
                             </button>
                         </div>
+                        <button class="mt-2 w-full rounded-2xl border border-zinc-200 px-3 py-2 text-xs font-medium text-zinc-600 hover:bg-zinc-50" type="button" data-chat-trash-toggle>回收站</button>
                         <div class="mt-3 space-y-2" data-chat-sessions></div>
                     </aside>
 
@@ -78,7 +90,7 @@
                             </div>
                             <button class="inline-flex items-center gap-2 rounded-full border border-zinc-200 px-3 py-2 text-xs font-medium text-zinc-600 hover:bg-zinc-50" type="button" data-chat-delete>
                                 <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v5"/><path d="M14 11v5"/></svg>
-                                删除会话
+                                <span data-chat-delete-label>删除会话</span>
                             </button>
                         </div>
 
@@ -114,7 +126,7 @@
                         <input class="hidden" type="file" name="chat_files" multiple data-chat-files-input>
 
                         <div class="flex flex-wrap items-end gap-2" data-image-controls>
-                            <button class="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-600 hover:bg-zinc-200" type="button" data-reference-button title="添加参考图" aria-label="添加参考图">
+                            <button class="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-600 hover:bg-zinc-200" type="button" data-reference-button title="娣诲姞鍙傝€冨浘" aria-label="娣诲姞鍙傝€冨浘">
                                 <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="2"><path d="M21.4 11.6 12 21a6 6 0 0 1-8.5-8.5l10-10a4 4 0 1 1 5.7 5.7l-10 10a2 2 0 0 1-2.8-2.8l9.3-9.3"/></svg>
                             </button>
 
@@ -185,7 +197,7 @@
                         </div>
 
                         <div class="hidden flex-1 flex-wrap items-end gap-2" data-chat-controls>
-                            <button class="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-600 hover:bg-zinc-200" type="button" data-chat-files-button title="附加文件" aria-label="附加文件">
+                            <button class="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-600 hover:bg-zinc-200" type="button" data-chat-files-button title="闄勫姞鏂囦欢" aria-label="闄勫姞鏂囦欢">
                                 <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="2"><path d="M21.4 11.6 12 21a6 6 0 0 1-8.5-8.5l10-10a4 4 0 1 1 5.7 5.7l-10 10a2 2 0 0 1-2.8-2.8l9.3-9.3"/></svg>
                             </button>
 
@@ -199,7 +211,7 @@
                                 </select>
                             </label>
 
-                            <button class="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-400 transition hover:bg-zinc-200" type="button" data-chat-web-search aria-label="联网搜索" title="联网搜索" aria-pressed="false">
+                            <button class="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-400 transition hover:bg-zinc-200" type="button" data-chat-web-search aria-label="鑱旂綉鎼滅储" title="鑱旂綉鎼滅储" aria-pressed="false">
                                 <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="2">
                                     <circle cx="12" cy="12" r="10"/>
                                     <path d="M2 12h20"/>
@@ -209,9 +221,9 @@
                             </button>
 
                             <label class="ml-auto min-w-48 flex-1 text-xs font-medium text-zinc-400 sm:max-w-64 sm:flex-none">
-                                模型
+                                妯″瀷
                                 <select class="mt-1 h-9 w-full rounded-2xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-900" name="chat_model" data-chat-model-select>
-                                    <option value="">默认模型 gpt-5.5</option>
+                                    <option value="">榛樿妯″瀷 gpt-5.5</option>
                                 </select>
                             </label>
                         </div>
@@ -228,7 +240,7 @@
             <aside class="fixed inset-y-0 right-0 z-50 w-full max-w-md translate-x-full border-l border-zinc-200 bg-white shadow-2xl transition-transform duration-200" data-settings-panel>
                 <div class="flex items-center justify-between border-b border-zinc-200 px-5 py-4">
                     <h2 class="text-base font-semibold">生成设置</h2>
-                    <button class="inline-flex h-9 w-9 items-center justify-center rounded-full text-zinc-500 hover:bg-zinc-100" type="button" data-settings-close aria-label="关闭设置">
+                    <button class="inline-flex h-9 w-9 items-center justify-center rounded-full text-zinc-500 hover:bg-zinc-100" type="button" data-settings-close aria-label="鍏抽棴璁剧疆">
                         <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
                     </button>
                 </div>
@@ -248,6 +260,13 @@
                             </select>
                         </label>
 
+                        <label class="block text-sm" data-saved-config-field>
+                            <span class="font-medium text-zinc-700">Saved config</span>
+                            <select class="mt-1 w-full rounded-lg border border-zinc-200 px-4 py-3 text-sm outline-none focus:border-zinc-400" name="config_id" data-ai-config-select>
+                                <option value="">No saved config</option>
+                            </select>
+                        </label>
+
                         <label class="block text-sm">
                             <span class="font-medium text-zinc-700">配置名称</span>
                             <input class="mt-1 w-full rounded-lg border border-zinc-200 px-4 py-3 text-sm outline-none focus:border-zinc-400" name="config_name" type="text" value="默认配置" data-config-name>
@@ -263,6 +282,21 @@
                             <input class="mt-1 w-full rounded-lg border border-zinc-200 px-4 py-3 text-sm outline-none focus:border-zinc-400" name="api_key" type="password" autocomplete="off" placeholder="sk-..." data-ai-key>
                         </label>
 
+                        <label class="block text-sm" data-chat-endpoint-field>
+                            <span class="font-medium text-zinc-700">Chat / Responses API URL</span>
+                            <input class="mt-1 w-full rounded-lg border border-zinc-200 px-4 py-3 text-sm outline-none focus:border-zinc-400" name="chat_endpoint" type="url" placeholder="https://api.openai.com/v1" data-ai-chat-endpoint>
+                        </label>
+
+                        <label class="block text-sm" data-chat-key-field>
+                            <span class="font-medium text-zinc-700">Chat / Responses API Key</span>
+                            <input class="mt-1 w-full rounded-lg border border-zinc-200 px-4 py-3 text-sm outline-none focus:border-zinc-400" name="chat_api_key" type="password" autocomplete="off" placeholder="sk-..." data-ai-chat-key>
+                        </label>
+
+                        <div class="flex flex-wrap gap-2" data-custom-config-actions>
+                            <button class="rounded-full border border-zinc-200 px-3 py-2 text-xs font-medium text-zinc-700 hover:bg-zinc-50" type="button" data-save-ai-config>Save config</button>
+                            <button class="rounded-full border border-red-200 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50" type="button" data-delete-ai-config>Delete config</button>
+                        </div>
+
                         <label class="block text-sm">
                             <span class="font-medium text-zinc-700">图片模型</span>
                             <select class="mt-1 w-full rounded-lg border border-zinc-200 px-4 py-3 text-sm outline-none focus:border-zinc-400" name="model" data-ai-model-select>
@@ -272,7 +306,7 @@
 
                         <label class="block text-sm">
                             <span class="font-medium text-zinc-700">手动模型</span>
-                            <input class="mt-1 w-full rounded-lg border border-zinc-200 px-4 py-3 text-sm outline-none focus:border-zinc-400" name="manual_model" type="text" placeholder="例如 gpt-image-1" data-ai-manual-model>
+                            <input class="mt-1 w-full rounded-lg border border-zinc-200 px-4 py-3 text-sm outline-none focus:border-zinc-400" name="manual_model" type="text" placeholder="例如 gpt-image-2" data-ai-manual-model>
                         </label>
                     </section>
 
@@ -304,6 +338,16 @@
                             </label>
 
                             <label class="block text-sm">
+                                <span class="font-medium text-zinc-700">生图接口</span>
+                                <select class="mt-1 w-full rounded-lg border border-zinc-200 px-4 py-3 text-sm" name="image_api_mode">
+                                    <option value="auto">auto</option>
+                                    <option value="images">Images API</option>
+                                    <option value="images_root">Images API (/images)</option>
+                                    <option value="responses">Responses API</option>
+                                </select>
+                            </label>
+
+                            <label class="block text-sm">
                                 <span class="font-medium text-zinc-700">Seed</span>
                                 <input class="mt-1 w-full rounded-lg border border-zinc-200 px-4 py-3 text-sm" name="seed" type="number" min="0" max="4294967295" placeholder="可选">
                             </label>
@@ -324,7 +368,7 @@
                         <div class="flex items-start justify-between gap-4">
                             <div>
                                 <h3 class="text-sm font-semibold text-zinc-950">流式传输</h3>
-                                <p class="mt-1 text-xs leading-5 text-zinc-500">开启后请求以流式传输，并非所有服务商和网关都支持。官方接口在流式模式下不发送心跳，数量大于 1 时会拆分为并发单图。</p>
+                                <p class="mt-1 text-xs leading-5 text-zinc-500">开启后请求以流式传输，并非所有服务商和网关都支持。数量大于 1 时会拆分为并发单图。</p>
                             </div>
                             <label class="relative inline-flex cursor-pointer items-center">
                                 <input class="peer sr-only" type="checkbox" name="stream" value="1" data-stream-toggle>
@@ -335,7 +379,7 @@
                         <label class="block text-sm">
                             <span class="font-medium text-zinc-700">请求中间步骤图像数</span>
                             <input class="mt-1 w-full rounded-lg border border-zinc-200 px-4 py-3 text-sm" name="partial_images" type="number" min="0" max="3" value="2">
-                            <span class="mt-1 block text-xs leading-5 text-zinc-500">对应 partial_images 参数 0-3。建议设为 2 或 3，以减少长时间无数据导致的断开风险。</span>
+                            <span class="mt-1 block text-xs leading-5 text-zinc-500">对应 partial_images 参数 0-3，建议设为 2 或 3 以减少长时间无数据导致的断开风险。</span>
                         </label>
 
                         <label class="block text-sm">
@@ -405,7 +449,9 @@
                     <div class="sticky top-0 z-10 flex items-center justify-between border-b border-zinc-200 bg-white px-5 py-4">
                         <h2 class="text-base font-semibold">图像任务详情</h2>
                         <div class="flex items-center gap-2">
-                            <a class="rounded-full bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800" href="#" download data-detail-download>下载</a>
+                            <a class="inline-flex h-9 w-9 items-center justify-center rounded-full bg-zinc-900 text-white hover:bg-zinc-800" href="#" download data-detail-download title="下载" aria-label="下载图片">
+                                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+                            </a>
                             <button class="inline-flex h-9 w-9 items-center justify-center rounded-full text-zinc-500 hover:bg-zinc-100" type="button" data-detail-close aria-label="关闭详情">
                                 <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
                             </button>
@@ -433,7 +479,7 @@
         </section>
 
         <div class="fixed bottom-36 left-1/2 z-50 hidden w-[min(92vw,420px)] -translate-x-1/2 rounded-lg border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 shadow-xl" data-help-panel>
-            接口设置在右上角齿轮里。开启流式后，生成中会显示中间预览；失败时仍可点击任务下载已返回的中间图。
+            接口设置在右上角齿轮里。开启流式后，生成中会显示中间预览；失败时仍可点击任务查看已返回的中间图。
         </div>
 
         <script>
@@ -445,8 +491,15 @@
                 const status = root.querySelector('[data-ai-status]');
                 const endpointInput = root.querySelector('[data-ai-endpoint]');
                 const apiKeyInput = root.querySelector('[data-ai-key]');
+                const chatEndpointInput = root.querySelector('[data-ai-chat-endpoint]');
+                const chatApiKeyInput = root.querySelector('[data-ai-chat-key]');
                 const endpointField = root.querySelector('[data-endpoint-field]');
                 const keyField = root.querySelector('[data-key-field]');
+                const chatEndpointField = root.querySelector('[data-chat-endpoint-field]');
+                const chatKeyField = root.querySelector('[data-chat-key-field]');
+                const savedConfigField = root.querySelector('[data-saved-config-field]');
+                const savedConfigSelect = root.querySelector('[data-ai-config-select]');
+                const customConfigActions = root.querySelector('[data-custom-config-actions]');
                 const configMode = root.querySelector('[data-config-mode]');
                 const configName = root.querySelector('[data-config-name]');
                 const modelSelect = root.querySelector('[data-ai-model-select]');
@@ -491,7 +544,9 @@
                 const defaultImageModel = 'gpt-image-2';
                 const defaultChatModel = 'gpt-5.5';
                 const tasks = new Map();
+                const trashedTasks = new Map();
                 const chatStore = new Map();
+                const trashedChatStore = new Map();
                 const chatFileItems = [];
                 const taskStorageKey = 'shopweb.ai-image.tasks.v1';
                 let referenceItems = [];
@@ -500,7 +555,10 @@
                 let activeChatId = null;
                 let currentMode = 'gallery';
                 let webSearchEnabled = false;
+                let savedConfigs = [];
+                let showingChatTrash = false;
 
+                const urlFromTemplate = (template, placeholder, value) => String(template || '').replace(placeholder, encodeURIComponent(value));
                 const formData = () => new FormData(form);
                 const formValue = (name, fallback = '') => String(formData().get(name) ?? fallback);
                 const formNumber = (name, fallback = 0) => Number(formValue(name, String(fallback)) || fallback);
@@ -573,21 +631,263 @@
                     const custom = configMode.value === 'custom';
                     endpointInput.disabled = !custom;
                     apiKeyInput.disabled = !custom;
+                    chatEndpointInput.disabled = !custom;
+                    chatApiKeyInput.disabled = !custom;
                     endpointField?.classList.toggle('hidden', !custom);
                     keyField?.classList.toggle('hidden', !custom);
+                    chatEndpointField?.classList.toggle('hidden', !custom);
+                    chatKeyField?.classList.toggle('hidden', !custom);
+                    savedConfigField?.classList.toggle('hidden', !custom);
+                    customConfigActions?.classList.toggle('hidden', !custom);
 
                     if (!custom && !configName.value.trim()) {
-                        configName.value = '默认配置';
+                        configName.value = '榛樿閰嶇疆';
                     }
                 };
 
                 configMode.addEventListener('change', () => {
                     if (configMode.value === 'default') {
-                        configName.value = configName.value.trim() || '默认配置';
+                        configName.value = configName.value.trim() || '榛樿閰嶇疆';
                     }
                     updateConfigMode();
                 });
                 updateConfigMode();
+
+                const renderSavedConfigs = () => {
+                    if (!savedConfigSelect) return;
+
+                    const current = savedConfigSelect.value;
+                    savedConfigSelect.innerHTML = '<option value="">No saved config</option>';
+                    savedConfigs.forEach((config) => {
+                        const option = document.createElement('option');
+                        option.value = String(config.id);
+                        option.textContent = `${config.name}${config.is_default ? ' (default)' : ''}`;
+                        savedConfigSelect.appendChild(option);
+                    });
+
+                    if (current && savedConfigs.some((config) => String(config.id) === current)) {
+                        savedConfigSelect.value = current;
+                    }
+                };
+
+                const applySavedConfig = (config) => {
+                    if (!config) return;
+
+                    configMode.value = 'custom';
+                    configName.value = config.name || 'Custom config';
+                    endpointInput.value = config.image_endpoint || '';
+                    apiKeyInput.value = '';
+                    apiKeyInput.placeholder = config.has_image_key ? 'Saved key; fill to replace' : 'sk-...';
+                    chatEndpointInput.value = config.chat_endpoint || '';
+                    chatApiKeyInput.value = '';
+                    chatApiKeyInput.placeholder = config.has_chat_key ? 'Saved key; fill to replace' : 'sk-...';
+                    manualModel.value = config.image_model || '';
+                    if (config.chat_model && !Array.from(chatModelSelect.options).some((option) => option.value === config.chat_model)) {
+                        const option = document.createElement('option');
+                        option.value = config.chat_model;
+                        option.textContent = config.chat_model;
+                        chatModelSelect.appendChild(option);
+                    }
+                    chatModelSelect.value = config.chat_model || '';
+                    savedConfigSelect.value = String(config.id);
+                    updateConfigMode();
+                    syncChatModelOptions();
+                };
+
+                const loadSavedConfigs = async () => {
+                    try {
+                        const response = await fetch(root.dataset.configsUrl, {
+                            headers: { 'Accept': 'application/json' },
+                        });
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.message || 'Config list failed.');
+                        savedConfigs = Array.isArray(data.configs) ? data.configs : [];
+                        renderSavedConfigs();
+                    } catch (error) {
+                        setStatus(error.message || 'Config list failed.', 'red');
+                    }
+                };
+
+                const saveCurrentConfig = async () => {
+                    const payload = new FormData();
+                    payload.set('name', configName.value.trim() || 'Custom config');
+                    if (savedConfigSelect.value) payload.set('config_id', savedConfigSelect.value);
+                    payload.set('image_endpoint', endpointInput.value.trim());
+                    payload.set('image_api_key', apiKeyInput.value);
+                    payload.set('chat_endpoint', chatEndpointInput.value.trim());
+                    payload.set('chat_api_key', chatApiKeyInput.value);
+                    payload.set('image_model', activeModel());
+                    payload.set('chat_model', selectedChatModel());
+                    payload.set('is_default', '0');
+
+                    const response = await fetch(root.dataset.configSaveUrl, {
+                        method: 'POST',
+                        body: payload,
+                        headers: { 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' },
+                    });
+                    const data = await response.json();
+                    if (!response.ok) throw new Error(data.message || 'Config save failed.');
+
+                    const index = savedConfigs.findIndex((config) => config.id === data.config.id);
+                    if (index >= 0) {
+                        savedConfigs.splice(index, 1, data.config);
+                    } else {
+                        savedConfigs.unshift(data.config);
+                    }
+
+                    renderSavedConfigs();
+                    applySavedConfig(data.config);
+                    setStatus('Config saved.', 'green');
+                };
+
+                const deleteCurrentConfig = async () => {
+                    const id = savedConfigSelect.value;
+                    if (!id) return;
+
+                    const response = await fetch(`${root.dataset.configsUrl}/${encodeURIComponent(id)}`, {
+                        method: 'DELETE',
+                        headers: { 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' },
+                    });
+                    const data = await response.json().catch(() => ({}));
+                    if (!response.ok) throw new Error(data.message || 'Config delete failed.');
+
+                    savedConfigs = savedConfigs.filter((config) => String(config.id) !== String(id));
+                    savedConfigSelect.value = '';
+                    renderSavedConfigs();
+                    setStatus('Config deleted.', 'green');
+                };
+
+                savedConfigSelect?.addEventListener('change', () => {
+                    const config = savedConfigs.find((item) => String(item.id) === savedConfigSelect.value);
+                    if (config) applySavedConfig(config);
+                });
+                root.querySelector('[data-save-ai-config]')?.addEventListener('click', () => {
+                    saveCurrentConfig().catch((error) => setStatus(error.message || 'Config save failed.', 'red'));
+                });
+                root.querySelector('[data-delete-ai-config]')?.addEventListener('click', () => {
+                    deleteCurrentConfig().catch((error) => setStatus(error.message || 'Config delete failed.', 'red'));
+                });
+
+                const serverFetch = async (url, options = {}) => {
+                    const response = await fetch(url, {
+                        ...options,
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': csrf,
+                            ...(options.headers || {}),
+                        },
+                    });
+                    const data = await response.json().catch(() => ({}));
+
+                    if (!response.ok) {
+                        throw new Error(data.message || '请求失败。');
+                    }
+
+                    return data;
+                };
+
+                const stableReferencePayload = (references = []) => references
+                    .filter((reference) => reference.asset?.id || (reference.url && !String(reference.url).startsWith('blob:')))
+                    .map((reference) => ({
+                        name: reference.name,
+                        url: reference.asset?.url || reference.url,
+                        asset: reference.asset || null,
+                        editNote: reference.editNote || '',
+                        hasMask: Boolean(reference.hasMask),
+                    }));
+
+                const taskPayload = (task) => ({
+                    id: task.id,
+                    status: task.status,
+                    stream: Boolean(task.stream),
+                    prompt: task.prompt || '',
+                    submittedPrompt: task.submittedPrompt || task.prompt || '',
+                    config: task.config || {},
+                    images: serializeImages(task.images),
+                    partials: serializeImages(task.partials),
+                    error: task.error || '',
+                    createdAt: task.createdAt instanceof Date ? task.createdAt.toISOString() : task.createdAt,
+                    elapsedMs: Math.round(Number(task.elapsedMs || 0)),
+                    actualWidth: task.actualWidth || null,
+                    actualHeight: task.actualHeight || null,
+                    meta: task.meta || {},
+                    references: stableReferencePayload(task.references),
+                });
+
+                const saveTaskToServer = (task) => {
+                    if (!task || !root.dataset.taskSaveUrl) return;
+
+                    serverFetch(root.dataset.taskSaveUrl, {
+                        method: 'POST',
+                        body: JSON.stringify(taskPayload(task)),
+                        headers: { 'Content-Type': 'application/json' },
+                    }).catch(() => {});
+                };
+
+                const deleteTaskFromServer = async (taskId) => {
+                    if (!taskId || !root.dataset.taskDeleteUrlTemplate) return null;
+
+                    return serverFetch(urlFromTemplate(root.dataset.taskDeleteUrlTemplate, '__TASK__', taskId), {
+                        method: 'DELETE',
+                    });
+                };
+
+                const restoreTaskFromServer = async (taskId) => {
+                    if (!taskId || !root.dataset.taskRestoreUrlTemplate) return null;
+
+                    const data = await serverFetch(urlFromTemplate(root.dataset.taskRestoreUrlTemplate, '__TASK__', taskId), {
+                        method: 'POST',
+                    });
+
+                    return data.task || null;
+                };
+
+                const chatPayload = (session) => ({
+                    id: session.id,
+                    title: session.title || '新会话',
+                    createdAt: session.createdAt instanceof Date ? session.createdAt.toISOString() : session.createdAt,
+                    updatedAt: session.updatedAt instanceof Date ? session.updatedAt.toISOString() : session.updatedAt,
+                    messages: (session.messages || []).slice(-200).map((message) => ({
+                        role: message.role,
+                        content: message.content || '',
+                        files: (message.files || []).map((file) => ({
+                            ...file,
+                            url: file.url && !String(file.url).startsWith('blob:') ? file.url : '',
+                        })),
+                        model: message.model || '',
+                        reasoning: message.reasoning || '',
+                        reasoningLabel: message.reasoningLabel || '',
+                        error: Boolean(message.error),
+                    })),
+                });
+
+                const saveChatToServer = (session) => {
+                    if (!session || !root.dataset.chatSaveUrl) return;
+
+                    serverFetch(root.dataset.chatSaveUrl, {
+                        method: 'POST',
+                        body: JSON.stringify(chatPayload(session)),
+                        headers: { 'Content-Type': 'application/json' },
+                    }).catch(() => {});
+                };
+
+                const deleteChatFromServer = async (sessionId) => {
+                    if (!sessionId || !root.dataset.chatDeleteUrlTemplate) return null;
+
+                    return serverFetch(urlFromTemplate(root.dataset.chatDeleteUrlTemplate, '__SESSION__', sessionId), {
+                        method: 'DELETE',
+                    });
+                };
+
+                const restoreChatFromServer = async (sessionId) => {
+                    if (!sessionId || !root.dataset.chatRestoreUrlTemplate) return null;
+
+                    const data = await serverFetch(urlFromTemplate(root.dataset.chatRestoreUrlTemplate, '__SESSION__', sessionId), {
+                        method: 'POST',
+                    });
+
+                    return data.chat || null;
+                };
 
                 const autoGrowPrompt = () => {
                     promptInput.style.height = 'auto';
@@ -629,7 +929,7 @@
 
                 const syncChatModelOptions = () => {
                     const current = chatModelSelect.value;
-                    chatModelSelect.innerHTML = `<option value="">默认模型 ${defaultChatModel}</option>`;
+                    chatModelSelect.innerHTML = `<option value="">榛樿妯″瀷 ${defaultChatModel}</option>`;
 
                     Array.from(modelSelect.options).forEach((option) => {
                         if (!option.value) return;
@@ -656,9 +956,10 @@
                 modelSelect.addEventListener('change', syncChatModelOptions);
                 manualModel.addEventListener('input', syncChatModelOptions);
 
-                const currentChat = () => chatStore.get(activeChatId);
+                const currentChat = () => (showingChatTrash ? trashedChatStore : chatStore).get(activeChatId);
+                const taskById = (taskId) => tasks.get(taskId) || trashedTasks.get(taskId);
 
-                const createChatSession = (title = '新会话') => {
+                const createChatSession = (title = '新会话', sync = false) => {
                     const id = `chat-${Date.now()}-${Math.random().toString(16).slice(2)}`;
                     const session = {
                         id,
@@ -672,21 +973,60 @@
                     activeChatId = id;
                     renderChatSessions();
                     renderChats();
+                    if (sync) saveChatToServer(session);
 
                     return session;
                 };
 
                 const deleteActiveChat = () => {
+                    const store = showingChatTrash ? trashedChatStore : chatStore;
                     const session = currentChat();
-                    session?.messages.forEach((message) => {
-                        (message.files ?? []).forEach((file) => {
-                            if (file.url) URL.revokeObjectURL(file.url);
-                        });
-                    });
 
-                    if (activeChatId) chatStore.delete(activeChatId);
+                    if (showingChatTrash) {
+                        if (!activeChatId) return;
 
-                    activeChatId = chatStore.keys().next().value ?? null;
+                        const restoringId = activeChatId;
+
+                        restoreChatFromServer(restoringId)
+                            .then((restored) => {
+                                if (restored) {
+                                    trashedChatStore.delete(restoringId);
+                                    applyStoredChats([...chatStore.values(), restored]);
+                                    showingChatTrash = false;
+                                    activeChatId = restored.id;
+                                    renderChatSessions();
+                                    renderChats();
+                                    setStatus('会话已恢复。', 'green');
+                                }
+                            })
+                            .catch((error) => setStatus(error.message || '会话恢复失败。', 'red'));
+                        return;
+                    }
+
+                    if (activeChatId) {
+                        const deletingId = activeChatId;
+                        const deletedSession = store.get(deletingId);
+
+                        if (deletedSession) {
+                            deletedSession.deletedAt = new Date();
+                            trashedChatStore.set(deletingId, deletedSession);
+                        }
+
+                        store.delete(deletingId);
+                        deleteChatFromServer(deletingId)
+                            .catch((error) => {
+                                if (deletedSession) {
+                                    trashedChatStore.delete(deletingId);
+                                    chatStore.set(deletingId, deletedSession);
+                                    activeChatId = deletingId;
+                                    renderChatSessions();
+                                    renderChats();
+                                }
+                                setStatus(error.message || '会话删除失败。', 'red');
+                            });
+                    }
+
+                    activeChatId = store.keys().next().value ?? null;
 
                     if (!activeChatId) {
                         createChatSession();
@@ -709,8 +1049,11 @@
 
                 const renderChatSessions = () => {
                     chatSessions.innerHTML = '';
+                    const store = showingChatTrash ? trashedChatStore : chatStore;
+                    const deleteLabel = root.querySelector('[data-chat-delete-label]');
+                    if (deleteLabel) deleteLabel.textContent = showingChatTrash ? '恢复会话' : '删除会话';
 
-                    Array.from(chatStore.values()).forEach((session) => {
+                    Array.from(store.values()).forEach((session) => {
                         const active = session.id === activeChatId;
                         const button = document.createElement('button');
                         button.className = `block w-full rounded-2xl px-3 py-3 text-left text-sm transition ${active ? 'bg-zinc-950 text-white' : 'text-zinc-700 hover:bg-zinc-100'}`;
@@ -738,7 +1081,7 @@
                                 <span class="block truncate text-xs font-medium text-zinc-700">${escapeHtml(item.file.name)}</span>
                                 <span class="block text-[11px] text-zinc-400">${formatBytes(item.file.size)}</span>
                             </span>
-                            <button class="hidden h-6 w-6 items-center justify-center rounded-full bg-zinc-100 text-zinc-500 group-hover:flex" type="button" data-remove-chat-file="${index}" aria-label="移除附件">×</button>
+                            <button class="hidden h-6 w-6 items-center justify-center rounded-full bg-zinc-100 text-zinc-500 group-hover:flex" type="button" data-remove-chat-file="${index}" aria-label="绉婚櫎闄勪欢">脳</button>
                         `;
                         chatFilesPreview.appendChild(chip);
                     });
@@ -757,10 +1100,18 @@
                 };
 
                 root.querySelector('[data-chat-new]')?.addEventListener('click', () => {
-                    createChatSession();
+                    showingChatTrash = false;
+                    createChatSession('新会话', true);
                     setStatus('已新增会话。', 'green');
                 });
                 root.querySelector('[data-chat-delete]')?.addEventListener('click', deleteActiveChat);
+                root.querySelector('[data-chat-trash-toggle]')?.addEventListener('click', () => {
+                    showingChatTrash = !showingChatTrash;
+                    activeChatId = (showingChatTrash ? trashedChatStore : chatStore).keys().next().value ?? null;
+                    renderChatSessions();
+                    renderChats();
+                    setStatus(showingChatTrash ? '正在查看会话回收站。' : '已返回当前会话。');
+                });
                 chatSessions.addEventListener('click', (event) => {
                     const button = event.target.closest('[data-chat-session]');
                     if (!button) return;
@@ -806,6 +1157,7 @@
                         .slice(0, remainingSlots)
                         .map((file) => ({
                             file,
+                            asset: null,
                             editNote: '',
                             maskFile: null,
                             previewUrl: URL.createObjectURL(file),
@@ -814,6 +1166,7 @@
                     referenceItems = [...referenceItems, ...incomingItems].slice(0, 6);
                     referenceInput.value = '';
                     renderReferencePreview();
+                    incomingItems.forEach((item) => uploadReferenceAsset(item));
                 });
 
                 const renderReferencePreview = () => {
@@ -826,7 +1179,7 @@
                         const url = reference.previewUrl;
                         item.innerHTML = `
                             <img class="aspect-square w-full object-cover" src="${escapeAttribute(url)}" alt="">
-                            <span class="absolute right-1 top-1 hidden rounded-full bg-zinc-950/70 px-2 py-1 text-[10px] text-white group-hover:block">移除</span>
+                            <span class="absolute right-1 top-1 hidden rounded-full bg-zinc-950/70 px-2 py-1 text-[10px] text-white group-hover:block">绉婚櫎</span>
                         `;
                         item.addEventListener('click', () => {
                             removeReference(index);
@@ -835,16 +1188,16 @@
                         });
                         item.querySelector('img')?.addEventListener('load', () => {}, { once: true });
                         item.innerHTML = `
-                            <button class="block h-full w-full" type="button" data-edit-reference="${index}" aria-label="编辑参考图">
+                            <button class="block h-full w-full" type="button" data-edit-reference="${index}" aria-label="缂栬緫鍙傝€冨浘">
                                 <img class="h-full w-full object-cover transition duration-150 group-hover:brightness-50" src="${escapeAttribute(reference.previewUrl)}" alt="">
                                 <span class="absolute inset-0 hidden items-center justify-center text-white group-hover:flex">
                                     <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
                                 </span>
                                 <span class="absolute bottom-1 left-1 rounded-full bg-zinc-950/75 px-1.5 py-0.5 text-[10px] font-semibold text-white">${index + 1}</span>
-                                ${reference.maskFile ? '<span class="absolute bottom-1 right-1 rounded-full bg-emerald-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">遮罩</span>' : ''}
+                                ${reference.maskFile ? '<span class="absolute bottom-1 right-1 rounded-full bg-emerald-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">閬僵</span>' : ''}
                                 ${reference.editNote ? '<span class="absolute inset-x-0 bottom-0 h-1 bg-blue-500"></span>' : ''}
                             </button>
-                            <button class="absolute right-1 top-1 hidden h-5 w-5 items-center justify-center rounded-full bg-zinc-950/75 text-xs font-bold leading-none text-white group-hover:flex" type="button" data-remove-reference="${index}" aria-label="删除参考图">×</button>
+                            <button class="absolute right-1 top-1 hidden h-5 w-5 items-center justify-center rounded-full bg-zinc-950/75 text-xs font-bold leading-none text-white group-hover:flex" type="button" data-remove-reference="${index}" aria-label="鍒犻櫎鍙傝€冨浘">脳</button>
                         `;
                         item.addEventListener('click', (event) => {
                             event.stopImmediatePropagation();
@@ -878,6 +1231,29 @@
                     renderReferencePreview();
                 };
 
+                const uploadReferenceAsset = async (item) => {
+                    if (!item?.file || item.asset?.id) return;
+
+                    const payload = new FormData();
+                    payload.set('reference_image', item.file);
+
+                    try {
+                        const response = await fetch(root.dataset.referenceUploadUrl, {
+                            method: 'POST',
+                            body: payload,
+                            headers: { 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' },
+                        });
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.message || 'Reference upload failed.');
+                        item.asset = data.asset;
+                        item.previewUrl = data.asset.url || item.previewUrl;
+                        item.ownedPreviewUrl = false;
+                        renderReferencePreview();
+                    } catch (error) {
+                        item.assetError = error.message || 'Reference upload failed.';
+                    }
+                };
+
                 const resetReferences = () => {
                     referenceItems.forEach((item) => {
                         if (item.ownedPreviewUrl !== false) URL.revokeObjectURL(item.previewUrl);
@@ -888,13 +1264,60 @@
                     renderReferencePreview();
                 };
 
-                const cloneTaskReferences = (task) => task.references.map((reference) => ({
-                    file: reference.file,
-                    editNote: reference.editNote || '',
-                    maskFile: reference.maskFile || null,
-                    previewUrl: reference.url,
-                    ownedPreviewUrl: false,
-                }));
+                const cloneTaskReferences = async (task) => {
+                    const references = [];
+
+                    for (const [index, reference] of (task.references ?? []).entries()) {
+                        if (reference.asset?.id) {
+                            references.push({
+                                file: null,
+                                asset: reference.asset,
+                                editNote: reference.editNote || '',
+                                maskFile: null,
+                                previewUrl: reference.asset.url || reference.url,
+                                ownedPreviewUrl: false,
+                            });
+                            continue;
+                        }
+
+                        if (reference.file instanceof File) {
+                            references.push({
+                                file: reference.file,
+                                asset: reference.asset || null,
+                                editNote: reference.editNote || '',
+                                maskFile: reference.maskFile || null,
+                                previewUrl: URL.createObjectURL(reference.file),
+                                ownedPreviewUrl: true,
+                            });
+                            continue;
+                        }
+
+                        if (!reference.url) continue;
+
+                        try {
+                            const response = await fetch(reference.url);
+                            const blob = await response.blob();
+                            const file = new File([blob], reference.name || `reference-${index + 1}.png`, { type: blob.type || 'image/png' });
+                            references.push({
+                                file,
+                                editNote: reference.editNote || '',
+                                maskFile: null,
+                                previewUrl: URL.createObjectURL(file),
+                                ownedPreviewUrl: true,
+                            });
+                        } catch (error) {
+                            references.push({
+                                file: null,
+                                editNote: reference.editNote || '',
+                                maskFile: null,
+                                previewUrl: reference.url,
+                                ownedPreviewUrl: false,
+                            });
+                        }
+                    }
+
+                    return references;
+                };
 
                 const imageToReference = async (image, task) => {
                     const src = image?.url || image?.data_url || '';
@@ -980,7 +1403,10 @@
                 });
 
                 const fetchModels = async () => {
-                    if (configMode.value === 'custom' && !endpointInput.value.trim()) {
+                    const modelEndpoint = currentMode === 'chat'
+                        ? (chatEndpointInput.value.trim() || endpointInput.value.trim())
+                        : endpointInput.value.trim();
+                    if (configMode.value === 'custom' && !modelEndpoint && !savedConfigSelect?.value) {
                         setStatus('请先在右上角设置里填写 API URL。', 'red');
                         openSettings();
                         return;
@@ -989,12 +1415,15 @@
                     const payload = new FormData();
                     payload.append('feature', currentMode === 'chat' ? 'chat' : 'image');
                     payload.append('config_mode', configMode.value);
+                    payload.append('config_id', savedConfigSelect?.value || '');
                     payload.append('config_name', configName.value);
                     if (configMode.value === 'custom') {
                         payload.append('endpoint', endpointInput.value);
                         payload.append('api_key', apiKeyInput.value);
+                        payload.append('chat_endpoint', chatEndpointInput.value);
+                        payload.append('chat_api_key', chatApiKeyInput.value);
                     }
-                    setStatus(currentMode === 'chat' ? '正在获取可用聊天模型...' : '正在获取可用图片模型...');
+                    setStatus(currentMode === 'chat' ? '姝ｅ湪鑾峰彇鍙敤鑱婂ぉ妯″瀷...' : '姝ｅ湪鑾峰彇鍙敤鍥剧墖妯″瀷...');
 
                     try {
                         const response = await fetch(root.dataset.modelsUrl, {
@@ -1007,7 +1436,7 @@
                         if (!response.ok) throw new Error(data.message || '模型列表获取失败。');
 
                         const targetSelect = currentMode === 'chat' ? chatModelSelect : modelSelect;
-                        targetSelect.innerHTML = currentMode === 'chat' ? `<option value="">默认模型 ${defaultChatModel}</option>` : `<option value="">默认模型 ${defaultImageModel}</option>`;
+                        targetSelect.innerHTML = currentMode === 'chat' ? `<option value="">榛樿妯″瀷 ${defaultChatModel}</option>` : `<option value="">榛樿妯″瀷 ${defaultImageModel}</option>`;
                         if (!data.models?.length && currentMode !== 'chat') {
                             targetSelect.insertAdjacentHTML('beforeend', '<option value="">没有识别到模型，请手动填写</option>');
                         } else {
@@ -1037,7 +1466,10 @@
 
                 const scheduleModelFetch = () => {
                     window.clearTimeout(modelFetchTimer);
-                    if (configMode.value === 'custom' && !endpointInput.value.trim()) return;
+                    const endpoint = currentMode === 'chat'
+                        ? (chatEndpointInput.value.trim() || endpointInput.value.trim())
+                        : endpointInput.value.trim();
+                    if (configMode.value === 'custom' && !endpoint && !savedConfigSelect?.value) return;
                     modelFetchTimer = window.setTimeout(fetchModels, 700);
                 };
 
@@ -1047,6 +1479,10 @@
                 endpointInput.addEventListener('blur', scheduleModelFetch);
                 apiKeyInput.addEventListener('change', scheduleModelFetch);
                 apiKeyInput.addEventListener('blur', scheduleModelFetch);
+                chatEndpointInput.addEventListener('change', scheduleModelFetch);
+                chatEndpointInput.addEventListener('blur', scheduleModelFetch);
+                chatApiKeyInput.addEventListener('change', scheduleModelFetch);
+                chatApiKeyInput.addEventListener('blur', scheduleModelFetch);
 
                 const referenceEditInstructions = () => referenceItems
                     .map((reference, index) => {
@@ -1077,17 +1513,27 @@
                     payload.set('model', model);
                     payload.set('prompt', composedPrompt());
                     payload.set('config_mode', configMode.value);
+                    payload.set('config_id', savedConfigSelect?.value || '');
                     payload.set('config_name', configName.value.trim() || (configMode.value === 'default' ? '默认配置' : '自定义配置'));
                     payload.delete('manual_model');
                     payload.delete('reference_images[]');
+                    payload.delete('reference_asset_ids[]');
                     payload.delete('mask_image');
 
                     if (configMode.value !== 'custom') {
                         payload.delete('endpoint');
                         payload.delete('api_key');
+                        payload.delete('chat_endpoint');
+                        payload.delete('chat_api_key');
                     }
 
-                    referenceItems.forEach((reference) => payload.append('reference_images[]', reference.file));
+                    referenceItems.forEach((reference) => {
+                        if (reference.asset?.id) {
+                            payload.append('reference_asset_ids[]', reference.asset.id);
+                        } else if (reference.file) {
+                            payload.append('reference_images[]', reference.file);
+                        }
+                    });
 
                     const maskReference = referenceItems.find((reference) => reference.maskFile);
                     if (maskReference?.maskFile) {
@@ -1110,6 +1556,7 @@
 
                     const payload = new FormData();
                     payload.set('config_mode', configMode.value);
+                    payload.set('config_id', savedConfigSelect?.value || '');
                     payload.set('config_name', configName.value.trim() || (configMode.value === 'default' ? '默认配置' : '自定义配置'));
                     payload.set('model', model);
                     payload.set('prompt', promptInput.value.trim());
@@ -1120,11 +1567,31 @@
                     if (configMode.value === 'custom') {
                         payload.set('endpoint', endpointInput.value);
                         payload.set('api_key', apiKeyInput.value);
+                        payload.set('chat_endpoint', chatEndpointInput.value);
+                        payload.set('chat_api_key', chatApiKeyInput.value);
                     }
 
                     chatFileItems.forEach((item) => payload.append('chat_files[]', item.file));
 
                     return payload;
+                };
+
+                const requestTimeoutMs = () => Math.max(30, Math.min(1200, formNumber('timeout_seconds', 600) || 600)) * 1000;
+                const runWithRequestTimeout = async (operation) => {
+                    const controller = new AbortController();
+                    const timeoutId = window.setTimeout(() => controller.abort(), requestTimeoutMs());
+
+                    try {
+                        return await operation(controller.signal);
+                    } catch (error) {
+                        if (error?.name === 'AbortError') {
+                            throw new Error(`请求超过 ${Math.round(requestTimeoutMs() / 1000)} 秒未完成，已自动取消。`);
+                        }
+
+                        throw error;
+                    } finally {
+                        window.clearTimeout(timeoutId);
+                    }
                 };
 
                 const submitWorkbench = async () => {
@@ -1173,11 +1640,12 @@
                     setStatus('正在生成图片，请稍候...');
 
                     try {
-                        const response = await fetch(root.dataset.generateUrl, {
+                        const response = await runWithRequestTimeout((signal) => fetch(root.dataset.generateUrl, {
                             method: 'POST',
                             body: buildPayload(),
                             headers: { 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' },
-                        });
+                            signal,
+                        }));
                         const data = await response.json();
 
                         if (!response.ok) throw new Error(data.message || '图片生成失败。');
@@ -1202,18 +1670,21 @@
                         startTimer(task.id);
 
                         try {
-                            const response = await fetch(root.dataset.streamUrl, {
-                                method: 'POST',
-                                body: buildPayload(1),
-                                headers: { 'X-CSRF-TOKEN': csrf, 'Accept': 'text/event-stream' },
+                            await runWithRequestTimeout(async (signal) => {
+                                const response = await fetch(root.dataset.streamUrl, {
+                                    method: 'POST',
+                                    body: buildPayload(1),
+                                    headers: { 'X-CSRF-TOKEN': csrf, 'Accept': 'text/event-stream' },
+                                    signal,
+                                });
+
+                                if (!response.ok || !response.body) {
+                                    const errorData = await response.json().catch(() => ({}));
+                                    throw new Error(errorData.message || '流式生成失败。');
+                                }
+
+                                await readStream(response.body, task.id);
                             });
-
-                            if (!response.ok || !response.body) {
-                                const errorData = await response.json().catch(() => ({}));
-                                throw new Error(errorData.message || '流式生成失败。');
-                            }
-
-                            await readStream(response.body, task.id);
                         } catch (error) {
                             failTask(task.id, error.message || '流式生成失败。');
                             throw error;
@@ -1284,14 +1755,16 @@
                     session.updatedAt = new Date();
                     renderChatSessions();
                     renderChats();
+                    saveChatToServer(session);
                     setStatus('正在请求 AI 回复...');
 
                     try {
-                        const response = await fetch(root.dataset.chatUrl, {
+                        const response = await runWithRequestTimeout((signal) => fetch(root.dataset.chatUrl, {
                             method: 'POST',
                             body: payload,
                             headers: { 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' },
-                        });
+                            signal,
+                        }));
                         const data = await response.json().catch(() => ({}));
 
                         if (!response.ok) throw new Error(data.message || 'AI 聊天请求失败。');
@@ -1309,6 +1782,7 @@
                         clearChatFiles({ revoke: false });
                         renderChatSessions();
                         renderChats();
+                        saveChatToServer(session);
                         setStatus('Chat 消息已发送。', 'green');
                     } catch (error) {
                         session.messages.push({
@@ -1324,6 +1798,7 @@
                         session.updatedAt = new Date();
                         renderChatSessions();
                         renderChats();
+                        saveChatToServer(session);
                         setStatus(error.message || 'AI 聊天请求失败。', 'red');
                     }
                 };
@@ -1380,9 +1855,10 @@
                         submittedPrompt: composedPrompt(),
                         references: referenceItems.map((reference) => ({
                             file: reference.file,
+                            asset: reference.asset || null,
                             maskFile: reference.maskFile,
-                            name: reference.file.name,
-                            url: URL.createObjectURL(reference.file),
+                            name: reference.file?.name || reference.asset?.name || 'reference.png',
+                            url: reference.asset?.url || (reference.file ? URL.createObjectURL(reference.file) : reference.previewUrl),
                             editNote: reference.editNote,
                             hasMask: Boolean(reference.maskFile),
                         })),
@@ -1396,12 +1872,13 @@
                     };
 
                     tasks.set(id, task);
+                    saveTaskToServer(task);
                     return task;
                 };
 
                 const captureConfig = () => ({
                     source: configMode.value === 'default'
-                        ? (configName.value.trim() || '默认配置')
+                        ? (configName.value.trim() || '榛樿閰嶇疆')
                         : (endpointInput.value ? new URL(endpointInput.value).host : '未设置'),
                     configMode: configMode.value,
                     configName: configName.value.trim() || (configMode.value === 'default' ? '默认配置' : '自定义配置'),
@@ -1427,7 +1904,7 @@
                 };
 
                 const startTimer = (taskId) => {
-                    const task = tasks.get(taskId);
+                    const task = taskById(taskId);
                     if (!task) return;
 
                     const startedAt = performance.now();
@@ -1445,6 +1922,7 @@
 
                     task.partials.push(...images);
                     renderTasks();
+                    saveTaskToServer(task);
                 };
 
                 const finishTask = (taskId, images, meta) => {
@@ -1458,6 +1936,7 @@
                     task.elapsedMs = task.elapsedMs || 1;
                     renderTasks();
                     persistTasks();
+                    saveTaskToServer(task);
                     enrichImageDimensions(taskId);
                 };
 
@@ -1471,37 +1950,16 @@
                     task.error = message;
                     renderTasks();
                     persistTasks();
+                    saveTaskToServer(task);
                 };
 
                 const persistTasks = () => {
                     try {
                         const saved = Array.from(tasks.values())
                             .filter((task) => task.status !== 'running')
-                            .slice(-80)
-                            .map((task) => ({
-                                id: task.id,
-                                status: task.status,
-                                stream: task.stream,
-                                prompt: task.prompt,
-                                submittedPrompt: task.submittedPrompt,
-                                config: task.config,
-                                images: serializeImages(task.images),
-                                partials: serializeImages(task.partials),
-                                error: task.error,
-                                createdAt: task.createdAt instanceof Date ? task.createdAt.toISOString() : task.createdAt,
-                                elapsedMs: task.elapsedMs,
-                                actualWidth: task.actualWidth,
-                                actualHeight: task.actualHeight,
-                                meta: task.meta ?? {},
-                                references: (task.references ?? [])
-                                    .filter((reference) => reference.url && !String(reference.url).startsWith('blob:'))
-                                    .map((reference) => ({
-                                        name: reference.name,
-                                        url: reference.url,
-                                        editNote: reference.editNote,
-                                        hasMask: reference.hasMask,
-                                    })),
-                            }));
+                            .sort((a, b) => taskTimestamp(b) - taskTimestamp(a))
+                            .slice(0, 80)
+                            .map((task) => taskPayload(task));
 
                         window.localStorage.setItem(taskStorageKey, JSON.stringify(saved));
                     } catch (error) {
@@ -1514,7 +1972,14 @@
                         const saved = JSON.parse(window.localStorage.getItem(taskStorageKey) || '[]');
                         if (!Array.isArray(saved)) return;
 
-                        saved.forEach((task) => {
+                        applyStoredTasks(saved);
+                    } catch (error) {
+                        window.localStorage.removeItem(taskStorageKey);
+                    }
+                };
+
+                const applyStoredTasks = (items, targetStore = tasks) => {
+                    items.forEach((task) => {
                             if (!task?.id) return;
                             const config = {
                                 source: task.config?.source ?? '历史任务',
@@ -1534,7 +1999,7 @@
                                 timeout: Number(task.config?.timeout || 600),
                             };
 
-                            tasks.set(task.id, {
+                            targetStore.set(task.id, {
                                 ...task,
                                 prompt: task.prompt ?? '',
                                 submittedPrompt: task.submittedPrompt ?? task.prompt ?? '',
@@ -1549,8 +2014,68 @@
                                 timer: null,
                             });
                         });
+                };
+
+                const applyStoredChats = (items, targetStore = chatStore) => {
+                    if (!Array.isArray(items)) return;
+
+                    targetStore.clear();
+                    items.forEach((session) => {
+                        if (!session?.id) return;
+
+                        targetStore.set(session.id, {
+                            id: session.id,
+                            title: session.title || '新会话',
+                            messages: Array.isArray(session.messages) ? session.messages.map((message) => ({
+                                ...message,
+                                files: Array.isArray(message.files) ? message.files : [],
+                                createdAt: message.createdAt ? new Date(message.createdAt) : new Date(),
+                            })) : [],
+                            createdAt: session.createdAt ? new Date(session.createdAt) : new Date(),
+                            updatedAt: session.updatedAt ? new Date(session.updatedAt) : new Date(),
+                        });
+                    });
+
+                    if (targetStore === chatStore) {
+                        activeChatId = chatStore.keys().next().value ?? null;
+                    }
+                };
+
+                const loadServerState = async () => {
+                    if (!root.dataset.stateUrl) return;
+
+                    try {
+                        const localTasks = Array.from(tasks.values());
+                        const localChats = Array.from(chatStore.values()).filter((session) => session.messages?.length);
+                        const data = await serverFetch(root.dataset.stateUrl);
+                        const serverTasks = Array.isArray(data.tasks) ? data.tasks : [];
+                        const serverTrashedTasks = Array.isArray(data.trashed_tasks) ? data.trashed_tasks : [];
+                        const serverChats = Array.isArray(data.chats) ? data.chats : [];
+                        const serverTrashedChats = Array.isArray(data.trashed_chats) ? data.trashed_chats : [];
+
+                        if (serverTasks.length) {
+                            tasks.clear();
+                            applyStoredTasks(serverTasks);
+                        } else {
+                            localTasks.forEach((task) => saveTaskToServer(task));
+                        }
+
+                        if (serverChats.length) {
+                            applyStoredChats(serverChats);
+                        } else {
+                            localChats.forEach((session) => saveChatToServer(session));
+                        }
+
+                        trashedTasks.clear();
+                        applyStoredTasks(serverTrashedTasks, trashedTasks);
+                        applyStoredChats(serverTrashedChats, trashedChatStore);
+
+                        if (!activeChatId) createChatSession();
+                        renderTasks();
+                        renderChatSessions();
+                        renderChats();
                     } catch (error) {
-                        window.localStorage.removeItem(taskStorageKey);
+                        // Local cache remains available when the account state endpoint is unreachable.
                     }
                 };
 
@@ -1565,15 +2090,24 @@
                     })
                     .filter(Boolean);
 
+                const taskTimestamp = (task) => {
+                    const time = task?.createdAt instanceof Date ? task.createdAt.getTime() : Date.parse(task?.createdAt ?? '');
+
+                    return Number.isFinite(time) ? time : 0;
+                };
+
                 const renderTasks = () => {
                     const query = gallerySearch.value.trim().toLowerCase();
                     const selectedStatus = statusFilter.value;
-                    const filtered = Array.from(tasks.values()).filter((task) => {
-                        const matchesStatus = selectedStatus === 'all' || task.status === selectedStatus;
-                        const haystack = `${task.prompt ?? ''} ${task.config?.model ?? ''} ${task.config?.requestedSize ?? ''} ${task.config?.quality ?? ''}`.toLowerCase();
+                    const sourceTasks = selectedStatus === 'trash' ? Array.from(trashedTasks.values()) : Array.from(tasks.values());
+                    const filtered = sourceTasks
+                        .sort((a, b) => taskTimestamp(b) - taskTimestamp(a))
+                        .filter((task) => {
+                            const matchesStatus = selectedStatus === 'trash' || selectedStatus === 'all' || task.status === selectedStatus;
+                            const haystack = `${task.prompt ?? ''} ${task.config?.model ?? ''} ${task.config?.requestedSize ?? ''} ${task.config?.quality ?? ''}`.toLowerCase();
 
-                        return matchesStatus && (!query || haystack.includes(query));
-                    });
+                            return matchesStatus && (!query || haystack.includes(query));
+                        });
 
                     results.innerHTML = '';
 
@@ -1585,13 +2119,17 @@
                     filtered.forEach((task) => {
                         const image = task.images[0] ?? task.partials.at(-1) ?? null;
                         const src = image?.url || image?.data_url || '';
+                        const placeholder = task.status === 'failed'
+                            ? '<div class="flex h-full min-h-44 flex-col items-center justify-center gap-2 px-4 text-center text-sm text-red-600"><span class="inline-flex h-10 w-10 items-center justify-center rounded-full bg-red-100 text-lg font-bold">!</span><span class="font-semibold">失败</span></div>'
+                            : '<div class="flex h-full min-h-44 items-center justify-center px-4 text-center text-sm text-zinc-400">生成中</div>';
                         const article = document.createElement('article');
                         article.className = 'grid min-h-44 overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm transition hover:shadow-md sm:grid-cols-[42%_1fr]';
                         article.dataset.taskId = task.id;
                         article.innerHTML = `
                             <button class="relative min-h-44 bg-zinc-100 text-left" type="button" data-open-task="${escapeAttribute(task.id)}">
-                                ${src ? `<img class="h-full w-full object-cover" src="${escapeAttribute(src)}" alt="">` : `<div class="flex h-full min-h-44 items-center justify-center px-4 text-center text-sm ${task.status === 'failed' ? 'text-red-600' : 'text-zinc-400'}">${escapeHtml(task.status === 'failed' ? task.error : '生成中')}</div>`}
+                                ${src ? `<img class="h-full w-full object-cover" src="${escapeAttribute(src)}" alt="">` : placeholder}
                                 <span class="absolute left-2 top-2 rounded-lg bg-zinc-950/65 px-2 py-1 text-xs font-semibold text-white" data-task-badge>${task.status === 'running' ? formatSeconds(task.elapsedMs) : task.status === 'failed' ? formatSeconds(task.elapsedMs) : taskDimensionLabel(task)}</span>
+                                ${task.stream ? '<span class="absolute right-2 top-2 rounded-lg bg-blue-600/85 px-2 py-1 text-xs font-semibold text-white">流式</span>' : ''}
                                 ${task.status === 'done' ? `<span class="absolute left-2 top-10 rounded-lg bg-zinc-950/55 px-2 py-1 text-xs font-semibold text-white">${escapeHtml(taskRatioLabel(task))}</span>` : ''}
                             </button>
                             <div class="flex min-w-0 flex-col p-3">
@@ -1599,10 +2137,12 @@
                                 <div class="mt-3 inline-flex w-fit rounded-xl bg-zinc-100 px-2.5 py-1 text-xs text-zinc-500">&lt;/&gt; ${escapeHtml(task.config.model || '默认')}</div>
                                 ${task.error ? `<p class="mt-2 line-clamp-2 text-xs leading-5 text-red-600">${escapeHtml(task.error)}</p>` : ''}
                                 <div class="mt-auto flex justify-end gap-1.5 pt-3 text-zinc-400">
-                                    <button class="rounded-full p-1.5 hover:bg-zinc-100 hover:text-zinc-700" type="button" title="收藏" aria-label="收藏"><svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.8 1-6.1-4.4-4.3 6.1-.9L12 3Z"/></svg></button>
-                                    <button class="rounded-full p-1.5 hover:bg-zinc-100 hover:text-zinc-700" type="button" data-reuse-task="${escapeAttribute(task.id)}" title="复用提示词和参考图" aria-label="复用提示词和参考图"><svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-2"/></svg></button>
+                                    <button class="rounded-full p-1.5 hover:bg-zinc-100 hover:text-zinc-700" type="button" title="鏀惰棌" aria-label="鏀惰棌"><svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.8 1-6.1-4.4-4.3 6.1-.9L12 3Z"/></svg></button>
+                                    ${selectedStatus === 'trash'
+                                        ? `<button class="rounded-full p-1.5 hover:bg-zinc-100 hover:text-emerald-700" type="button" data-restore-task="${escapeAttribute(task.id)}" title="恢复" aria-label="恢复"><svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v6h6"/></svg></button>`
+                                        : `<button class="rounded-full p-1.5 hover:bg-zinc-100 hover:text-zinc-700" type="button" data-reuse-task="${escapeAttribute(task.id)}" title="复用提示词和参考图" aria-label="复用提示词和参考图"><svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-2"/></svg></button>
                                     ${task.status === 'failed' ? '' : `<button class="rounded-full p-1.5 hover:bg-zinc-100 hover:text-zinc-700" type="button" data-edit-output="${escapeAttribute(task.id)}" title="编辑输出" aria-label="编辑输出"><svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>`}
-                                    <button class="rounded-full p-1.5 hover:bg-zinc-100 hover:text-red-600" type="button" data-delete-task="${escapeAttribute(task.id)}" title="删除" aria-label="删除"><svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-1 14H6L5 6"/></svg></button>
+                                    <button class="rounded-full p-1.5 hover:bg-zinc-100 hover:text-red-600" type="button" data-delete-task="${escapeAttribute(task.id)}" title="删除" aria-label="删除"><svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-1 14H6L5 6"/></svg></button>`}
                                 </div>
                             </div>
                         `;
@@ -1628,13 +2168,14 @@
                         task.actualHeight = probe.naturalHeight;
                         renderTasks();
                         persistTasks();
+                        saveTaskToServer(task);
                     };
                     probe.src = src;
                 };
 
                 const taskDimensionLabel = (task) => {
-                    if (task.actualWidth && task.actualHeight) return `${task.actualWidth}×${task.actualHeight}`;
-                    if (task.config.requestedSize && task.config.requestedSize !== 'auto') return task.config.requestedSize.replace('x', '×');
+                    if (task.actualWidth && task.actualHeight) return `${task.actualWidth}脳${task.actualHeight}`;
+                    if (task.config.requestedSize && task.config.requestedSize !== 'auto') return task.config.requestedSize.replace('x', '脳');
                     return task.status === 'failed' ? '失败' : '完成';
                 };
 
@@ -1666,7 +2207,7 @@
                     detailError.classList.toggle('hidden', task.status !== 'failed');
                     detailError.textContent = task.error || '图片生成失败。';
                     detailImage.src = src || '';
-                    detailImage.alt = task.status === 'failed' ? '失败任务的中间步骤图' : '生成图片';
+                    detailImage.alt = task.status === 'failed' ? '失败任务' : '生成图片';
                     downloadLink.href = src || '#';
                     downloadLink.download = `ai-image-${task.id}.png`;
                     downloadLink.classList.toggle('pointer-events-none', !src);
@@ -1676,13 +2217,13 @@
                     const referencesSection = detailPanel.querySelector('[data-detail-references-section]');
                     const references = detailPanel.querySelector('[data-detail-references]');
                     references.innerHTML = '';
-                    referencesSection.classList.toggle('hidden', task.references.length === 0);
+                    referencesSection.classList.toggle('hidden', task.references.length === 0 || task.status === 'failed');
                     task.references.forEach((reference) => {
                         references.insertAdjacentHTML('beforeend', `<img class="aspect-square rounded-lg object-cover" src="${escapeAttribute(reference.url)}" alt="${escapeAttribute(reference.name)}">`);
                     });
 
                     const meta = detailPanel.querySelector('[data-detail-meta]');
-                    const actualSize = task.actualWidth && task.actualHeight ? `${task.actualWidth}×${task.actualHeight}` : '未知';
+                    const actualSize = task.actualWidth && task.actualHeight ? `${task.actualWidth}x${task.actualHeight}` : '未知';
                     const actualRatio = task.actualWidth && task.actualHeight ? ratioFromSize(task.actualWidth, task.actualHeight) : '未知';
                     const rows = [
                         ['来源', task.config.source],
@@ -1704,21 +2245,26 @@
                     const reuseButton = event.target.closest('[data-reuse-task]');
                     const editOutputButton = event.target.closest('[data-edit-output]');
                     const deleteButton = event.target.closest('[data-delete-task]');
+                    const restoreButton = event.target.closest('[data-restore-task]');
 
                     if (openButton) {
                         openTask(openButton.dataset.openTask);
                     } else if (reuseButton) {
-                        const task = tasks.get(reuseButton.dataset.reuseTask);
+                        const task = taskById(reuseButton.dataset.reuseTask);
                         if (task) {
                             resetReferences();
                             promptInput.value = task.prompt;
-                            referenceItems = cloneTaskReferences(task).slice(0, 6);
-                            renderReferencePreview();
-                            autoGrowPrompt();
-                            setStatus('已复用提示词和参考图。', 'green');
+                            cloneTaskReferences(task)
+                                .then((references) => {
+                                    referenceItems = references.slice(0, 6);
+                                    renderReferencePreview();
+                                    autoGrowPrompt();
+                                    setStatus('已复用提示词和参考图。', 'green');
+                                })
+                                .catch(() => setStatus('参考图复用失败。', 'red'));
                         }
                     } else if (editOutputButton) {
-                        const task = tasks.get(editOutputButton.dataset.editOutput);
+                        const task = taskById(editOutputButton.dataset.editOutput);
                         const image = task?.images[0] ?? task?.partials.at(-1);
                         if (!task || !image) return;
 
@@ -1728,13 +2274,42 @@
                                 resetReferences();
                                 referenceItems = [reference];
                                 renderReferencePreview();
+                                uploadReferenceAsset(reference);
                                 setStatus('已将输出图添加为参考图。', 'green');
                             })
                             .catch(() => setStatus('输出图无法添加为参考图。', 'red'));
                     } else if (deleteButton) {
-                        tasks.delete(deleteButton.dataset.deleteTask);
+                        const deletingId = deleteButton.dataset.deleteTask;
+                        const deletedTask = tasks.get(deletingId);
+
+                        if (!deletedTask) return;
+
+                        deletedTask.trashed = true;
+                        deletedTask.deletedAt = new Date();
+                        tasks.delete(deletingId);
+                        trashedTasks.set(deletingId, deletedTask);
                         persistTasks();
                         renderTasks();
+                        setStatus('任务已移入回收站。', 'green');
+                        deleteTaskFromServer(deletingId)
+                            .catch((error) => {
+                                trashedTasks.delete(deletingId);
+                                tasks.set(deletingId, deletedTask);
+                                persistTasks();
+                                renderTasks();
+                                setStatus(error.message || '任务删除失败。', 'red');
+                            });
+                    } else if (restoreButton) {
+                        restoreTaskFromServer(restoreButton.dataset.restoreTask)
+                            .then((task) => {
+                                if (!task) return;
+                                trashedTasks.delete(restoreButton.dataset.restoreTask);
+                                applyStoredTasks([task], tasks);
+                                persistTasks();
+                                renderTasks();
+                                setStatus('任务已恢复。', 'green');
+                            })
+                            .catch((error) => setStatus(error.message || '任务恢复失败。', 'red'));
                     }
                 });
 
@@ -1788,10 +2363,12 @@
                 const escapeAttribute = (value) => escapeHtml(value).replaceAll('`', '&#096;');
 
                 syncChatModelOptions();
+                loadSavedConfigs();
                 hydrateTasks();
-                createChatSession();
+                if (!activeChatId) createChatSession();
                 setMode('gallery');
                 renderTasks();
+                loadServerState();
             })();
         </script>
     </section>

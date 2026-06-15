@@ -56,6 +56,17 @@ Route::get('/friend-links', [FriendLinkController::class, 'index'])->name('frien
 Route::middleware('auth')->group(function (): void {
     Route::get('/ai-image', [AiImageController::class, 'index'])->name('ai-image.index');
     Route::post('/ai-image/models', [AiImageController::class, 'models'])->name('ai-image.models');
+    Route::get('/ai-image/configs', [AiImageController::class, 'configs'])->name('ai-image.configs');
+    Route::post('/ai-image/configs', [AiImageController::class, 'saveConfig'])->name('ai-image.configs.store');
+    Route::delete('/ai-image/configs/{config}', [AiImageController::class, 'deleteConfig'])->name('ai-image.configs.destroy');
+    Route::get('/ai-image/state', [AiImageController::class, 'state'])->name('ai-image.state');
+    Route::post('/ai-image/tasks', [AiImageController::class, 'saveTask'])->name('ai-image.tasks.store');
+    Route::delete('/ai-image/tasks/{task}', [AiImageController::class, 'deleteTask'])->name('ai-image.tasks.destroy');
+    Route::post('/ai-image/tasks/{task}/restore', [AiImageController::class, 'restoreTask'])->name('ai-image.tasks.restore');
+    Route::post('/ai-image/chats', [AiImageController::class, 'saveChatSession'])->name('ai-image.chats.store');
+    Route::delete('/ai-image/chats/{session}', [AiImageController::class, 'deleteChatSession'])->name('ai-image.chats.destroy');
+    Route::post('/ai-image/chats/{session}/restore', [AiImageController::class, 'restoreChatSession'])->name('ai-image.chats.restore');
+    Route::post('/ai-image/references', [AiImageController::class, 'uploadReference'])->name('ai-image.references.store');
     Route::post('/ai-image/generate', [AiImageController::class, 'generate'])->name('ai-image.generate');
     Route::post('/ai-image/stream', [AiImageController::class, 'stream'])->name('ai-image.stream');
     Route::post('/ai-image/chat', [AiImageController::class, 'chat'])->name('ai-image.chat');

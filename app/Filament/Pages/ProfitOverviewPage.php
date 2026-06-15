@@ -9,6 +9,7 @@ use App\Support\Url;
 use BackedEnum;
 use Carbon\Carbon;
 use Filament\Pages\Page;
+use Filament\Notifications\Notification;
 use Filament\Support\Icons\Heroicon;
 use UnitEnum;
 
@@ -30,10 +31,13 @@ class ProfitOverviewPage extends Page
 
     public ?string $date_to = null;
 
+    public ?string $profit_formula = null;
+
     public function mount(): void
     {
         $this->date_from = request('date_from');
         $this->date_to = request('date_to');
+        $this->profit_formula = app(ProfitMetrics::class)->profitFormula();
     }
 
     public static function canAccess(): bool
@@ -75,6 +79,37 @@ class ProfitOverviewPage extends Page
                 'orders_count' => $row['orders_count'],
             ])
             ->all();
+    }
+
+    /**
+     * @return array<int, array<string, string|int|null>>
+     */
+    public function fulfillmentRows(): array
+    {
+        return collect(app(ProfitMetrics::class)->fulfillmentBreakdown($this->dateFrom(), $this->dateTo()))
+            ->map(fn (array $row): array => [
+                'label' => $row['label'],
+                'sales' => Money::format((int) $row['sales_cents']),
+                'purchase_cost' => Money::format((int) $row['purchase_cost_cents']),
+                'cost' => Money::format((int) $row['cost_cents']),
+                'gross_profit' => Money::format((int) $row['gross_profit_cents']),
+                'profit' => Money::format((int) $row['profit_cents']),
+                'formula_profit' => Money::format((int) $row['formula_profit_cents']),
+                'profit_rate' => $this->formatRate($row['profit_rate']),
+                'orders_count' => $row['orders_count'],
+            ])
+            ->all();
+    }
+
+    public function saveProfitFormula(): void
+    {
+        app(ProfitMetrics::class)->updateProfitFormula($this->profit_formula);
+        $this->profit_formula = app(ProfitMetrics::class)->profitFormula();
+
+        Notification::make()
+            ->title('利润公式已保存')
+            ->success()
+            ->send();
     }
 
     public function exportUrl(): string

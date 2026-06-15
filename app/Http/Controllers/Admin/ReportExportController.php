@@ -64,6 +64,19 @@ class ReportExportController extends Controller
                 $row['orders_count'],
             ])
             ->all();
+        $fulfillmentRows = collect($metrics->fulfillmentBreakdown($dateFrom, $dateTo))
+            ->map(fn (array $row): array => [
+                $row['label'],
+                Money::format((int) $row['sales_cents']),
+                Money::format((int) $row['purchase_cost_cents']),
+                Money::format((int) $row['cost_cents']),
+                Money::format((int) $row['gross_profit_cents']),
+                Money::format((int) $row['profit_cents']),
+                Money::format((int) $row['formula_profit_cents']),
+                $this->formatRate($row['profit_rate']),
+                $row['orders_count'],
+            ])
+            ->all();
 
         return $this->download('report-profit-overview.csv', [
             '类型',
@@ -91,6 +104,9 @@ class ReportExportController extends Controller
             ],
             [],
             ['仓库利润', '仓库', '销售额', '成本', '利润', '利润率', '完成订单'],
+            ['交付类型利润', '交付类型', '销售额', '采购成本', '总成本', '毛利润', '默认利润', '公式利润', '利润率', '完成订单'],
+            ...$fulfillmentRows,
+            [],
             ...$warehouseRows,
         ]);
     }

@@ -199,9 +199,9 @@ class WarehouseService
         ]);
 
         $product = $variant->product()->first();
-        if ($product?->status === Product::STATUS_PUBLISHED && $product->activeVariants()->sum('stock') <= 0) {
+        if ($product?->status === Product::STATUS_PUBLISHED && $product->usesStockLimit() && $product->activeVariants()->sum('stock') <= 0) {
             $product->update(['status' => Product::STATUS_SOLD_OUT]);
-        } elseif ($product?->status === Product::STATUS_SOLD_OUT && $product->activeVariants()->sum('stock') > 0) {
+        } elseif ($product?->status === Product::STATUS_SOLD_OUT && (! $product->usesStockLimit() || $product->activeVariants()->sum('stock') > 0)) {
             $product->update(['status' => Product::STATUS_PUBLISHED]);
         }
     }

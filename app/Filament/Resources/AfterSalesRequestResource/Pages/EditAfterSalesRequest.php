@@ -6,6 +6,7 @@ use App\Filament\Resources\AfterSalesRequestResource;
 use App\Models\AfterSalesRequest;
 use App\Models\Coupon;
 use App\Models\UserCoupon;
+use App\Support\AdminAccess;
 use App\Services\CouponService;
 use Filament\Resources\Pages\EditRecord;
 
@@ -33,6 +34,10 @@ class EditAfterSalesRequest extends EditRecord
         $coupon = Coupon::query()->find($this->record->coupon_id);
 
         if (! $coupon) {
+            return;
+        }
+
+        if (! AdminAccess::canAction('coupons.issue')) {
             return;
         }
 

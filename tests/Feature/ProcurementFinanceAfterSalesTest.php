@@ -16,6 +16,7 @@ use App\Models\User;
 use App\Models\Warehouse;
 use App\Models\WarehouseMovement;
 use App\Models\WarehouseStock;
+use App\Services\BackofficeApprovalService;
 use App\Services\ProcurementService;
 use App\Services\CouponService;
 use App\Services\OrderService;
@@ -473,6 +474,196 @@ it('adds after sales compensation coupons to the user coupon wallet', function (
         'after_sales_request_id' => $request->id,
         'source' => \App\Models\UserCoupon::SOURCE_AFTER_SALES,
     ]);
+});
+
+it('lets support request coupon and refund approvals from chat while reviewers can approve them', function (): void {
+    $support = User::factory()->create(['role' => 'support']);
+    $finance = User::factory()->create(['role' => 'finance']);
+    $user = User::factory()->create(['role' => 'customer']);
+    $coupon = Coupon::query()->create([
+        'code' => 'CHAT10',
+        'name' => 'Chat compensation',
+        'type' => Coupon::TYPE_FIXED,
+        'value' => 1000,
+        'scope' => Coupon::SCOPE_GLOBAL,
+        'is_active' => true,
+    ]);
+    $order = Order::query()->create([
+        'user_id' => $user->id,
+        'order_number' => 'CHAT-APPROVAL-1',
+        'status' => Order::STATUS_FULFILLED,
+        'payment_status' => Order::PAYMENT_CONFIRMED,
+        'subtotal_cents' => 3000,
+        'total_cents' => 3000,
+        'contact_name' => 'Buyer',
+        'contact_phone' => '1',
+    ]);
+    $session = SupportChatSession::query()->create([
+        'user_id' => $user->id,
+        'order_id' => $order->id,
+        'status' => SupportChatSession::STATUS_ACTIVE,
+        'last_message_at' => now(),
+    ]);
+
+    $couponRequest = app(BackofficeApprovalService::class)->requestCouponFromChat($session, $coupon, $support, 'Please compensate.');
+    $refundRequest = app(BackofficeApprovalService::class)->requestRefundFromChat($session, $support, 1200, 'Please refund.');
+
+    expect($couponRequest->resolution_type)->toBe(AfterSalesRequest::RESOLUTION_COUPON)
+        ->and($couponRequest->status)->toBe(AfterSalesRequest::STATUS_CONTACTING)
+        ->and($refundRequest->refund_status)->toBe(AfterSalesRequest::REFUND_REQUESTED);
+
+    app(BackofficeApprovalService::class)->approveCouponRequest($couponRequest->fresh('user'), $finance, 'Approved.');
+    app(BackofficeApprovalService::class)->approveRefundRequest($refundRequest->fresh(), $finance, 'Approved.');
+
+    $this->assertDatabaseHas('user_coupons', [
+        'user_id' => $user->id,
+        'coupon_id' => $coupon->id,
+        'issued_by_user_id' => $finance->id,
+        'after_sales_request_id' => $couponRequest->id,
+        'source' => \App\Models\UserCoupon::SOURCE_AFTER_SALES,
+    ]);
+
+    $this->assertDatabaseHas('after_sales_requests', [
+        'id' => $refundRequest->id,
+        'refund_status' => AfterSalesRequest::REFUND_APPROVED,
+        'refund_reviewed_by_id' => $finance->id,
+        'status' => AfterSalesRequest::STATUS_RESOLVED,
+    ]);
+});
+
+it('keeps support coupon compensation requests pending until an approver issues the coupon', function (): void {
+    $support = User::factory()->create(['role' => 'support']);
+    $finance = User::factory()->create(['role' => 'finance']);
+    $user = User::factory()->create(['role' => 'customer']);
+    $coupon = Coupon::query()->create([
+        'code' => 'PENDING10',
+        'name' => 'Pending compensation',
+        'type' => Coupon::TYPE_FIXED,
+        'value' => 1000,
+        'scope' => Coupon::SCOPE_GLOBAL,
+        'is_active' => true,
+    ]);
+    $request = AfterSalesRequest::query()->create([
+        'user_id' => $user->id,
+        'type' => 'support',
+        'status' => AfterSalesRequest::STATUS_OPEN,
+        'subject' => 'Coupon approval',
+        'message' => 'Need compensation.',
+    ]);
+
+    app(BackofficeApprovalService::class)->requestCouponForAfterSales($request, $coupon, $support, 'Please issue.');
+
+    expect($request->fresh()->status)->toBe(AfterSalesRequest::STATUS_CONTACTING)
+        ->and($request->fresh()->resolution_type)->toBe(AfterSalesRequest::RESOLUTION_COUPON);
+
+    $this->assertDatabaseMissing('user_coupons', [
+        'user_id' => $user->id,
+        'coupon_id' => $coupon->id,
+    ]);
+
+    app(BackofficeApprovalService::class)->approveCouponRequest($request->fresh('user'), $finance, 'Approved.');
+
+    $this->assertDatabaseHas('user_coupons', [
+        'user_id' => $user->id,
+        'coupon_id' => $coupon->id,
+        'issued_by_user_id' => $finance->id,
+    ]);
+});
+
+it('lets permitted staff directly issue coupons and register direct refunds from support chat', function (): void {
+    $sales = User::factory()->create(['role' => 'sales']);
+    $user = User::factory()->create(['role' => 'customer']);
+    $coupon = Coupon::query()->create([
+        'code' => 'DIRECT10',
+        'name' => 'Direct compensation',
+        'type' => Coupon::TYPE_FIXED,
+        'value' => 1000,
+        'scope' => Coupon::SCOPE_GLOBAL,
+        'is_active' => true,
+    ]);
+    $order = Order::query()->create([
+        'user_id' => $user->id,
+        'order_number' => 'CHAT-DIRECT-1',
+        'status' => Order::STATUS_FULFILLED,
+        'payment_status' => Order::PAYMENT_CONFIRMED,
+        'subtotal_cents' => 3000,
+        'total_cents' => 3000,
+        'contact_name' => 'Buyer',
+        'contact_phone' => '1',
+    ]);
+    $session = SupportChatSession::query()->create([
+        'user_id' => $user->id,
+        'order_id' => $order->id,
+        'status' => SupportChatSession::STATUS_ACTIVE,
+        'last_message_at' => now(),
+    ]);
+
+    app(BackofficeApprovalService::class)->issueCouponForChat($session, $coupon, $sales, 'Direct coupon.');
+    $refund = app(BackofficeApprovalService::class)->approveRefundForChat($session, $sales, 800, 'Direct refund.');
+
+    $this->assertDatabaseHas('user_coupons', [
+        'user_id' => $user->id,
+        'coupon_id' => $coupon->id,
+        'issued_by_user_id' => $sales->id,
+        'source' => \App\Models\UserCoupon::SOURCE_AFTER_SALES,
+    ]);
+
+    expect($refund->refund_status)->toBe(AfterSalesRequest::REFUND_APPROVED)
+        ->and($refund->status)->toBe(AfterSalesRequest::STATUS_RESOLVED)
+        ->and($refund->refund_reviewed_by_id)->toBe($sales->id);
+});
+
+it('renders approval and coupon issue backoffice entry points by permission', function (): void {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $support = User::factory()->create(['role' => 'support']);
+    $finance = User::factory()->create(['role' => 'finance']);
+    $user = User::factory()->create(['role' => 'customer']);
+    $order = Order::query()->create([
+        'user_id' => $user->id,
+        'order_number' => 'CHAT-UI-1',
+        'status' => Order::STATUS_FULFILLED,
+        'payment_status' => Order::PAYMENT_CONFIRMED,
+        'subtotal_cents' => 3000,
+        'total_cents' => 3000,
+        'contact_name' => 'Buyer',
+        'contact_phone' => '1',
+    ]);
+    $session = SupportChatSession::query()->create([
+        'user_id' => $user->id,
+        'order_id' => $order->id,
+        'status' => SupportChatSession::STATUS_ACTIVE,
+        'last_message_at' => now(),
+    ]);
+    \App\Models\SupportChatMessage::query()->create([
+        'support_chat_session_id' => $session->id,
+        'sender_user_id' => $user->id,
+        'sender_type' => 'customer',
+        'body' => 'Need help.',
+    ]);
+
+    $this->actingAs($support)
+        ->get('/admin/support-chat-sessions/'.$session->id.'/edit')
+        ->assertOk()
+        ->assertSee('申请优惠码')
+        ->assertSee('申请退款')
+        ->assertDontSee('发放优惠码')
+        ->assertDontSee('直接退款');
+
+    $this->actingAs($finance)
+        ->get('/admin/support-chat-sessions/'.$session->id.'/edit')
+        ->assertOk()
+        ->assertSee('发放优惠码')
+        ->assertSee('直接退款');
+
+    $this->actingAs($finance)
+        ->get('/admin/approval-requests')
+        ->assertOk()
+        ->assertSee('审批');
+
+    $this->actingAs($admin)
+        ->get('/admin/coupons')
+        ->assertOk()
+        ->assertSee('发放优惠码');
 });
 
 it('renders an order business timeline in the backoffice order form', function (): void {

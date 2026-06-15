@@ -5,7 +5,9 @@
         $mainImageUrl = $mainMedia ? null : $firstVariantImage?->imageUrl();
         $firstVariant = $product->variants->first();
         $totalStock = $product->variants->sum('stock');
-        $isSoldOut = $product->isSoldOut() || ($product->status === \App\Models\Product::STATUS_PUBLISHED && $totalStock <= 0);
+        $unlimitedStock = $product->hasUnlimitedStock();
+        $stockLabel = $product->isPresale() ? '预售不限库存' : ($unlimitedStock ? '不限库存' : (string) $totalStock);
+        $isSoldOut = $product->isSoldOut() || ($product->status === \App\Models\Product::STATUS_PUBLISHED && ! $unlimitedStock && $totalStock <= 0);
         $statusBadge = match ($product->status) {
             \App\Models\Product::STATUS_CONCEPT => '概念',
             \App\Models\Product::STATUS_PRESALE => '预售',
@@ -160,7 +162,7 @@
                             @elseif($product->isIncoming())
                                 {{ $product->incoming_quantity }}
                             @else
-                                {{ $totalStock }}
+                                {{ $stockLabel }}
                             @endif
                         </dd>
                     </div>
@@ -216,18 +218,19 @@
                             <span class="text-sm font-medium">规格</span>
                             <select id="product-detail-variant" class="hidden" required>
                                 @foreach($product->variants as $variant)
+                                    @php($variantStockLabel = $unlimitedStock ? $stockLabel : '库存 '.$variant->stock)
                                     <option
                                         value="{{ $variant->id }}"
                                         data-price="{{ \App\Support\Money::format($variant->effectivePriceCents()) }}"
                                         data-compare-price="{{ $variant->hasActiveDiscount() ? \App\Support\Money::format($variant->price_cents) : ($variant->compare_at_price_cents ? \App\Support\Money::format($variant->compare_at_price_cents) : '') }}"
                                         data-has-discount="{{ $variant->hasActiveDiscount() ? '1' : '0' }}"
-                                        data-stock-label="{{ $product->isPresale() ? '预售不限库存' : '库存 '.$variant->stock }}"
-                                        data-stock-value="{{ $product->isPresale() ? '预售不限库存' : $variant->stock }}"
+                                        data-stock-label="{{ $variantStockLabel }}"
+                                        data-stock-value="{{ $variantStockLabel }}"
                                         data-image-url="{{ $variant->imageUrl() }}"
                                         data-image-alt="{{ $variant->displayName() }}"
                                         data-spec-label="{{ $variant->displayName() }}"
                                     >
-                                        {{ $variant->displayName() }} / @money($variant->effectivePriceCents()) / {{ $product->isPresale() ? '预售不限库存' : '库存 '.$variant->stock }}
+                                        {{ $variant->displayName() }} / @money($variant->effectivePriceCents()) / {{ $variantStockLabel }}
                                     </option>
                                 @endforeach
                             </select>
@@ -265,7 +268,7 @@
                                 @endforelse
                                 <div class="grid min-w-0 grid-cols-[minmax(88px,0.34fr)_minmax(0,1fr)]">
                                     <div class="bg-slate-50 px-3 py-2 text-sm font-medium text-slate-600">库存</div>
-                                    <div class="min-w-0 break-words px-3 py-2 text-sm font-medium text-slate-900" data-product-stock>{{ $product->isPresale() ? '预售不限库存' : ($firstVariant?->stock ?? 0) }}</div>
+                                    <div class="min-w-0 break-words px-3 py-2 text-sm font-medium text-slate-900" data-product-stock>{{ $unlimitedStock ? $stockLabel : ($firstVariant?->stock ?? 0) }}</div>
                                 </div>
                             </div>
                         </div>

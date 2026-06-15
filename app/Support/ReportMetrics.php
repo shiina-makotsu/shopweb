@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Models\CouponRedemption;
 use App\Models\Order;
+use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\User;
 use Illuminate\Support\Collection;
@@ -35,6 +36,10 @@ class ReportMetrics
     {
         return ProductVariant::query()
             ->with('product')
+            ->whereHas('product', fn ($query) => $query->whereNotIn('fulfillment_type', [
+                Product::FULFILLMENT_ONLINE,
+                Product::FULFILLMENT_CONTACT_LEGACY,
+            ]))
             ->whereColumn('stock', '<=', 'low_stock_threshold')
             ->orderBy('stock')
             ->limit($limit)

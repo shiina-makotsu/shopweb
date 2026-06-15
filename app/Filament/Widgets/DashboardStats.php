@@ -4,6 +4,7 @@ namespace App\Filament\Widgets;
 
 use App\Filament\Resources\OrderResource;
 use App\Models\Order;
+use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Support\Money;
 use App\Support\ProfitMetrics;
@@ -39,6 +40,10 @@ class DashboardStats extends StatsOverviewWidget
             ->count();
 
         $lowStockVariants = ProductVariant::query()
+            ->whereHas('product', fn ($query) => $query->whereNotIn('fulfillment_type', [
+                Product::FULFILLMENT_ONLINE,
+                Product::FULFILLMENT_CONTACT_LEGACY,
+            ]))
             ->whereColumn('stock', '<=', 'low_stock_threshold')
             ->count();
 

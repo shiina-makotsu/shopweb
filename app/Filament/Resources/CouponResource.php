@@ -10,6 +10,7 @@ use App\Models\Coupon;
 use App\Models\User;
 use App\Models\UserCoupon;
 use App\Services\CouponService;
+use App\Support\AdminAccess;
 use App\Support\MoneyInput;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
@@ -93,10 +94,11 @@ class CouponResource extends Resource
                 Action::make('issueToUser')
                     ->label('发放给用户')
                     ->icon(Heroicon::OutlinedUserPlus)
+                    ->visible(fn (): bool => AdminAccess::canAction('coupons.issue'))
                     ->form([
                         Select::make('user_id')
                             ->label('用户')
-                            ->options(fn (): array => User::query()->where('role', 'customer')->latest()->limit(100)->pluck('email', 'id')->all())
+                            ->options(fn (): array => static::customerOptions())
                             ->searchable()
                             ->required(),
                         TextInput::make('note')->label('备注')->maxLength(255),
@@ -117,6 +119,72 @@ class CouponResource extends Resource
                 DeleteAction::make(),
             ])
             ->toolbarActions([DeleteBulkAction::make()]);
+    }
+
+    public static function issueCouponHeaderAction(): Action
+    {
+        return Action::make('issueCoupon')
+            ->label('发放优惠码')
+            ->icon(Heroicon::OutlinedUserPlus)
+            ->visible(fn (): bool => AdminAccess::canAction('coupons.issue'))
+            ->form([
+                Select::make('coupon_id')
+                    ->label('优惠码')
+                    ->options(fn (): array => static::couponOptions())
+                    ->searchable()
+                    ->preload()
+                    ->required(),
+                Select::make('user_id')
+                    ->label('用户')
+                    ->options(fn (): array => static::customerOptions())
+                    ->searchable()
+                    ->required(),
+                TextInput::make('note')->label('备注')->maxLength(255),
+            ])
+            ->action(function (array $data): void {
+                $coupon = Coupon::query()->findOrFail($data['coupon_id']);
+                $user = User::query()->findOrFail($data['user_id']);
+
+                app(CouponService::class)->issueToUser(
+                    $coupon,
+                    $user,
+                    UserCoupon::SOURCE_ADMIN,
+                    auth()->user(),
+                    null,
+                    $data['note'] ?? null,
+                );
+            });
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public static function couponOptions(): array
+    {
+        return Coupon::query()
+            ->latest()
+            ->limit(100)
+            ->get()
+            ->mapWithKeys(fn (Coupon $coupon): array => [
+                $coupon->id => $coupon->code.' - '.$coupon->name,
+            ])
+            ->all();
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public static function customerOptions(): array
+    {
+        return User::query()
+            ->where('role', 'customer')
+            ->latest()
+            ->limit(100)
+            ->get()
+            ->mapWithKeys(fn (User $user): array => [
+                $user->id => $user->displayName().' / '.$user->public_id.' / '.$user->email,
+            ])
+            ->all();
     }
 
     public static function getPages(): array

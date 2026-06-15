@@ -3,7 +3,9 @@
 @php
     $variant = $product->variants->where('is_active', true)->sortBy(fn ($variant) => $variant->effectivePriceCents())->first();
     $stock = $product->variants->where('is_active', true)->sum('stock');
-    $isSoldOut = $product->isSoldOut() || ($product->status === \App\Models\Product::STATUS_PUBLISHED && $stock <= 0);
+    $unlimitedStock = $product->hasUnlimitedStock();
+    $stockLabel = $product->isPresale() ? '预售不限库存' : ($unlimitedStock ? '不限库存' : '库存 '.$stock);
+    $isSoldOut = $product->isSoldOut() || ($product->status === \App\Models\Product::STATUS_PUBLISHED && ! $unlimitedStock && $stock <= 0);
     $statusBadge = match ($product->status) {
         \App\Models\Product::STATUS_CONCEPT => '概念',
         \App\Models\Product::STATUS_PRESALE => '预售',
@@ -21,7 +23,7 @@
         \App\Models\Product::STATUS_PRESALE => '预售',
         \App\Models\Product::STATUS_INCOMING => '进货 '.$product->incoming_quantity,
         \App\Models\Product::STATUS_SOLD_OUT => '售罄',
-        default => $isSoldOut ? '售罄' : '库存 '.$stock,
+        default => $isSoldOut ? '售罄' : $stockLabel,
     };
     $actionLabel = match ($product->status) {
         \App\Models\Product::STATUS_CONCEPT => '参与投票',

@@ -82,7 +82,7 @@ class OrderService
 
                 $product = $cartItem['product'];
 
-                if (! $variant->is_active || ($product->status === Product::STATUS_PUBLISHED && $variant->stock < $cartItem['quantity'])) {
+                if (! $variant->is_active || ($product->status === Product::STATUS_PUBLISHED && $product->usesStockLimit() && $variant->stock < $cartItem['quantity'])) {
                     throw ValidationException::withMessages([
                         'cart' => "SKU {$variant->sku} 库存不足。",
                     ]);
@@ -438,10 +438,14 @@ class OrderService
         }
 
         DB::transaction(function () use ($order, $actor, $note): void {
-            $order->loadMissing('items');
+            $order->loadMissing('items.product');
 
             foreach ($order->items as $item) {
                 if (! $order->stock_deducted_at) {
+                    continue;
+                }
+
+                if ($item->product_status !== Product::STATUS_PUBLISHED || $item->product?->hasUnlimitedStock()) {
                     continue;
                 }
 
@@ -522,13 +526,24 @@ class OrderService
 
             $variant = ProductVariant::query()
                 ->whereKey($item->product_variant_id)
+                ->with('product')
                 ->lockForUpdate()
                 ->first();
 
-            if (! $variant || ! $variant->is_active || $variant->stock < $item->quantity) {
+            $product = $variant?->product;
+
+            if (! $variant || ! $variant->is_active || ($product?->usesStockLimit() !== false && $variant->stock < $item->quantity)) {
                 throw ValidationException::withMessages([
                     'cart' => "SKU {$item->variant_sku} 库存不足，无法确认收款。",
                 ]);
+            }
+
+            if ($product?->hasUnlimitedStock()) {
+                $item->update([
+                    'status' => $order->requires_shipping ? Order::STATUS_PENDING_SHIPMENT : Order::STATUS_PAID,
+                ]);
+
+                continue;
             }
 
             $variant->decrement('stock', $item->quantity);
@@ -548,7 +563,6 @@ class OrderService
                 'note' => $order->order_number,
             ]);
 
-            $product = $variant->product()->first();
             if ($product?->status === Product::STATUS_PUBLISHED && $product->activeVariants()->sum('stock') <= 0) {
                 $product->update(['status' => Product::STATUS_SOLD_OUT]);
             }

@@ -110,6 +110,19 @@ class AdminAccess
                 self::ROLE_FINANCE,
                 self::ROLE_SALES,
             ],
+            'coupons.issue_request' => [
+                self::ROLE_SUPPORT,
+            ],
+            'coupons.issue' => [
+                self::ROLE_OPERATOR,
+                self::ROLE_FINANCE,
+                self::ROLE_SALES,
+            ],
+            'approvals.review' => [
+                self::ROLE_OPERATOR,
+                self::ROLE_FINANCE,
+                self::ROLE_SALES,
+            ],
             'after_sales.resolve' => [
                 self::ROLE_SUPPORT,
                 self::ROLE_FINANCE,
@@ -126,6 +139,7 @@ class AdminAccess
     {
         return match ($role) {
             self::ROLE_OPERATOR => [
+                'approvals',
                 'catalog',
                 'orders',
                 'customers',
@@ -139,6 +153,7 @@ class AdminAccess
                 'reports',
             ],
             self::ROLE_FINANCE => [
+                'approvals',
                 'orders',
                 'payments',
                 'coupons',
@@ -154,6 +169,7 @@ class AdminAccess
                 'procurement',
             ],
             self::ROLE_SALES => [
+                'approvals',
                 'orders',
                 'customers',
                 'coupons',

@@ -25,12 +25,14 @@ class MediaAsset extends Model
     public const USAGE_RESOURCE = 'resource';
     public const USAGE_BACKGROUND = 'background';
     public const USAGE_FORUM = 'forum';
+    public const USAGE_AI_REFERENCE = 'ai_reference';
     public const LIBRARY_SITE = 'site';
     public const LIBRARY_FORUM_USER = 'forum_user';
 
     protected $fillable = [
         'name',
         'path',
+        'content_hash',
         'disk',
         'mime_type',
         'size',

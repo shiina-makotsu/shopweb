@@ -8,6 +8,7 @@ use App\Filament\Resources\AfterSalesRequestResource\Pages\ListAfterSalesRequest
 use App\Models\AfterSalesRequest;
 use App\Models\Coupon;
 use App\Models\UserCoupon;
+use App\Services\BackofficeApprovalService;
 use App\Services\CouponService;
 use App\Support\AdminAccess;
 use App\Support\Money;
@@ -159,15 +160,7 @@ class AfterSalesRequestResource extends Resource
                         Textarea::make('admin_note')->label('审批备注')->rows(4),
                     ])
                     ->visible(fn (AfterSalesRequest $record): bool => AdminAccess::canAction('after_sales.refund') && $record->refund_status === AfterSalesRequest::REFUND_REQUESTED)
-                    ->action(fn (AfterSalesRequest $record, array $data) => $record->update([
-                        'status' => AfterSalesRequest::STATUS_RESOLVED,
-                        'resolution_type' => AfterSalesRequest::RESOLUTION_REFUND,
-                        'refund_status' => AfterSalesRequest::REFUND_APPROVED,
-                        'refund_reviewed_by_id' => auth()->id(),
-                        'refund_reviewed_at' => now(),
-                        'admin_note' => static::appendNote($record->admin_note, $data['admin_note'] ?? null),
-                        'resolved_at' => now(),
-                    ])),
+                    ->action(fn (AfterSalesRequest $record, array $data) => app(BackofficeApprovalService::class)->approveRefundRequest($record, auth()->user(), $data['admin_note'] ?? null)),
                 Action::make('rejectRefund')
                     ->label('驳回退款')
                     ->icon(Heroicon::OutlinedXCircle)
@@ -177,13 +170,7 @@ class AfterSalesRequestResource extends Resource
                         Textarea::make('admin_note')->label('驳回原因')->rows(4)->required(),
                     ])
                     ->visible(fn (AfterSalesRequest $record): bool => AdminAccess::canAction('after_sales.refund') && $record->refund_status === AfterSalesRequest::REFUND_REQUESTED)
-                    ->action(fn (AfterSalesRequest $record, array $data) => $record->update([
-                        'status' => AfterSalesRequest::STATUS_CONTACTING,
-                        'refund_status' => AfterSalesRequest::REFUND_REJECTED,
-                        'refund_reviewed_by_id' => auth()->id(),
-                        'refund_reviewed_at' => now(),
-                        'admin_note' => static::appendNote($record->admin_note, $data['admin_note'] ?? null),
-                    ])),
+                    ->action(fn (AfterSalesRequest $record, array $data) => app(BackofficeApprovalService::class)->rejectRefundRequest($record, auth()->user(), $data['admin_note'] ?? null)),
                 Action::make('resolve')
                     ->label('快速处理')
                     ->icon(Heroicon::OutlinedCheck)
@@ -222,14 +209,23 @@ class AfterSalesRequestResource extends Resource
                             $coupon = Coupon::query()->find($data['coupon_id']);
 
                             if ($coupon) {
-                                app(CouponService::class)->issueToUser(
-                                    $coupon,
-                                    $record->user,
-                                    UserCoupon::SOURCE_AFTER_SALES,
-                                    auth()->user(),
-                                    $record->id,
-                                    '售后补偿',
-                                );
+                                if (AdminAccess::canAction('coupons.issue')) {
+                                    app(CouponService::class)->issueToUser(
+                                        $coupon,
+                                        $record->user,
+                                        UserCoupon::SOURCE_AFTER_SALES,
+                                        auth()->user(),
+                                        $record->id,
+                                        '售后补偿',
+                                    );
+                                } else {
+                                    app(BackofficeApprovalService::class)->requestCouponForAfterSales(
+                                        $record,
+                                        $coupon,
+                                        auth()->user(),
+                                        $data['admin_note'] ?? null,
+                                    );
+                                }
                             }
                         }
                     }),

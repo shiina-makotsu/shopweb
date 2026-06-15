@@ -81,6 +81,8 @@ class SiteSetting extends Model
         'ai_default_chat_endpoint',
         'ai_default_chat_api_key',
         'ai_default_user_quota_k',
+        'profit_formula',
+        'ai_trash_retention_days',
     ];
 
     protected function casts(): array

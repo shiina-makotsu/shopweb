@@ -88,6 +88,7 @@ class EditSupportChatSession extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
+            ...SupportChatSessionResource::approvalActions($this->record),
             Action::make('assign')
                 ->label('接待此会话')
                 ->color('info')

@@ -6,9 +6,14 @@ use App\Filament\Concerns\ChecksAdminAccess;
 use App\Filament\Resources\CustomerResource\Pages\CreateCustomer;
 use App\Filament\Resources\CustomerResource\Pages\EditCustomer;
 use App\Filament\Resources\CustomerResource\Pages\ListCustomers;
+use App\Models\Coupon;
 use App\Models\User;
+use App\Models\UserCoupon;
+use App\Services\CouponService;
+use App\Support\AdminAccess;
 use App\Support\Money;
 use App\Support\RegexSearch;
+use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\DateTimePicker;
@@ -196,6 +201,31 @@ class CustomerResource extends Resource
             ])
             ->defaultSort('created_at', 'desc')
             ->recordActions([
+                Action::make('issueCoupon')
+                    ->label('发放优惠码')
+                    ->icon(Heroicon::OutlinedTicket)
+                    ->visible(fn (): bool => AdminAccess::canAction('coupons.issue'))
+                    ->form([
+                        Select::make('coupon_id')
+                            ->label('优惠码')
+                            ->options(fn (): array => \App\Filament\Resources\CouponResource::couponOptions())
+                            ->searchable()
+                            ->preload()
+                            ->required(),
+                        TextInput::make('note')->label('备注')->maxLength(255),
+                    ])
+                    ->action(function (User $record, array $data): void {
+                        $coupon = Coupon::query()->findOrFail($data['coupon_id']);
+
+                        app(CouponService::class)->issueToUser(
+                            $coupon,
+                            $record,
+                            UserCoupon::SOURCE_ADMIN,
+                            auth()->user(),
+                            null,
+                            $data['note'] ?? null,
+                        );
+                    }),
                 EditAction::make()
                     ->url(fn (User $record): string => static::getUrl('edit', ['record' => $record->getKey()])),
             ])

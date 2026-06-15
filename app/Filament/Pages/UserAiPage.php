@@ -48,6 +48,7 @@ class UserAiPage extends Page implements HasSchemas
             'ai_default_chat_endpoint',
             'ai_default_chat_api_key',
             'ai_default_user_quota_k',
+            'ai_trash_retention_days',
         ]));
 
         $firstUser = User::query()->where('role', 'customer')->orderBy('id')->first();
@@ -95,6 +96,13 @@ class UserAiPage extends Page implements HasSchemas
                             ->numeric()
                             ->minValue(0)
                             ->default(100),
+                        TextInput::make('ai_trash_retention_days')
+                            ->label('AI 回收站保留天数')
+                            ->numeric()
+                            ->minValue(1)
+                            ->maxValue(365)
+                            ->default(30)
+                            ->helperText('用户删除的 AI 生图任务和聊天会话会先进入回收站，超过该天数后自动清理。'),
                     ])
                     ->columns(2),
             ]);

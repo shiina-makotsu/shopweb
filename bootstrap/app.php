@@ -3,6 +3,7 @@
 use App\Http\Middleware\EnsureInstalled;
 use App\Http\Middleware\UseRelativeUrls;
 use Illuminate\Foundation\Application;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
@@ -14,8 +15,12 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withCommands([
+        App\Console\Commands\PruneAiTrashCommand::class,
         App\Console\Commands\ShopInstallCommand::class,
     ])
+    ->withSchedule(function (Schedule $schedule): void {
+        $schedule->command('shop:ai-trash-prune')->dailyAt('03:20')->withoutOverlapping();
+    })
     ->withMiddleware(function (Middleware $middleware): void {
         $trustedProxies = trim((string) env('TRUSTED_PROXIES', '*'));
         $trustedProxyList = match (true) {

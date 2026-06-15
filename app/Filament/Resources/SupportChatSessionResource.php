@@ -5,13 +5,19 @@ namespace App\Filament\Resources;
 use App\Filament\Concerns\ChecksAdminAccess;
 use App\Filament\Resources\SupportChatSessionResource\Pages\EditSupportChatSession;
 use App\Filament\Resources\SupportChatSessionResource\Pages\ListSupportChatSessions;
+use App\Models\Coupon;
 use App\Models\SupportChatSession;
+use App\Services\BackofficeApprovalService;
 use App\Services\SupportChatService;
+use App\Support\AdminAccess;
+use App\Support\MoneyInput;
 use App\Support\RegexSearch;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\Placeholder;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
@@ -42,6 +48,19 @@ class SupportChatSessionResource extends Resource
     public static function canDelete(Model $record): bool
     {
         return false;
+    }
+
+    public static function canAccess(): bool
+    {
+        return AdminAccess::can(static::$permissionArea)
+            || AdminAccess::canAction('coupons.issue')
+            || AdminAccess::canAction('after_sales.refund')
+            || AdminAccess::canAction('approvals.review');
+    }
+
+    public static function canViewAny(): bool
+    {
+        return static::canAccess();
     }
 
     public static function getEloquentQuery(): Builder
@@ -96,6 +115,7 @@ class SupportChatSessionResource extends Resource
             ->defaultSort('last_message_at', 'desc')
             ->recordActions([
                 EditAction::make(),
+                ...static::approvalActions(),
                 Action::make('assign')
                     ->label('接待')
                     ->color('info')
@@ -115,6 +135,108 @@ class SupportChatSessionResource extends Resource
                     ->visible(fn (SupportChatSession $record): bool => ! $record->isClosed() && $record->status !== SupportChatSession::STATUS_ENDED)
                     ->action(fn (SupportChatSession $record) => app(SupportChatService::class)->end($record, auth()->user())),
             ]);
+    }
+
+    /**
+     * @return array<int, Action>
+     */
+    public static function approvalActions(?SupportChatSession $fixedRecord = null): array
+    {
+        return [
+            Action::make('requestCoupon')
+                ->label('申请优惠码')
+                ->icon(Heroicon::OutlinedTicket)
+                ->color('warning')
+                ->visible(fn (?SupportChatSession $record = null): bool => static::resolveActionRecord($record, $fixedRecord)?->user_id
+                    && ! AdminAccess::canAction('coupons.issue')
+                    && AdminAccess::canAction('coupons.issue_request'))
+                ->form([
+                    Select::make('coupon_id')
+                        ->label('优惠码')
+                        ->options(fn (): array => CouponResource::couponOptions())
+                        ->searchable()
+                        ->preload()
+                        ->required(),
+                    Textarea::make('note')->label('申请说明')->rows(4)->required(),
+                ])
+                ->action(function (array $data, ?SupportChatSession $record = null) use ($fixedRecord): void {
+                    $record = static::resolveActionRecord($record, $fixedRecord);
+                    $coupon = Coupon::query()->findOrFail($data['coupon_id']);
+
+                    app(BackofficeApprovalService::class)->requestCouponFromChat(
+                        $record,
+                        $coupon,
+                        auth()->user(),
+                        $data['note'] ?? null,
+                    );
+                }),
+            Action::make('issueCoupon')
+                ->label('发放优惠码')
+                ->icon(Heroicon::OutlinedTicket)
+                ->color('success')
+                ->visible(fn (?SupportChatSession $record = null): bool => (bool) static::resolveActionRecord($record, $fixedRecord)?->user_id && AdminAccess::canAction('coupons.issue'))
+                ->form([
+                    Select::make('coupon_id')
+                        ->label('优惠码')
+                        ->options(fn (): array => CouponResource::couponOptions())
+                        ->searchable()
+                        ->preload()
+                        ->required(),
+                    Textarea::make('note')->label('发放说明')->rows(4),
+                ])
+                ->action(function (array $data, ?SupportChatSession $record = null) use ($fixedRecord): void {
+                    $record = static::resolveActionRecord($record, $fixedRecord);
+                    $coupon = Coupon::query()->findOrFail($data['coupon_id']);
+
+                    app(BackofficeApprovalService::class)->issueCouponForChat(
+                        $record,
+                        $coupon,
+                        auth()->user(),
+                        $data['note'] ?? null,
+                    );
+                }),
+            Action::make('requestRefund')
+                ->label('申请退款')
+                ->icon(Heroicon::OutlinedReceiptRefund)
+                ->color('warning')
+                ->visible(fn (?SupportChatSession $record = null): bool => (bool) static::resolveActionRecord($record, $fixedRecord)?->user_id
+                    && (bool) static::resolveActionRecord($record, $fixedRecord)?->order_id
+                    && ! AdminAccess::canAction('after_sales.refund')
+                    && AdminAccess::canAction('after_sales.request_refund'))
+                ->form([
+                    MoneyInput::cents(TextInput::make('refund_amount_cents')->label('退款金额（元）')->required()),
+                    Textarea::make('note')->label('申请说明')->rows(4)->required(),
+                ])
+                ->action(fn (array $data, ?SupportChatSession $record = null) => app(BackofficeApprovalService::class)->requestRefundFromChat(
+                    static::resolveActionRecord($record, $fixedRecord),
+                    auth()->user(),
+                    (int) $data['refund_amount_cents'],
+                    $data['note'] ?? null,
+                )),
+            Action::make('approveRefund')
+                ->label('直接退款')
+                ->icon(Heroicon::OutlinedReceiptRefund)
+                ->color('danger')
+                ->requiresConfirmation()
+                ->visible(fn (?SupportChatSession $record = null): bool => (bool) static::resolveActionRecord($record, $fixedRecord)?->user_id
+                    && (bool) static::resolveActionRecord($record, $fixedRecord)?->order_id
+                    && AdminAccess::canAction('after_sales.refund'))
+                ->form([
+                    MoneyInput::cents(TextInput::make('refund_amount_cents')->label('退款金额（元）')->required()),
+                    Textarea::make('note')->label('退款说明')->rows(4),
+                ])
+                ->action(fn (array $data, ?SupportChatSession $record = null) => app(BackofficeApprovalService::class)->approveRefundForChat(
+                    static::resolveActionRecord($record, $fixedRecord),
+                    auth()->user(),
+                    (int) $data['refund_amount_cents'],
+                    $data['note'] ?? null,
+                )),
+        ];
+    }
+
+    private static function resolveActionRecord(?SupportChatSession $record, ?SupportChatSession $fixedRecord): SupportChatSession
+    {
+        return $fixedRecord ?? $record ?? throw new \RuntimeException('Support chat session record is required.');
     }
 
     public static function getPages(): array

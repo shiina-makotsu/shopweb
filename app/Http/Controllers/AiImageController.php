@@ -2,6 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AiUserConfig;
+use App\Models\AiChatSession;
+use App\Models\AiImageTask;
+use App\Models\MediaAsset;
 use App\Models\SiteSetting;
 use App\Services\AiUsageService;
 use Illuminate\Http\Client\ConnectionException;
@@ -9,6 +13,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
@@ -33,16 +38,20 @@ class AiImageController extends Controller
         $data = $request->validate([
             'feature' => ['nullable', 'in:image,chat'],
             'config_mode' => ['nullable', 'in:default,custom'],
+            'config_id' => ['nullable', 'integer'],
             'config_name' => ['nullable', 'string', 'max:100'],
             'endpoint' => ['nullable', 'url:http,https', 'max:2048'],
             'api_key' => ['nullable', 'string', 'max:4096'],
+            'chat_endpoint' => ['nullable', 'url:http,https', 'max:2048'],
+            'chat_api_key' => ['nullable', 'string', 'max:4096'],
         ]);
         $feature = ($data['feature'] ?? 'image') === 'chat' ? 'chat' : 'image';
+        $data = $this->applySavedUserConfig($request, $data);
 
         $config = $this->usage->resolveConfig($request->user(), $data, $feature);
         $baseUrl = $this->apiBaseUrl((string) $config['endpoint']);
         try {
-            $response = Http::timeout(30)
+            $response = $this->aiHttp(30)
                 ->acceptJson()
                 ->withHeaders($this->apiHeaders($config['api_key'] ?? null))
                 ->get($baseUrl.'/models');
@@ -67,58 +76,496 @@ class AiImageController extends Controller
         ]);
     }
 
+    public function configs(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        return response()->json([
+            'configs' => AiUserConfig::query()
+                ->whereBelongsTo($user)
+                ->latest()
+                ->get()
+                ->map(fn (AiUserConfig $config): array => $this->publicAiConfig($config))
+                ->values(),
+        ]);
+    }
+
+    public function saveConfig(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'config_id' => ['nullable', 'integer'],
+            'name' => ['required', 'string', 'max:100'],
+            'image_endpoint' => ['nullable', 'url:http,https', 'max:2048'],
+            'image_api_key' => ['nullable', 'string', 'max:4096'],
+            'chat_endpoint' => ['nullable', 'url:http,https', 'max:2048'],
+            'chat_api_key' => ['nullable', 'string', 'max:4096'],
+            'image_model' => ['nullable', 'string', 'max:255'],
+            'chat_model' => ['nullable', 'string', 'max:255'],
+            'is_default' => ['nullable', 'boolean'],
+        ]);
+
+        if (blank($data['image_endpoint'] ?? null) && blank($data['chat_endpoint'] ?? null)) {
+            throw ValidationException::withMessages([
+                'image_endpoint' => 'Please fill at least one image or chat API URL.',
+            ]);
+        }
+
+        $user = $request->user();
+        $config = AiUserConfig::query()
+            ->whereBelongsTo($user)
+            ->when($data['config_id'] ?? null, fn ($query, int $id) => $query->whereKey($id))
+            ->first();
+
+        if (! $config) {
+            $config = new AiUserConfig(['user_id' => $user->id]);
+        }
+
+        $imageApiKey = filled($data['image_api_key'] ?? null)
+            ? (string) $data['image_api_key']
+            : $config->image_api_key;
+        $chatApiKey = filled($data['chat_api_key'] ?? null)
+            ? (string) $data['chat_api_key']
+            : $config->chat_api_key;
+
+        $config->fill([
+            'name' => trim((string) $data['name']),
+            'image_endpoint' => blank($data['image_endpoint'] ?? null) ? null : trim((string) $data['image_endpoint']),
+            'image_api_key' => $imageApiKey,
+            'chat_endpoint' => blank($data['chat_endpoint'] ?? null) ? null : trim((string) $data['chat_endpoint']),
+            'chat_api_key' => $chatApiKey,
+            'image_model' => blank($data['image_model'] ?? null) ? null : trim((string) $data['image_model']),
+            'chat_model' => blank($data['chat_model'] ?? null) ? null : trim((string) $data['chat_model']),
+            'is_default' => (bool) ($data['is_default'] ?? false),
+        ]);
+        $config->save();
+
+        if ($config->is_default) {
+            AiUserConfig::query()
+                ->whereBelongsTo($user)
+                ->whereKeyNot($config->id)
+                ->update(['is_default' => false]);
+        }
+
+        return response()->json([
+            'config' => $this->publicAiConfig($config->fresh()),
+        ]);
+    }
+
+    public function deleteConfig(Request $request, AiUserConfig $config): JsonResponse
+    {
+        abort_unless($config->user_id === $request->user()?->id, 403);
+
+        $config->delete();
+
+        return response()->json(['deleted' => true]);
+    }
+
+    public function state(Request $request): JsonResponse
+    {
+        $this->usage->purgeExpiredAiTrash();
+        $user = $request->user();
+
+        return response()->json([
+            'tasks' => AiImageTask::query()
+                ->whereBelongsTo($user)
+                ->whereNull('deleted_at')
+                ->latest()
+                ->get()
+                ->map(fn (AiImageTask $task): array => $task->toWorkbenchArray())
+                ->values(),
+            'trashed_tasks' => AiImageTask::query()
+                ->whereBelongsTo($user)
+                ->whereNotNull('deleted_at')
+                ->latest('deleted_at')
+                ->get()
+                ->map(fn (AiImageTask $task): array => $task->toWorkbenchArray())
+                ->values(),
+            'chats' => AiChatSession::query()
+                ->whereBelongsTo($user)
+                ->whereNull('deleted_at')
+                ->with('messages')
+                ->latest('updated_at')
+                ->get()
+                ->map(fn (AiChatSession $session): array => $session->toWorkbenchArray())
+                ->values(),
+            'trashed_chats' => AiChatSession::query()
+                ->whereBelongsTo($user)
+                ->whereNotNull('deleted_at')
+                ->with('messages')
+                ->latest('deleted_at')
+                ->get()
+                ->map(fn (AiChatSession $session): array => $session->toWorkbenchArray())
+                ->values(),
+            'trash_retention_days' => $this->usage->aiTrashRetentionDays(),
+        ]);
+    }
+
+    public function saveTask(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'id' => ['nullable', 'string', 'max:64'],
+            'status' => ['required', 'in:running,done,failed'],
+            'stream' => ['nullable', 'boolean'],
+            'prompt' => ['nullable', 'string', 'max:5000'],
+            'submittedPrompt' => ['nullable', 'string', 'max:8000'],
+            'references' => ['nullable', 'array'],
+            'config' => ['nullable', 'array'],
+            'images' => ['nullable', 'array'],
+            'partials' => ['nullable', 'array'],
+            'error' => ['nullable', 'string', 'max:8000'],
+            'createdAt' => ['nullable', 'date'],
+            'updatedAt' => ['nullable', 'date'],
+            'elapsedMs' => ['nullable', 'integer', 'min:0'],
+            'actualWidth' => ['nullable', 'integer', 'min:0'],
+            'actualHeight' => ['nullable', 'integer', 'min:0'],
+            'meta' => ['nullable', 'array'],
+        ]);
+
+        $task = AiImageTask::query()
+            ->whereBelongsTo($request->user())
+            ->where('public_id', (string) ($data['id'] ?? ''))
+            ->first();
+
+        if (! $task) {
+            $task = new AiImageTask([
+                'user_id' => $request->user()->id,
+                'public_id' => filled($data['id'] ?? null) ? (string) $data['id'] : null,
+            ]);
+        }
+
+        $task->fill([
+            'status' => $data['status'],
+            'stream' => (bool) ($data['stream'] ?? false),
+            'prompt' => $data['prompt'] ?? '',
+            'submitted_prompt' => $data['submittedPrompt'] ?? ($data['prompt'] ?? ''),
+            'references' => $data['references'] ?? [],
+            'config' => $data['config'] ?? [],
+            'images' => $data['images'] ?? [],
+            'partials' => $data['partials'] ?? [],
+            'error' => $data['error'] ?? '',
+            'elapsed_ms' => (int) ($data['elapsedMs'] ?? 0),
+            'actual_width' => $data['actualWidth'] ?? null,
+            'actual_height' => $data['actualHeight'] ?? null,
+            'meta' => $data['meta'] ?? [],
+        ]);
+        if (! $task->exists && filled($data['createdAt'] ?? null)) {
+            $task->created_at = $data['createdAt'];
+        }
+
+        if (filled($data['updatedAt'] ?? null)) {
+            $task->updated_at = $data['updatedAt'];
+        }
+        $task->save();
+
+        return response()->json([
+            'task' => $task->fresh()->toWorkbenchArray(),
+        ]);
+    }
+
+    public function deleteTask(Request $request, string $task): JsonResponse
+    {
+        $record = AiImageTask::query()
+            ->whereBelongsTo($request->user())
+            ->where('public_id', $task)
+            ->firstOrFail();
+
+        $record->forceFill(['deleted_at' => now()])->save();
+
+        return response()->json(['deleted' => true]);
+    }
+
+    public function restoreTask(Request $request, string $task): JsonResponse
+    {
+        $record = AiImageTask::query()
+            ->whereBelongsTo($request->user())
+            ->where('public_id', $task)
+            ->firstOrFail();
+
+        $record->forceFill(['deleted_at' => null])->save();
+
+        return response()->json([
+            'task' => $record->fresh()->toWorkbenchArray(),
+        ]);
+    }
+
+    public function saveChatSession(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'id' => ['nullable', 'string', 'max:64'],
+            'title' => ['nullable', 'string', 'max:255'],
+            'createdAt' => ['nullable', 'date'],
+            'updatedAt' => ['nullable', 'date'],
+            'messages' => ['nullable', 'array', 'max:200'],
+            'messages.*.role' => ['required', 'in:user,assistant,system'],
+            'messages.*.content' => ['nullable', 'string', 'max:20000'],
+            'messages.*.files' => ['nullable', 'array'],
+            'messages.*.model' => ['nullable', 'string', 'max:255'],
+            'messages.*.reasoning' => ['nullable', 'string', 'max:50'],
+            'messages.*.reasoningLabel' => ['nullable', 'string', 'max:50'],
+            'messages.*.error' => ['nullable', 'boolean'],
+        ]);
+
+        $session = AiChatSession::query()
+            ->whereBelongsTo($request->user())
+            ->where('public_id', (string) ($data['id'] ?? ''))
+            ->first();
+
+        if (! $session) {
+            $session = new AiChatSession([
+                'user_id' => $request->user()->id,
+                'public_id' => filled($data['id'] ?? null) ? (string) $data['id'] : null,
+            ]);
+        }
+
+        $session->fill([
+            'title' => trim((string) ($data['title'] ?? '')) ?: '新会话',
+        ]);
+        if (! $session->exists && filled($data['createdAt'] ?? null)) {
+            $session->created_at = $data['createdAt'];
+        }
+
+        if (filled($data['updatedAt'] ?? null)) {
+            $session->updated_at = $data['updatedAt'];
+        }
+        $session->save();
+
+        $session->messages()->delete();
+
+        foreach (array_slice($data['messages'] ?? [], -200) as $message) {
+            $session->messages()->create([
+                'user_id' => $request->user()->id,
+                'role' => $message['role'],
+                'content' => $message['content'] ?? '',
+                'files' => $message['files'] ?? [],
+                'model' => $message['model'] ?? '',
+                'reasoning_mode' => $message['reasoning'] ?? '',
+                'reasoning_label' => $message['reasoningLabel'] ?? '',
+                'is_error' => (bool) ($message['error'] ?? false),
+            ]);
+        }
+
+        $session->touch();
+
+        return response()->json([
+            'chat' => $session->fresh()->load('messages')->toWorkbenchArray(),
+        ]);
+    }
+
+    public function deleteChatSession(Request $request, string $session): JsonResponse
+    {
+        $record = AiChatSession::query()
+            ->whereBelongsTo($request->user())
+            ->where('public_id', $session)
+            ->firstOrFail();
+
+        $record->forceFill(['deleted_at' => now()])->save();
+
+        return response()->json(['deleted' => true]);
+    }
+
+    public function restoreChatSession(Request $request, string $session): JsonResponse
+    {
+        $record = AiChatSession::query()
+            ->whereBelongsTo($request->user())
+            ->where('public_id', $session)
+            ->with('messages')
+            ->firstOrFail();
+
+        $record->forceFill(['deleted_at' => null])->save();
+
+        return response()->json([
+            'chat' => $record->fresh()->load('messages')->toWorkbenchArray(),
+        ]);
+    }
+
+    public function uploadReference(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'reference_image' => ['required', 'image', 'max:10240'],
+        ]);
+
+        /** @var UploadedFile $file */
+        $file = $data['reference_image'];
+        $hash = hash_file('sha256', $file->getRealPath());
+        $asset = MediaAsset::query()
+            ->where('content_hash', $hash)
+            ->where('usage', MediaAsset::USAGE_AI_REFERENCE)
+            ->first();
+
+        if (! $asset) {
+            $extension = $file->guessExtension() ?: 'png';
+            $path = 'ai/references/'.$hash.'.'.$extension;
+            Storage::disk('public_uploads')->put($path, file_get_contents($file->getRealPath()) ?: '');
+            $asset = MediaAsset::query()->create([
+                'name' => $file->getClientOriginalName() ?: 'AI reference image',
+                'path' => $path,
+                'content_hash' => $hash,
+                'disk' => 'public_uploads',
+                'mime_type' => $file->getMimeType() ?: 'image/png',
+                'size' => $file->getSize(),
+                'usage' => MediaAsset::USAGE_AI_REFERENCE,
+                'library' => MediaAsset::LIBRARY_SITE,
+                'uploaded_by_id' => $request->user()?->id,
+            ]);
+        }
+
+        return response()->json([
+            'asset' => [
+                'id' => $asset->id,
+                'name' => $asset->name,
+                'path' => $asset->path,
+                'url' => $asset->url(),
+                'hash' => $asset->content_hash,
+            ],
+        ]);
+    }
+
     public function generate(Request $request): JsonResponse
     {
         $data = $this->validatedGenerationData($request);
-        $config = $this->usage->resolveConfig($request->user(), $data, 'image');
+        $data = $this->applySavedUserConfig($request, $data);
+        $usedMode = $this->initialImageApiMode($data);
+
+        try {
+            $config = $this->usage->resolveConfig($request->user(), $data, 'image');
+        } catch (ValidationException $exception) {
+            if ($usedMode !== 'responses') {
+                throw $exception;
+            }
+
+            $config = $this->usage->resolveConfig($request->user(), $data, 'chat');
+        }
 
         if (($config['tracked'] ?? false) && $request->user()) {
-            $this->usage->assertWithinQuota($request->user());
+            $this->usage->assertWithinQuota($request->user(), $data);
         }
 
         $baseUrl = $this->apiBaseUrl((string) $config['endpoint']);
         $payload = $this->generationPayload($data);
-        $references = $request->file('reference_images', []);
+        $references = $this->generationReferenceFiles($request, $data);
         $mask = $request->file('mask_image');
+        $responsesConfig = null;
+        $usedConfig = $config;
+        $usedBaseUrl = $baseUrl;
+        $timeout = (int) ($data['timeout_seconds'] ?? 600);
 
-        $makePendingRequest = fn () => Http::timeout((int) ($data['timeout_seconds'] ?? 600))
+        $resolveResponsesConfig = function (bool $required = false) use ($request, $data, &$responsesConfig): ?array {
+            if ($responsesConfig !== null) {
+                return $responsesConfig;
+            }
+
+            try {
+                $responsesConfig = $this->usage->resolveConfig($request->user(), $data, 'chat');
+            } catch (ValidationException $exception) {
+                if ($required) {
+                    throw $exception;
+                }
+
+                return null;
+            }
+
+            return $responsesConfig;
+        };
+
+        $makePendingRequest = fn (array $requestConfig) => $this->aiHttp($timeout)
             ->acceptJson()
-            ->withHeaders($this->apiHeaders($config['api_key'] ?? null));
+            ->withHeaders($this->apiHeaders($requestConfig['api_key'] ?? null));
+
+        $sendAttempt = function (string $mode, bool $requiredResponses = false) use ($config, &$payload, $references, $mask, $makePendingRequest, $resolveResponsesConfig, &$usedConfig, &$usedBaseUrl): ?\Illuminate\Http\Client\Response {
+            $attemptConfig = $mode === 'responses' ? $resolveResponsesConfig($requiredResponses) : $config;
+
+            if ($attemptConfig === null) {
+                return null;
+            }
+
+            $usedConfig = $attemptConfig;
+            $usedBaseUrl = $this->apiBaseUrl((string) $attemptConfig['endpoint']);
+
+            return $this->sendImageGenerationByMode($makePendingRequest($attemptConfig), $usedBaseUrl, $payload, $references, $mask, $mode);
+        };
 
         $startedAt = microtime(true);
         try {
-            $response = $this->sendImageGenerationRequest($makePendingRequest(), $baseUrl, $payload, $references, $mask);
+            $response = $sendAttempt($usedMode, $usedMode === 'responses');
         } catch (ConnectionException $exception) {
             return response()->json([
                 'message' => '图片生成失败：'.$exception->getMessage(),
             ], 502);
         }
 
+        if ($response === null) {
+            return response()->json([
+                'message' => 'Responses API image generation requires a chat/Responses API URL and key.',
+            ], 422);
+        }
+
         $requestMs = (int) round((microtime(true) - $startedAt) * 1000);
         $providerPayload = (array) $response->json();
 
-        if ($response->failed()) {
-            $fallbackModel = $this->fallbackImageModel($baseUrl, $config['api_key'] ?? null, $providerPayload, trim((string) $data['model']));
+        if ($response->failed() && $this->shouldTryAlternateImageMode($data, $providerPayload, $usedMode)) {
+            $failedMode = $usedMode;
 
-            if ($fallbackModel !== null) {
-                $data['model'] = $fallbackModel;
-                $payload['model'] = $fallbackModel;
+            foreach ($this->fallbackImageApiModes($data, $failedMode) as $fallbackMode) {
+                if ($fallbackMode === $failedMode) {
+                    continue;
+                }
+
+                $usedMode = $fallbackMode;
                 $startedAt = microtime(true);
 
                 try {
-                    $response = $this->sendImageGenerationRequest($makePendingRequest(), $baseUrl, $payload, $references, $mask);
+                    $fallbackResponse = $sendAttempt($usedMode);
                 } catch (ConnectionException $exception) {
                     return response()->json([
                         'message' => '图片生成失败：'.$exception->getMessage(),
                     ], 502);
                 }
 
+                if ($fallbackResponse === null) {
+                    continue;
+                }
+
+                $response = $fallbackResponse;
                 $requestMs = (int) round((microtime(true) - $startedAt) * 1000);
                 $providerPayload = (array) $response->json();
 
                 if (! $response->failed()) {
-                    $config['fallback_model'] = $fallbackModel;
-                    $providerPayload['_shopweb_fallback_model'] = $fallbackModel;
+                    break;
+                }
+            }
+        }
+
+        if ($response->failed()) {
+            $fallbackModels = $this->fallbackImageModels($baseUrl, $config['api_key'] ?? null, $providerPayload, trim((string) $data['model']));
+
+            foreach ($fallbackModels as $fallbackModel) {
+                foreach ($this->fallbackImageApiModes($data, $usedMode) as $fallbackMode) {
+                    $data['model'] = $fallbackModel;
+                    $payload['model'] = $fallbackModel;
+                    $usedMode = $fallbackMode;
+                    $startedAt = microtime(true);
+
+                    try {
+                        $fallbackResponse = $sendAttempt($usedMode);
+                    } catch (ConnectionException $exception) {
+                        return response()->json([
+                            'message' => '图片生成失败：'.$exception->getMessage(),
+                        ], 502);
+                    }
+
+                    if ($fallbackResponse === null) {
+                        continue;
+                    }
+
+                    $response = $fallbackResponse;
+                    $requestMs = (int) round((microtime(true) - $startedAt) * 1000);
+                    $providerPayload = (array) $response->json();
+
+                    if (! $response->failed()) {
+                        $usedConfig['fallback_model'] = $fallbackModel;
+                        $providerPayload['_shopweb_fallback_model'] = $fallbackModel;
+                        break 2;
+                    }
                 }
             }
         }
@@ -126,6 +573,8 @@ class AiImageController extends Controller
         if ($response->failed()) {
             return $this->providerErrorResponse($providerPayload, $response->status(), '图片生成失败。');
         }
+
+        $usedConfig['image_api_mode'] = $usedMode;
 
         $images = $this->extractImages($providerPayload);
 
@@ -135,7 +584,7 @@ class AiImageController extends Controller
             ], 502);
         }
 
-        $this->usage->record($request->user(), $data, $config, $providerPayload, $requestMs, metadata: [
+        $this->usage->record($request->user(), $data, $usedConfig, $providerPayload, $requestMs, metadata: [
             'feature' => 'image',
             'image_count' => count($images),
             'stream' => false,
@@ -143,31 +592,39 @@ class AiImageController extends Controller
 
         return response()->json([
             'images' => $images,
-            'meta' => $this->generationMeta($data, $baseUrl, $config),
+            'meta' => $this->generationMeta($data, $usedBaseUrl, $usedConfig),
         ]);
     }
 
     public function stream(Request $request): StreamedResponse
     {
         $data = $this->validatedGenerationData($request);
+        $data = $this->applySavedUserConfig($request, $data);
         $data['count'] = 1;
         $data['stream'] = true;
-        $config = $this->usage->resolveConfig($request->user(), $data, 'image');
+        $usedMode = $this->initialStreamImageApiMode($data);
+        $config = $this->usage->resolveConfig($request->user(), $data, $usedMode === 'responses' ? 'chat' : 'image');
 
         if (($config['tracked'] ?? false) && $request->user()) {
-            $this->usage->assertWithinQuota($request->user());
+            $this->usage->assertWithinQuota($request->user(), $data);
         }
 
         $baseUrl = $this->apiBaseUrl((string) $config['endpoint']);
         $payload = $this->generationPayload($data);
-        $references = $this->referenceAttachments($request->file('reference_images', []));
+        $referenceFiles = $this->generationReferenceFiles($request, $data);
+        $references = $this->referenceAttachments($referenceFiles);
         $mask = $this->uploadedAttachment($request->file('mask_image'), 'mask.png');
         $timeout = (int) ($data['timeout_seconds'] ?? 600);
         $headers = $this->apiHeaders($config['api_key'] ?? null);
         $user = $request->user();
         $usage = $this->usage;
+        if ($usedMode === 'responses') {
+            $payload = $this->responsesImagePayload($payload, $referenceFiles);
+            $references = [];
+            $mask = null;
+        }
 
-        return response()->stream(function () use ($baseUrl, $payload, $references, $mask, $timeout, $headers, $data, $config, $user, $usage): void {
+        return response()->stream(function () use ($baseUrl, $payload, $references, $mask, $timeout, $headers, $data, $config, $user, $usage, $usedMode): void {
             $emit = fn (string $event, array $payload): bool => $this->emitSse($event, $payload);
 
             $emit('started', [
@@ -177,7 +634,7 @@ class AiImageController extends Controller
             $startedAt = microtime(true);
 
             try {
-                $images = $this->streamImages($baseUrl, $payload, $references, $mask, $timeout, $headers, $emit);
+                $images = $this->streamImages($baseUrl, $payload, $references, $mask, $timeout, $headers, $emit, $usedMode);
                 $requestMs = (int) round((microtime(true) - $startedAt) * 1000);
 
                 if ($images === []) {
@@ -190,7 +647,10 @@ class AiImageController extends Controller
 
                 $emit('done', [
                     'images' => $images,
-                    'meta' => $this->generationMeta($data, $baseUrl, $config),
+                    'meta' => $this->generationMeta($data, $baseUrl, [
+                        ...$config,
+                        'image_api_mode' => $usedMode,
+                    ]),
                 ]);
 
                 $usage->record($user, $data, $config, [], $requestMs, metadata: [
@@ -214,10 +674,14 @@ class AiImageController extends Controller
     public function chat(Request $request): JsonResponse
     {
         $data = $this->validatedChatData($request);
+        $data = $this->applySavedUserConfig($request, $data);
         $config = $this->usage->resolveConfig($request->user(), $data, 'chat');
 
         if (($config['tracked'] ?? false) && $request->user()) {
-            $this->usage->assertWithinQuota($request->user());
+            $this->usage->assertWithinQuota($request->user(), [
+                ...$data,
+                'count' => 1,
+            ]);
         }
 
         $baseUrl = $this->apiBaseUrl((string) $config['endpoint']);
@@ -225,7 +689,7 @@ class AiImageController extends Controller
 
         $startedAt = microtime(true);
         try {
-            $response = Http::timeout((int) ($data['timeout_seconds'] ?? 600))
+            $response = $this->aiHttp((int) ($data['timeout_seconds'] ?? 600))
                 ->acceptJson()
                 ->withHeaders($this->apiHeaders($config['api_key'] ?? null))
                 ->post($baseUrl.'/chat/completions', $payload);
@@ -274,12 +738,108 @@ class AiImageController extends Controller
         ]);
     }
 
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function applySavedUserConfig(Request $request, array $data): array
+    {
+        $configId = (int) ($data['config_id'] ?? 0);
+
+        if ($configId <= 0 || ! $request->user()) {
+            return $data;
+        }
+
+        $config = AiUserConfig::query()
+            ->whereBelongsTo($request->user())
+            ->whereKey($configId)
+            ->first();
+
+        if (! $config) {
+            throw ValidationException::withMessages([
+                'config_id' => 'AI config not found.',
+            ]);
+        }
+
+        $isChat = ($data['feature'] ?? null) === 'chat'
+            || array_key_exists('reasoning_mode', $data)
+            || array_key_exists('web_search', $data)
+            || array_key_exists('chat_files', $data);
+
+        return [
+            ...$data,
+            'config_mode' => 'custom',
+            'config_name' => $config->name,
+            'endpoint' => $config->image_endpoint ?: $config->chat_endpoint,
+            'api_key' => $config->image_api_key ?: $config->chat_api_key,
+            'chat_endpoint' => $config->chat_endpoint ?: $config->image_endpoint,
+            'chat_api_key' => $config->chat_api_key ?: $config->image_api_key,
+            'model' => $isChat
+                ? ($config->chat_model ?: ($data['model'] ?? null))
+                : ($config->image_model ?: ($data['model'] ?? null)),
+        ];
+    }
+
+    private function publicAiConfig(?AiUserConfig $config): array
+    {
+        if (! $config) {
+            return [];
+        }
+
+        return [
+            'id' => $config->id,
+            'name' => $config->name,
+            'image_endpoint' => $config->image_endpoint,
+            'chat_endpoint' => $config->chat_endpoint,
+            'image_model' => $config->image_model,
+            'chat_model' => $config->chat_model,
+            'is_default' => (bool) $config->is_default,
+            'has_image_key' => filled($config->image_api_key),
+            'has_chat_key' => filled($config->chat_api_key),
+        ];
+    }
+
     private function apiBaseUrl(string $endpoint): string
     {
         $url = $this->assertSafeEndpoint($endpoint);
         $url = rtrim($url, '/');
 
-        return preg_replace('#/(models|images/generations|images/edits|responses|chat/completions)$#', '', $url) ?: $url;
+        return preg_replace('#/(models|images/generations|images/edits|images|responses|chat/completions)$#', '', $url) ?: $url;
+    }
+
+    /**
+     * @return array<int, UploadedFile|array{name:string,content:string,mime_type:string}>
+     */
+    private function generationReferenceFiles(Request $request, array $data): array
+    {
+        $references = array_values($request->file('reference_images', []) ?: []);
+        $assetIds = collect($data['reference_asset_ids'] ?? [])
+            ->map(fn (mixed $id): int => (int) $id)
+            ->filter()
+            ->unique()
+            ->take(6 - count($references));
+
+        if ($assetIds->isEmpty()) {
+            return $references;
+        }
+
+        MediaAsset::query()
+            ->whereIn('id', $assetIds)
+            ->where('usage', MediaAsset::USAGE_AI_REFERENCE)
+            ->get()
+            ->each(function (MediaAsset $asset) use (&$references): void {
+                if ($asset->disk === 'external' || ! Storage::disk($asset->disk ?: 'public_uploads')->exists($asset->path)) {
+                    return;
+                }
+
+                $references[] = [
+                    'name' => $asset->name ?: basename($asset->path),
+                    'content' => Storage::disk($asset->disk ?: 'public_uploads')->get($asset->path),
+                    'mime_type' => $asset->mime_type ?: 'image/png',
+                ];
+            });
+
+        return array_slice($references, 0, 6);
     }
 
     /**
@@ -289,9 +849,12 @@ class AiImageController extends Controller
     {
         $data = $request->validate([
             'config_mode' => ['nullable', 'in:default,custom'],
+            'config_id' => ['nullable', 'integer'],
             'config_name' => ['nullable', 'string', 'max:100'],
             'endpoint' => ['nullable', 'url:http,https', 'max:2048'],
             'api_key' => ['nullable', 'string', 'max:4096'],
+            'chat_endpoint' => ['nullable', 'url:http,https', 'max:2048'],
+            'chat_api_key' => ['nullable', 'string', 'max:4096'],
             'model' => ['required', 'string', 'max:255'],
             'prompt' => ['required', 'string', 'max:5000'],
             'negative_prompt' => ['nullable', 'string', 'max:2000'],
@@ -306,6 +869,7 @@ class AiImageController extends Controller
             'transparent' => ['nullable', 'boolean'],
             'output_format' => ['nullable', 'in:auto,png,jpeg,webp'],
             'response_format' => ['nullable', 'in:auto,url,b64_json'],
+            'image_api_mode' => ['nullable', 'in:auto,images,images_root,responses'],
             'seed' => ['nullable', 'integer', 'min:0', 'max:4294967295'],
             'steps' => ['nullable', 'integer', 'min:1', 'max:150'],
             'guidance_scale' => ['nullable', 'numeric', 'min:0', 'max:30'],
@@ -314,6 +878,8 @@ class AiImageController extends Controller
             'timeout_seconds' => ['nullable', 'integer', 'min:30', 'max:1200'],
             'reference_images' => ['nullable', 'array', 'max:6'],
             'reference_images.*' => ['image', 'max:10240'],
+            'reference_asset_ids' => ['nullable', 'array', 'max:6'],
+            'reference_asset_ids.*' => ['integer'],
             'mask_image' => ['nullable', 'image', 'max:10240'],
         ]);
 
@@ -333,9 +899,12 @@ class AiImageController extends Controller
     {
         return $request->validate([
             'config_mode' => ['nullable', 'in:default,custom'],
+            'config_id' => ['nullable', 'integer'],
             'config_name' => ['nullable', 'string', 'max:100'],
             'endpoint' => ['nullable', 'url:http,https', 'max:2048'],
             'api_key' => ['nullable', 'string', 'max:4096'],
+            'chat_endpoint' => ['nullable', 'url:http,https', 'max:2048'],
+            'chat_api_key' => ['nullable', 'string', 'max:4096'],
             'model' => ['required', 'string', 'max:255'],
             'prompt' => ['required', 'string', 'max:5000'],
             'reasoning_mode' => ['nullable', 'in:low,medium,high,ultra'],
@@ -383,6 +952,85 @@ class AiImageController extends Controller
     private function isPublicIp(string $ip): bool
     {
         return filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) !== false;
+    }
+
+    private function aiHttp(int $timeout): \Illuminate\Http\Client\PendingRequest
+    {
+        $request = Http::timeout($timeout)->connectTimeout(min(30, max(5, $timeout)));
+        $options = $this->aiHttpOptions();
+
+        return $options === [] ? $request : $request->withOptions($options);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function aiHttpOptions(): array
+    {
+        if (! (bool) config('services.ai_http.verify_ssl', true)) {
+            return ['verify' => false];
+        }
+
+        $caBundle = trim((string) config('services.ai_http.ca_bundle', ''));
+
+        if ($caBundle !== '') {
+            $path = base_path($caBundle);
+
+            if (! is_file($path)) {
+                $path = $caBundle;
+            }
+
+            if (is_file($path)) {
+                return ['verify' => $path];
+            }
+        }
+
+        if ((bool) config('services.ai_http.use_native_ca', true) && defined('CURLOPT_SSL_OPTIONS') && defined('CURLSSLOPT_NATIVE_CA')) {
+            return [
+                'curl' => [
+                    CURLOPT_SSL_OPTIONS => CURLSSLOPT_NATIVE_CA,
+                ],
+            ];
+        }
+
+        return [];
+    }
+
+    /**
+     * @return array<int, mixed>
+     */
+    private function aiCurlOptions(): array
+    {
+        if (! (bool) config('services.ai_http.verify_ssl', true)) {
+            return [
+                CURLOPT_SSL_VERIFYPEER => false,
+                CURLOPT_SSL_VERIFYHOST => 0,
+            ];
+        }
+
+        $caBundle = trim((string) config('services.ai_http.ca_bundle', ''));
+
+        if ($caBundle !== '') {
+            $path = base_path($caBundle);
+
+            if (! is_file($path)) {
+                $path = $caBundle;
+            }
+
+            if (is_file($path)) {
+                return [
+                    CURLOPT_CAINFO => $path,
+                ];
+            }
+        }
+
+        if ((bool) config('services.ai_http.use_native_ca', true) && defined('CURLOPT_SSL_OPTIONS') && defined('CURLSSLOPT_NATIVE_CA')) {
+            return [
+                CURLOPT_SSL_OPTIONS => CURLSSLOPT_NATIVE_CA,
+            ];
+        }
+
+        return [];
     }
 
     /**
@@ -527,6 +1175,79 @@ class AiImageController extends Controller
         return false;
     }
 
+    private function initialImageApiMode(array $data): string
+    {
+        return match ($data['image_api_mode'] ?? 'auto') {
+            'responses' => 'responses',
+            'images_root' => 'images_root',
+            default => 'images',
+        };
+    }
+
+    private function initialStreamImageApiMode(array $data): string
+    {
+        return match ($data['image_api_mode'] ?? 'auto') {
+            'images' => 'images',
+            'images_root' => 'images_root',
+            default => 'responses',
+        };
+    }
+
+    private function shouldTryAlternateImageMode(array $data, array $payload, string $usedMode): bool
+    {
+        if (($data['image_api_mode'] ?? 'auto') !== 'auto' || ! in_array($usedMode, ['images', 'images_root'], true)) {
+            return false;
+        }
+
+        return $this->shouldRetryWithListedModel($payload);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function fallbackImageApiModes(array $data, string $usedMode): array
+    {
+        if (($data['image_api_mode'] ?? 'auto') === 'images') {
+            return ['images'];
+        }
+
+        if (($data['image_api_mode'] ?? 'auto') === 'images_root') {
+            return ['images_root'];
+        }
+
+        if (($data['image_api_mode'] ?? 'auto') === 'responses') {
+            return ['responses'];
+        }
+
+        return collect([$usedMode, 'images_root', 'responses', 'images'])
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @param  array<int, UploadedFile>|UploadedFile|null  $references
+     */
+    private function sendImageGenerationByMode(
+        \Illuminate\Http\Client\PendingRequest $request,
+        string $baseUrl,
+        array $payload,
+        array|UploadedFile|null $references,
+        mixed $mask,
+        string $mode,
+    ): \Illuminate\Http\Client\Response {
+        if ($mode === 'responses') {
+            return $request->post($baseUrl.'/responses', $this->responsesImagePayload($payload, $references));
+        }
+
+        if ($mode === 'images_root') {
+            return $this->sendImageGenerationRequest($request, $baseUrl, $payload, $references, $mask, useRootImagesEndpoint: true);
+        }
+
+        return $this->sendImageGenerationRequest($request, $baseUrl, $payload, $references, $mask);
+    }
+
     /**
      * @param  array<string, mixed>  $payload
      * @param  array<int, UploadedFile>|UploadedFile|null  $references
@@ -537,19 +1258,22 @@ class AiImageController extends Controller
         array $payload,
         array|UploadedFile|null $references,
         mixed $mask,
+        bool $useRootImagesEndpoint = false,
     ): \Illuminate\Http\Client\Response {
         $references = $references instanceof UploadedFile ? [$references] : array_values($references ?? []);
 
         if ($references !== []) {
             foreach ($references as $index => $file) {
-                if (! $file instanceof UploadedFile) {
+                $attachment = $this->attachmentData($file, $index);
+
+                if ($attachment === null) {
                     continue;
                 }
 
                 $request = $request->attach(
                     count($references) === 1 ? 'image' : 'image[]',
-                    file_get_contents($file->getRealPath()),
-                    $file->getClientOriginalName() ?: 'reference-'.$index.'.png',
+                    $attachment['content'],
+                    $attachment['name'],
                 );
             }
 
@@ -561,34 +1285,161 @@ class AiImageController extends Controller
                 );
             }
 
-            return $request->post($baseUrl.'/images/edits', $payload);
+            return $request->post($baseUrl.($useRootImagesEndpoint ? '/images' : '/images/edits'), $payload);
         }
 
-        return $request->post($baseUrl.'/images/generations', $payload);
+        return $request->post($baseUrl.($useRootImagesEndpoint ? '/images' : '/images/generations'), $payload);
     }
 
-    private function fallbackImageModel(string $baseUrl, ?string $apiKey, array $payload, string $failedModel): ?string
+    /**
+     * @return array{name:string,content:string,mime_type:string}|null
+     */
+    private function attachmentData(mixed $file, int $index = 0): ?array
     {
-        if (! $this->shouldRetryWithListedModel($payload)) {
-            return null;
+        if ($file instanceof UploadedFile) {
+            return [
+                'name' => $file->getClientOriginalName() ?: 'reference-'.$index.'.png',
+                'content' => file_get_contents($file->getRealPath()) ?: '',
+                'mime_type' => $file->getMimeType() ?: 'image/png',
+            ];
         }
 
+        if (is_array($file) && is_string($file['content'] ?? null)) {
+            return [
+                'name' => (string) ($file['name'] ?? 'reference-'.$index.'.png'),
+                'content' => (string) $file['content'],
+                'mime_type' => (string) ($file['mime_type'] ?? 'image/png'),
+            ];
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @param  array<int, UploadedFile>|UploadedFile|null  $references
+     * @return array<string, mixed>
+     */
+    private function responsesImagePayload(array $payload, array|UploadedFile|null $references): array
+    {
+        $references = $references instanceof UploadedFile ? [$references] : array_values($references ?? []);
+        $prompt = (string) ($payload['prompt'] ?? '');
+        $content = [];
+
+        foreach ($references as $file) {
+            $attachment = $this->attachmentData($file);
+
+            if ($attachment === null || ! str_starts_with($attachment['mime_type'], 'image/')) {
+                continue;
+            }
+
+            $content[] = [
+                'type' => 'input_image',
+                'image_url' => $this->dataUrl(
+                    base64_encode($attachment['content']),
+                    $attachment['mime_type'],
+                ),
+            ];
+        }
+
+        if ($content !== []) {
+            array_unshift($content, [
+                'type' => 'input_text',
+                'text' => $prompt,
+            ]);
+        }
+
+        $responsePayload = [
+            'model' => $this->responsesImageModel((string) $payload['model']),
+            'input' => $content === [] ? $prompt : [[
+                'role' => 'user',
+                'content' => $content,
+            ]],
+            'tools' => [[
+                'type' => 'image_generation',
+            ]],
+            'tool_choice' => [
+                'type' => 'image_generation',
+            ],
+        ];
+
+        foreach (['size', 'quality', 'background', 'output_format'] as $field) {
+            if (isset($payload[$field])) {
+                $responsePayload['tools'][0][$field] = $payload[$field];
+            }
+        }
+
+        if (isset($payload['n'])) {
+            $responsePayload['tools'][0]['n'] = $payload['n'];
+        }
+
+        if (isset($payload['stream'])) {
+            $responsePayload['stream'] = (bool) $payload['stream'];
+        }
+
+        if (isset($payload['partial_images'])) {
+            $responsePayload['tools'][0]['partial_images'] = $payload['partial_images'];
+        }
+
+        return $responsePayload;
+    }
+
+    private function responsesImageModel(string $imageModel): string
+    {
+        $configured = trim((string) config('services.ai_http.responses_image_model', ''));
+
+        if ($configured !== '') {
+            return $configured;
+        }
+
+        return $this->looksLikeImageModel($imageModel) ? 'gpt-5.5' : $imageModel;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function fallbackImageModels(string $baseUrl, ?string $apiKey, array $payload, string $failedModel): array
+    {
+        if (! $this->shouldRetryWithListedModel($payload)) {
+            return [];
+        }
+
+        $models = collect();
+
         try {
-            $response = Http::timeout(30)
+            $response = $this->aiHttp(30)
                 ->acceptJson()
                 ->withHeaders($this->apiHeaders($apiKey))
                 ->get($baseUrl.'/models');
+
+            if (! $response->failed()) {
+                $models = collect($this->extractModels((array) $response->json(), 'image'))
+                    ->pluck('id');
+            }
         } catch (ConnectionException) {
-            return null;
+            $models = collect();
         }
 
-        if ($response->failed()) {
-            return null;
-        }
+        return $models
+            ->merge($this->compatibleImageFallbackModels())
+            ->map(fn (mixed $model): string => trim((string) $model))
+            ->filter(fn (string $model): bool => $model !== '' && $model !== $failedModel)
+            ->unique()
+            ->take(4)
+            ->values()
+            ->all();
+    }
 
-        return collect($this->extractModels((array) $response->json(), 'image'))
-            ->pluck('id')
-            ->first(fn (string $model): bool => $model !== $failedModel);
+    /**
+     * @return array<int, string>
+     */
+    private function compatibleImageFallbackModels(): array
+    {
+        return [
+            'gpt-image-1',
+            'dall-e-3',
+            'dall-e-2',
+        ];
     }
 
     private function shouldRetryWithListedModel(array $payload): bool
@@ -674,6 +1525,14 @@ class AiImageController extends Controller
                 continue;
             }
 
+            if (($item['type'] ?? null) === 'image_generation_call' && is_string($item['result'] ?? null)) {
+                $this->appendImageString($images, $item['result']);
+            }
+
+            if (isset($item['content']) && is_array($item['content'])) {
+                $items = [...$items, ...array_values($item['content'])];
+            }
+
             foreach (['url', 'image_url'] as $key) {
                 $source = $item[$key] ?? null;
 
@@ -687,7 +1546,7 @@ class AiImageController extends Controller
                 }
             }
 
-            foreach (['b64_json', 'base64', 'image', 'partial_image_b64', 'partial_image', 'image_b64'] as $key) {
+            foreach (['b64_json', 'base64', 'image', 'partial_image_b64', 'partial_image', 'image_b64', 'result'] as $key) {
                 if (is_string($item[$key] ?? null)) {
                     $images[] = [
                         'data_url' => $this->dataUrl($item[$key], (string) ($item['mime_type'] ?? 'image/png')),
@@ -884,6 +1743,7 @@ class AiImageController extends Controller
             'stream' => (bool) ($data['stream'] ?? false),
             'partial_images' => (int) ($data['partial_images'] ?? 0),
             'fallback_model' => (string) ($config['fallback_model'] ?? ''),
+            'image_api_mode' => (string) ($config['image_api_mode'] ?? $data['image_api_mode'] ?? 'auto'),
         ];
     }
 
@@ -894,13 +1754,19 @@ class AiImageController extends Controller
      * @param  callable(string, array<string, mixed>): bool  $emit
      * @return array<int, array<string, string>>
      */
-    private function streamImages(string $baseUrl, array $payload, array $references, ?array $mask, int $timeout, array $headers, callable $emit): array
+    private function streamImages(string $baseUrl, array $payload, array $references, ?array $mask, int $timeout, array $headers, callable $emit, string $mode = 'images'): array
     {
         if (! function_exists('curl_init')) {
             throw new RuntimeException('当前 PHP 未启用 curl 扩展，无法使用流式传输。');
         }
 
-        $curl = curl_init($baseUrl.($references === [] ? '/images/generations' : '/images/edits'));
+        $path = match ($mode) {
+            'responses' => '/responses',
+            'images_root' => '/images',
+            default => $references === [] ? '/images/generations' : '/images/edits',
+        };
+
+        $curl = curl_init($baseUrl.$path);
 
         if ($curl === false) {
             throw new RuntimeException('图片流式请求初始化失败。');
@@ -943,6 +1809,8 @@ class AiImageController extends Controller
         $buffer = '';
         $rawResponse = '';
         $images = [];
+        $startedAt = microtime(true);
+        $timedOut = false;
 
         try {
             curl_setopt_array($curl, [
@@ -952,7 +1820,14 @@ class AiImageController extends Controller
                 CURLOPT_POSTFIELDS => $body,
                 CURLOPT_RETURNTRANSFER => false,
                 CURLOPT_TIMEOUT => $timeout,
-                CURLOPT_WRITEFUNCTION => function ($curl, string $chunk) use (&$buffer, &$rawResponse, &$images, $emit): int {
+                CURLOPT_CONNECTTIMEOUT => min(30, max(5, $timeout)),
+                CURLOPT_WRITEFUNCTION => function ($curl, string $chunk) use (&$buffer, &$rawResponse, &$images, $emit, $startedAt, $timeout, &$timedOut): int {
+                    if ((microtime(true) - $startedAt) >= $timeout) {
+                        $timedOut = true;
+
+                        return 0;
+                    }
+
                     $rawResponse .= $chunk;
                     $buffer .= $chunk;
 
@@ -967,12 +1842,16 @@ class AiImageController extends Controller
 
                     return strlen($chunk);
                 },
-            ]);
+            ] + $this->aiCurlOptions());
 
             curl_exec($curl);
 
             $status = (int) curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
             $error = curl_error($curl);
+
+            if ($timedOut) {
+                throw new RuntimeException('请求超过 '.$timeout.' 秒未完成，已自动取消。');
+            }
 
             if ($buffer !== '') {
                 $this->handleStreamEvent($buffer, $images, $emit);

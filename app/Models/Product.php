@@ -200,6 +200,17 @@ class Product extends Model
         return in_array($this->fulfillment_type, [self::FULFILLMENT_LOGISTICS, self::FULFILLMENT_SHIPPING_LEGACY], true);
     }
 
+    public function hasUnlimitedStock(): bool
+    {
+        return in_array($this->fulfillment_type, [self::FULFILLMENT_ONLINE, self::FULFILLMENT_CONTACT_LEGACY], true)
+            || $this->status === self::STATUS_PRESALE;
+    }
+
+    public function usesStockLimit(): bool
+    {
+        return ! $this->hasUnlimitedStock();
+    }
+
     public function isPresale(): bool
     {
         return $this->status === self::STATUS_PRESALE;
@@ -223,13 +234,13 @@ class Product extends Model
     public function isPurchasable(): bool
     {
         return in_array($this->status, [self::STATUS_CONCEPT, self::STATUS_PUBLISHED, self::STATUS_PRESALE], true)
-            && ($this->status === self::STATUS_CONCEPT || $this->status === self::STATUS_PRESALE || (int) $this->activeVariants()->sum('stock') > 0);
+            && ($this->status === self::STATUS_CONCEPT || $this->hasUnlimitedStock() || (int) $this->activeVariants()->sum('stock') > 0);
     }
 
     public function isDirectlyPurchasable(): bool
     {
         return in_array($this->status, [self::STATUS_PUBLISHED, self::STATUS_PRESALE], true)
-            && ($this->status === self::STATUS_PRESALE || (int) $this->activeVariants()->sum('stock') > 0);
+            && ($this->hasUnlimitedStock() || (int) $this->activeVariants()->sum('stock') > 0);
     }
 
     public function allowsCrowdfunding(): bool

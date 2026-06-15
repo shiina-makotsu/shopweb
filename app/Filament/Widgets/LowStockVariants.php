@@ -3,6 +3,7 @@
 namespace App\Filament\Widgets;
 
 use App\Filament\Resources\ProductResource;
+use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Support\Money;
 use Filament\Tables\Columns\TextColumn;
@@ -47,6 +48,10 @@ class LowStockVariants extends TableWidget
     {
         return ProductVariant::query()
             ->with('product')
+            ->whereHas('product', fn (Builder $query): Builder => $query->whereNotIn('fulfillment_type', [
+                Product::FULFILLMENT_ONLINE,
+                Product::FULFILLMENT_CONTACT_LEGACY,
+            ]))
             ->whereColumn('stock', '<=', 'low_stock_threshold');
     }
 }

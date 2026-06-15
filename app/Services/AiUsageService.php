@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Models\AiChatSession;
+use App\Models\AiImageTask;
 use App\Models\AiUsageLog;
 use App\Models\SiteSetting;
 use App\Models\User;
@@ -18,6 +20,35 @@ class AiUsageService
         return SiteSetting::query()->firstOrCreate([], ['site_name' => config('app.name', 'ShopWeb')]);
     }
 
+    public function aiTrashRetentionDays(): int
+    {
+        return max(1, min(365, (int) ($this->settings()->ai_trash_retention_days ?: 30)));
+    }
+
+    /**
+     * @return array{image_tasks:int,chat_sessions:int,expired_before:string}
+     */
+    public function purgeExpiredAiTrash(): array
+    {
+        $expiredBefore = now()->subDays($this->aiTrashRetentionDays());
+
+        $imageTasks = AiImageTask::query()
+            ->whereNotNull('deleted_at')
+            ->where('deleted_at', '<', $expiredBefore)
+            ->delete();
+
+        $chatSessions = AiChatSession::query()
+            ->whereNotNull('deleted_at')
+            ->where('deleted_at', '<', $expiredBefore)
+            ->delete();
+
+        return [
+            'image_tasks' => (int) $imageTasks,
+            'chat_sessions' => (int) $chatSessions,
+            'expired_before' => $expiredBefore->toIso8601String(),
+        ];
+    }
+
     /**
      * @return array{endpoint:string,api_key:?string,source:string,config_name:string,tracked:bool,feature:string}
      */
@@ -25,8 +56,8 @@ class AiUsageService
     {
         $feature = $feature === 'chat' ? 'chat' : 'image';
         $mode = (string) ($data['config_mode'] ?? 'default');
-        $endpoint = trim((string) ($data['endpoint'] ?? ''));
-        $apiKey = trim((string) ($data['api_key'] ?? ''));
+        $endpoint = trim((string) (($feature === 'chat' ? ($data['chat_endpoint'] ?? null) : null) ?? ($data['endpoint'] ?? '')));
+        $apiKey = trim((string) (($feature === 'chat' ? ($data['chat_api_key'] ?? null) : null) ?? ($data['api_key'] ?? '')));
         $configName = trim((string) ($data['config_name'] ?? ''));
 
         if ($mode === 'custom' || $endpoint !== '' || $apiKey !== '') {
@@ -115,7 +146,13 @@ class AiUsageService
 
     public function quotaLimitK(User $user): int
     {
-        return (int) ($user->ai_quota_k ?: ($this->settings()->ai_default_user_quota_k ?: 100));
+        if ($user->ai_quota_k !== null) {
+            return (int) $user->ai_quota_k;
+        }
+
+        $defaultLimit = $this->settings()->ai_default_user_quota_k;
+
+        return $defaultLimit !== null ? (int) $defaultLimit : 100;
     }
 
     public function usedTokens(?User $user = null, ?CarbonInterface $since = null): int
@@ -257,21 +294,37 @@ class AiUsageService
             ->get();
     }
 
-    public function assertWithinQuota(User $user): void
+    public function assertWithinQuota(User $user, array $data = []): void
     {
         if (! $this->shouldEnforceQuota($user)) {
             return;
         }
 
-        if ($this->quotaLimitK($user) <= 0) {
+        $limitTokens = $this->quotaLimitK($user) * 1000;
+
+        if ($limitTokens <= 0) {
             throw ValidationException::withMessages([
-                'quota' => '当前 AI 配额未启用，请联系管理员。',
+                'quota' => '当前 AI 余额不足，请联系管理员增加配额。',
             ]);
         }
 
-        if ($this->remainingK($user) <= 0) {
+        $remainingTokens = $limitTokens - $this->usedTokens($user);
+
+        if ($remainingTokens <= 0) {
             throw ValidationException::withMessages([
-                'quota' => 'AI 配额已用完，请联系管理员增加配额。',
+                'quota' => 'AI 余额不足，请联系管理员增加配额。',
+            ]);
+        }
+
+        $estimatedTokens = $data !== [] ? $this->estimateTokens($data) : 1;
+
+        if ($estimatedTokens > $remainingTokens) {
+            throw ValidationException::withMessages([
+                'quota' => sprintf(
+                    'AI 余额不足：当前剩余约 %s token，本次预计需要约 %s token。',
+                    number_format($remainingTokens),
+                    number_format($estimatedTokens),
+                ),
             ]);
         }
     }
