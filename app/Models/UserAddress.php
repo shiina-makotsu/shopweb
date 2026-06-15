@@ -19,6 +19,7 @@ class UserAddress extends Model
         'city',
         'district',
         'street',
+        'detail',
         'raw_text',
         'is_default',
         'is_visible',
@@ -39,12 +40,14 @@ class UserAddress extends Model
 
     public function formatted(): string
     {
+        $streetDetail = trim(($this->street ?? '').($this->detail ?? ''));
+
         return trim(implode(' ', array_filter([
             $this->country,
             $this->province,
             $this->city,
             $this->district,
-            $this->street,
+            $streetDetail,
         ])));
     }
 }

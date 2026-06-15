@@ -212,23 +212,36 @@
                         </label>
                         <label class="block">
                             <span class="text-sm font-medium text-slate-700">国家</span>
-                            <input class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" name="country" value="{{ old('country', '中国') }}" required>
+                            <input class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" name="country" data-address-country value="{{ old('country', '中国') }}" required>
                         </label>
                         <label class="block">
                             <span class="text-sm font-medium text-slate-700">省</span>
-                            <input class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" name="province" value="{{ old('province') }}" required>
+                            <select class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" name="province" data-address-province required>
+                                <option value="">请选择省份</option>
+                                @foreach($addressProvinceOptions as $provinceValue => $provinceLabel)
+                                    <option value="{{ $provinceValue }}" @selected(old('province') === $provinceValue)>{{ $provinceLabel }}</option>
+                                @endforeach
+                            </select>
+                            <input class="mt-1 hidden w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" data-address-province-free value="{{ old('province') }}">
                         </label>
                         <label class="block">
                             <span class="text-sm font-medium text-slate-700">市</span>
-                            <input class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" name="city" value="{{ old('city') }}" required>
+                            <select class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" name="city" data-address-city data-current="{{ old('city') }}" required></select>
+                            <input class="mt-1 hidden w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" data-address-city-free value="{{ old('city') }}">
                         </label>
                         <label class="block">
                             <span class="text-sm font-medium text-slate-700">区/县</span>
-                            <input class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" name="district" value="{{ old('district') }}" required>
+                            <select class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" name="district" data-address-district data-current="{{ old('district') }}"></select>
+                            <input class="mt-1 hidden w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" data-address-district-free value="{{ old('district') }}">
                         </label>
                         <label class="block md:col-span-2">
                             <span class="text-sm font-medium text-slate-700">街道</span>
-                            <input class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" name="street" value="{{ old('street') }}">
+                            <select class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" name="street" data-address-street data-current="{{ old('street') }}"></select>
+                            <input class="mt-1 hidden w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" data-address-street-free value="{{ old('street') }}">
+                        </label>
+                        <label class="block md:col-span-2">
+                            <span class="text-sm font-medium text-slate-700">详细地址</span>
+                            <input class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" name="detail" value="{{ old('detail') }}">
                         </label>
                         <div class="flex flex-wrap gap-4 md:col-span-2">
                             <label class="inline-flex items-center gap-2 text-sm">
@@ -269,23 +282,36 @@
                                     </label>
                                     <label class="block">
                                         <span class="text-xs text-slate-500">国家</span>
-                                        <input class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" name="country" value="{{ old('country', $address->country) }}" required>
+                                        <input class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" name="country" data-address-country value="{{ old('country', $address->country) }}" required>
                                     </label>
                                     <label class="block">
                                         <span class="text-xs text-slate-500">省</span>
-                                        <input class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" name="province" value="{{ old('province', $address->province) }}" required>
+                                        <select class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" name="province" data-address-province required>
+                                            <option value="">请选择省份</option>
+                                            @foreach($addressProvinceOptions as $provinceValue => $provinceLabel)
+                                                <option value="{{ $provinceValue }}" @selected(old('province', $address->province) === $provinceValue)>{{ $provinceLabel }}</option>
+                                            @endforeach
+                                        </select>
+                                        <input class="mt-1 hidden w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" data-address-province-free value="{{ old('province', $address->province) }}">
                                     </label>
                                     <label class="block">
                                         <span class="text-xs text-slate-500">市</span>
-                                        <input class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" name="city" value="{{ old('city', $address->city) }}" required>
+                                        <select class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" name="city" data-address-city data-current="{{ old('city', $address->city) }}" required></select>
+                                        <input class="mt-1 hidden w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" data-address-city-free value="{{ old('city', $address->city) }}">
                                     </label>
                                     <label class="block">
                                         <span class="text-xs text-slate-500">区/县</span>
-                                        <input class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" name="district" value="{{ old('district', $address->district) }}" required>
+                                        <select class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" name="district" data-address-district data-current="{{ old('district', $address->district) }}"></select>
+                                        <input class="mt-1 hidden w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" data-address-district-free value="{{ old('district', $address->district) }}">
                                     </label>
                                     <label class="block md:col-span-2">
                                         <span class="text-xs text-slate-500">街道</span>
-                                        <input class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" name="street" value="{{ old('street', $address->street) }}">
+                                        <select class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" name="street" data-address-street data-current="{{ old('street', $address->street) }}"></select>
+                                        <input class="mt-1 hidden w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" data-address-street-free value="{{ old('street', $address->street) }}">
+                                    </label>
+                                    <label class="block md:col-span-2">
+                                        <span class="text-xs text-slate-500">详细地址</span>
+                                        <input class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" name="detail" value="{{ old('detail', $address->detail) }}">
                                     </label>
                                     <div class="flex flex-wrap items-center gap-4 md:col-span-2">
                                         <label class="inline-flex items-center gap-2 text-sm">
@@ -318,6 +344,144 @@
                         @endforelse
                     </div>
                 </section>
+
+                <script type="application/json" id="user-address-region-tree">@json($addressRegionTree, JSON_UNESCAPED_UNICODE)</script>
+                <script>
+                    (() => {
+                        const dataNode = document.getElementById('user-address-region-tree');
+                        const tree = dataNode ? JSON.parse(dataNode.textContent || '{}') : {};
+                        const addOption = (select, value, label = value) => {
+                            const option = document.createElement('option');
+                            option.value = value;
+                            option.textContent = label;
+                            select.appendChild(option);
+                        };
+                        const isChina = (value) => ['中国', '中华人民共和国', 'China', 'CN', 'PRC'].includes(String(value || '').trim());
+
+                        document.querySelectorAll('[data-address-province]').forEach((province) => {
+                            const form = province.closest('form');
+                            if (!form) {
+                                return;
+                            }
+
+                            const country = form.querySelector('[data-address-country]');
+                            const city = form.querySelector('[data-address-city]');
+                            const district = form.querySelector('[data-address-district]');
+                            const street = form.querySelector('[data-address-street]');
+                            const provinceFree = form.querySelector('[data-address-province-free]');
+                            const cityFree = form.querySelector('[data-address-city-free]');
+                            const districtFree = form.querySelector('[data-address-district-free]');
+                            const streetFree = form.querySelector('[data-address-street-free]');
+
+                            if (!form || !city || !district) {
+                                return;
+                            }
+
+                            const pairs = [
+                                [province, provinceFree],
+                                [city, cityFree],
+                                [district, districtFree],
+                                [street, streetFree],
+                            ];
+
+                            const syncFreeInputs = () => {
+                                pairs.forEach(([select, input]) => {
+                                    if (!select || !input || !input.classList.contains('hidden')) return;
+                                    input.value = select.value;
+                                });
+                            };
+
+                            const syncSelectInputs = () => {
+                                pairs.forEach(([select, input]) => {
+                                    if (!select || !input || input.classList.contains('hidden')) return;
+                                    select.value = input.value;
+                                });
+                            };
+
+                            const setChinaMode = () => {
+                                const enabled = isChina(country?.value);
+                                pairs.forEach(([select, input]) => {
+                                    if (!select || !input) return;
+                                    select.dataset.wasRequired = select.dataset.wasRequired || (select.required ? '1' : '0');
+                                    const shouldRequire = select.dataset.wasRequired === '1';
+
+                                    if (enabled) {
+                                        select.name = input.name || select.name;
+                                        input.name = '';
+                                        select.disabled = false;
+                                        input.disabled = true;
+                                        select.required = shouldRequire;
+                                        input.required = false;
+                                        select.classList.remove('hidden');
+                                        input.classList.add('hidden');
+                                    } else {
+                                        input.name = select.name || input.name;
+                                        select.name = '';
+                                        select.disabled = true;
+                                        input.disabled = false;
+                                        select.required = false;
+                                        input.required = shouldRequire;
+                                        input.classList.remove('hidden');
+                                        select.classList.add('hidden');
+                                        input.value = input.value || select.value;
+                                    }
+                                });
+
+                                if (enabled) {
+                                    fillCities();
+                                } else {
+                                    syncFreeInputs();
+                                }
+                            };
+
+                            const fillStreets = () => {
+                                if (!isChina(country?.value)) return;
+                                if (!street) return;
+                                const current = street.dataset.current || street.value;
+                                street.innerHTML = '';
+                                addOption(street, '', '可不选择');
+                                const districtNode = tree[province.value]?.[city.value]?.[district.value];
+                                const streets = Array.isArray(districtNode) ? districtNode : Object.keys(districtNode || {});
+                                streets.forEach((name) => addOption(street, name));
+                                street.value = current && streets.includes(current) ? current : '';
+                                street.dataset.current = '';
+                            };
+
+                            const fillDistricts = () => {
+                                if (!isChina(country?.value)) return;
+                                const current = district.dataset.current || district.value;
+                                district.innerHTML = '';
+                                addOption(district, '', '可不选择');
+                                const districts = tree[province.value]?.[city.value] || [];
+                                const districtNames = Array.isArray(districts) ? districts : Object.keys(districts);
+                                districtNames.forEach((name) => addOption(district, name));
+                                district.value = current && districtNames.includes(current) ? current : '';
+                                district.dataset.current = '';
+                                fillStreets();
+                            };
+
+                            const fillCities = () => {
+                                if (!isChina(country?.value)) return;
+                                const current = city.dataset.current || city.value;
+                                city.innerHTML = '';
+                                addOption(city, '', '请选择城市');
+                                const cities = Object.keys(tree[province.value] || {});
+                                cities.forEach((name) => addOption(city, name));
+                                city.value = current && cities.includes(current) ? current : '';
+                                city.dataset.current = '';
+                                fillDistricts();
+                            };
+
+                            province.addEventListener('change', fillCities);
+                            city.addEventListener('change', fillDistricts);
+                            district.addEventListener('change', fillStreets);
+                            country?.addEventListener('input', setChinaMode);
+                            country?.addEventListener('change', setChinaMode);
+                            [provinceFree, cityFree, districtFree, streetFree].forEach((input) => input?.addEventListener('input', syncSelectInputs));
+                            setChinaMode();
+                        });
+                    })();
+                </script>
             </div>
         @elseif($section === 'coupons')
             <div class="space-y-5 px-4 py-5">

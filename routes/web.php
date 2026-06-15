@@ -115,6 +115,7 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/user/{section}', [UserCenterController::class, 'section'])->name('user.section');
     Route::get('/orders', [OrderController::class, 'index'])->name('orders.index');
     Route::get('/orders/{order}', [OrderController::class, 'show'])->name('orders.show');
+    Route::post('/orders/{order}/cancel', [OrderController::class, 'cancel'])->name('orders.cancel');
     Route::delete('/orders/{order}', [OrderController::class, 'destroy'])->name('orders.destroy');
     Route::get('/orders/{order}/after-sales', [AfterSalesController::class, 'create'])->name('orders.after-sales');
     Route::post('/orders/{order}/after-sales', [AfterSalesController::class, 'store'])->name('orders.after-sales.store');

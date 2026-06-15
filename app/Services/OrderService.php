@@ -48,6 +48,7 @@ class OrderService
             $shippingQuote = $this->shippingQuotes->quote($cartItems, $shippingProvince);
             $shippingFeeCents = (int) $shippingQuote['shipping_fee_cents'];
             $totalCents = max(0, $subtotalCents - $discountCents + $shippingFeeCents);
+            $shippingAddress = $this->shippingAddressText($data);
 
             $order = Order::query()->create([
                 'user_id' => $user->id,
@@ -66,8 +67,12 @@ class OrderService
                 'contact_phone' => $data['contact_phone'],
                 'contact_email' => $data['contact_email'] ?? null,
                 'requires_shipping' => (bool) ($data['requires_shipping'] ?? false),
-                'shipping_address' => $data['shipping_address'] ?? null,
+                'shipping_address' => $shippingAddress,
                 'shipping_province' => $shippingQuote['province'],
+                'shipping_city' => $data['shipping_city'] ?? null,
+                'shipping_district' => $data['shipping_district'] ?? null,
+                'shipping_street' => $data['shipping_street'] ?? null,
+                'shipping_detail' => $data['shipping_detail'] ?? null,
                 'customer_note' => $data['customer_note'] ?? null,
             ]);
 
@@ -491,11 +496,34 @@ class OrderService
                 'status' => CouponRedemption::STATUS_RELEASED,
             ]);
 
-            $this->activity->log('order_cancelled', $order, $order->order_number, [
-                'status' => Order::STATUS_CANCELLED,
-                'note' => $note,
-            ], $actor);
+            if ($actor && $actor->role !== 'customer') {
+                $this->activity->log('order_cancelled', $order, $order->order_number, [
+                    'status' => Order::STATUS_CANCELLED,
+                    'note' => $note,
+                ], $actor);
+            }
         });
+    }
+
+    private function shippingAddressText(array $data): ?string
+    {
+        $street = $data['shipping_street'] ?? null;
+        $detail = $data['shipping_detail'] ?? null;
+
+        if (filled($street) && filled($detail) && trim((string) $street) === trim((string) $detail)) {
+            $detail = null;
+        }
+
+        $parts = array_filter([
+            $data['shipping_country'] ?? '中国',
+            $data['shipping_province'] ?? null,
+            $data['shipping_city'] ?? null,
+            $data['shipping_district'] ?? null,
+            $street,
+            $detail,
+        ], fn ($value): bool => filled($value));
+
+        return $parts === [] ? ($data['shipping_address'] ?? null) : implode(' ', $parts);
     }
 
     private function nextOrderNumber(): string

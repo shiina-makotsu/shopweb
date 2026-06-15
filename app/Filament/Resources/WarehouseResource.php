@@ -48,7 +48,7 @@ class WarehouseResource extends Resource
                 TextInput::make('contact_name')->label('联系人')->maxLength(100),
                 TextInput::make('phone')->label('联系电话')->maxLength(60),
                 TextInput::make('country')->label('国家')->default('中国')->maxLength(100),
-                Select::make('province')->label('省份')->options(ChinaRegions::provinceOptions())->searchable(),
+                TextInput::make('province')->label('省份 / 州或地区')->datalist(ChinaRegions::provinces())->maxLength(100),
                 TextInput::make('city')->label('城市')->maxLength(100),
                 TextInput::make('district')->label('区 / 县')->maxLength(100),
                 TextInput::make('street')->label('街道 / 门牌')->placeholder('可填写测试仓、A 仓等内部占位文字')->maxLength(255)->columnSpanFull(),

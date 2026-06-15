@@ -2,6 +2,7 @@
     @php($statusPresenter = app(\App\Support\OrderStatusPresenter::class))
     @php($pendingFlashSaleItem = $order->items->first(fn ($item) => $item->flash_sale_id && ! $item->product_variant_id))
     @php($productStatuses = \App\Models\Product::statusOptions())
+    @php($isPaymentPage = $order->status === \App\Models\Order::STATUS_PENDING_PAYMENT && ! in_array($order->payment_status, ['confirmed'], true))
 
     <section class="mb-4 rounded-sm border border-slate-300 bg-white">
         <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-100 px-4 py-3">
@@ -169,6 +170,16 @@
                         <div class="flex justify-between"><dt>优惠</dt><dd>- @money($order->discount_cents)</dd></div>
                         <div class="flex justify-between border-t border-slate-200 pt-2 text-base font-semibold"><dt>应付</dt><dd>@money($order->total_cents)</dd></div>
                     </dl>
+                    @if($isPaymentPage)
+                        <div class="border-t border-slate-200 px-4 py-4">
+                            <form method="post" action="{{ route('orders.cancel', $order) }}">
+                                @csrf
+                                <button class="w-full rounded-sm border border-red-200 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50" type="submit">
+                                    取消订单
+                                </button>
+                            </form>
+                        </div>
+                    @endif
                 </div>
 
                 <div class="rounded-sm border border-slate-300">
@@ -199,6 +210,7 @@
                     </div>
                 </div>
 
+                @unless($isPaymentPage)
                 <div class="rounded-sm border border-slate-300">
                     <h2 class="border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold">物流信息</h2>
                     <div class="space-y-2 px-4 py-4 text-sm text-slate-700">
@@ -238,6 +250,7 @@
                         @if($order->shipping_address)<p class="mt-2 whitespace-pre-line">{{ $order->shipping_address }}</p>@endif
                     </div>
                 </div>
+                @endunless
             </aside>
         </div>
     </section>

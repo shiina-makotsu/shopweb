@@ -63,6 +63,24 @@ class OrderController extends Controller
         return back()->with('payment_success', true);
     }
 
+    public function cancel(Request $request, Order $order, OrderService $orders): RedirectResponse
+    {
+        $this->authorizeVisibleOrder($request, $order);
+
+        abort_unless(
+            in_array($order->status, [Order::STATUS_PENDING_PAYMENT, Order::STATUS_CANCELLED], true),
+            404
+        );
+
+        if ($order->status !== Order::STATUS_CANCELLED) {
+            $orders->cancel($order, $request->user());
+        }
+
+        return redirect()
+            ->route('orders.index')
+            ->with('status', '订单已取消。');
+    }
+
     public function confirmReceipt(Request $request, Order $order, OrderService $orders): RedirectResponse
     {
         $this->authorizeVisibleOrder($request, $order);

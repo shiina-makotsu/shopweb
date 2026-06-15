@@ -23,21 +23,62 @@
                             <span class="text-sm font-medium">邮箱</span>
                             <input class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" type="email" name="contact_email" value="{{ old('contact_email', auth()->user()->email) }}">
                         </label>
+
                         @if($requiresShipping)
-                            <label class="block">
-                                <span class="text-sm font-medium">收货省份 / 地区</span>
-                                <select class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" name="shipping_province" required>
-                                    <option value="">请选择省份</option>
-                                    @foreach($provinceOptions as $provinceValue => $provinceLabel)
-                                        <option value="{{ $provinceValue }}" @selected(old('shipping_province', $shippingProvince) === $provinceValue)>{{ $provinceLabel }}</option>
-                                    @endforeach
-                                </select>
-                                <span class="mt-1 block text-xs text-slate-500">邮费按省份匹配；没有单独设置的省份会使用“其他地区”邮费。</span>
-                            </label>
-                            <label class="block md:col-span-2">
-                                <span class="text-sm font-medium">收货地址</span>
-                                <textarea class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" name="shipping_address" rows="3" required>{{ old('shipping_address', $defaultAddress?->formatted()) }}</textarea>
-                            </label>
+                            @php
+                                $defaultCountry = old('shipping_country', $defaultAddress?->country ?: '中国');
+                                $defaultProvince = old('shipping_province', $shippingProvince);
+                                $defaultCity = old('shipping_city', $defaultAddress?->city);
+                                $defaultDistrict = old('shipping_district', $defaultAddress?->district);
+                                $defaultStreet = old('shipping_street', $defaultAddress?->street);
+                                $defaultDetail = old('shipping_detail', $defaultAddress?->detail);
+                                $defaultRawAddress = old('shipping_address', $defaultAddress?->formatted());
+                            @endphp
+                            <div class="md:col-span-2 rounded-sm border border-slate-200 bg-slate-50 p-3" data-address-cascade>
+                                <label class="block">
+                                    <span class="text-sm font-medium">智能地址识别</span>
+                                    <div class="mt-1 flex flex-col gap-2 sm:flex-row">
+                                        <textarea class="min-h-20 w-full rounded-sm border border-slate-300 bg-white px-3 py-2 text-sm leading-6" name="shipping_address" data-address-raw rows="2" required>{{ $defaultRawAddress }}</textarea>
+                                        <button class="rounded-sm border border-blue-700 bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800 sm:self-start" type="button" data-address-parse>识别</button>
+                                    </div>
+                                </label>
+                                <div class="mt-4 grid gap-4 md:grid-cols-2">
+                                    <label class="block">
+                                        <span class="text-sm font-medium">国家/地区</span>
+                                        <input class="mt-1 w-full rounded-sm border border-slate-300 bg-white px-3 py-2 text-sm" name="shipping_country" data-address-country value="{{ $defaultCountry }}" required>
+                                    </label>
+                                    <label class="block">
+                                        <span class="text-sm font-medium">省份 / 地区</span>
+                                        <select class="mt-1 w-full rounded-sm border border-slate-300 bg-white px-3 py-2 text-sm" name="shipping_province" data-address-province required>
+                                            <option value="">请选择省份</option>
+                                            @foreach($provinceOptions as $provinceValue => $provinceLabel)
+                                                <option value="{{ $provinceValue }}" @selected($defaultProvince === $provinceValue)>{{ $provinceLabel }}</option>
+                                            @endforeach
+                                        </select>
+                                        <input class="mt-1 hidden w-full rounded-sm border border-slate-300 bg-white px-3 py-2 text-sm" data-address-province-free value="{{ $defaultProvince }}">
+                                        <span class="mt-1 block text-xs text-slate-500">邮费按省份匹配；香港、澳门、台湾也作为地区选项参与匹配。</span>
+                                    </label>
+                                    <label class="block">
+                                        <span class="text-sm font-medium">市</span>
+                                        <select class="mt-1 w-full rounded-sm border border-slate-300 bg-white px-3 py-2 text-sm" name="shipping_city" data-address-city data-current="{{ $defaultCity }}" required></select>
+                                        <input class="mt-1 hidden w-full rounded-sm border border-slate-300 bg-white px-3 py-2 text-sm" data-address-city-free value="{{ $defaultCity }}">
+                                    </label>
+                                    <label class="block">
+                                        <span class="text-sm font-medium">区 / 县</span>
+                                        <select class="mt-1 w-full rounded-sm border border-slate-300 bg-white px-3 py-2 text-sm" name="shipping_district" data-address-district data-current="{{ $defaultDistrict }}"></select>
+                                        <input class="mt-1 hidden w-full rounded-sm border border-slate-300 bg-white px-3 py-2 text-sm" data-address-district-free value="{{ $defaultDistrict }}">
+                                    </label>
+                                    <label class="block">
+                                        <span class="text-sm font-medium">街道</span>
+                                        <select class="mt-1 w-full rounded-sm border border-slate-300 bg-white px-3 py-2 text-sm" name="shipping_street" data-address-street data-current="{{ $defaultStreet }}"></select>
+                                        <input class="mt-1 hidden w-full rounded-sm border border-slate-300 bg-white px-3 py-2 text-sm" data-address-street-free value="{{ $defaultStreet }}">
+                                    </label>
+                                    <label class="block">
+                                        <span class="text-sm font-medium">详细地址</span>
+                                        <input class="mt-1 w-full rounded-sm border border-slate-300 bg-white px-3 py-2 text-sm" name="shipping_detail" data-address-detail value="{{ $defaultDetail }}">
+                                    </label>
+                                </div>
+                            </div>
                         @endif
                     </div>
                 </section>
@@ -133,4 +174,176 @@
             </aside>
         </div>
     </section>
+
+    @if($requiresShipping)
+        <script type="application/json" id="china-region-tree">@json($regionTree, JSON_UNESCAPED_UNICODE)</script>
+        <script>
+            (() => {
+                const roots = document.querySelectorAll('[data-address-cascade]');
+                const dataNode = document.getElementById('china-region-tree');
+                const tree = dataNode ? JSON.parse(dataNode.textContent || '{}') : {};
+
+                const addOption = (select, value, label = value) => {
+                    const option = document.createElement('option');
+                    option.value = value;
+                    option.textContent = label;
+                    select.appendChild(option);
+                };
+
+                const compact = (value) => String(value || '').replace(/\s+/g, '').trim();
+                const isChina = (value) => ['中国', '中华人民共和国', 'China', 'CN', 'PRC'].includes(String(value || '').trim());
+
+                roots.forEach((root) => {
+                    const country = root.querySelector('[data-address-country]');
+                    const province = root.querySelector('[data-address-province]');
+                    const city = root.querySelector('[data-address-city]');
+                    const district = root.querySelector('[data-address-district]');
+                    const street = root.querySelector('[data-address-street]');
+                    const provinceFree = root.querySelector('[data-address-province-free]');
+                    const cityFree = root.querySelector('[data-address-city-free]');
+                    const districtFree = root.querySelector('[data-address-district-free]');
+                    const streetFree = root.querySelector('[data-address-street-free]');
+                    const detail = root.querySelector('[data-address-detail]');
+                    const raw = root.querySelector('[data-address-raw]');
+                    const parseButton = root.querySelector('[data-address-parse]');
+                    const pairs = [
+                        [province, provinceFree],
+                        [city, cityFree],
+                        [district, districtFree],
+                        [street, streetFree],
+                    ];
+
+                    const syncFreeInputs = () => {
+                        pairs.forEach(([select, input]) => {
+                            if (!select || !input || !input.classList.contains('hidden')) return;
+                            input.value = select.value;
+                        });
+                    };
+
+                    const syncSelectInputs = () => {
+                        pairs.forEach(([select, input]) => {
+                            if (!select || !input || input.classList.contains('hidden')) return;
+                            select.value = input.value;
+                        });
+                    };
+
+                    const setChinaMode = () => {
+                        const enabled = isChina(country?.value);
+                        pairs.forEach(([select, input]) => {
+                            if (!select || !input) return;
+                            select.dataset.wasRequired = select.dataset.wasRequired || (select.required ? '1' : '0');
+                            const shouldRequire = select.dataset.wasRequired === '1';
+
+                            if (enabled) {
+                                select.name = input.name || select.name;
+                                input.name = '';
+                                select.disabled = false;
+                                input.disabled = true;
+                                select.required = shouldRequire;
+                                input.required = false;
+                                select.classList.remove('hidden');
+                                input.classList.add('hidden');
+                            } else {
+                                input.name = select.name || input.name;
+                                select.name = '';
+                                select.disabled = true;
+                                input.disabled = false;
+                                select.required = false;
+                                input.required = shouldRequire;
+                                input.classList.remove('hidden');
+                                select.classList.add('hidden');
+                                input.value = input.value || select.value;
+                            }
+                        });
+
+                        if (enabled) {
+                            fillCities();
+                        } else {
+                            syncFreeInputs();
+                        }
+                    };
+
+                    const fillCities = () => {
+                        if (!isChina(country?.value)) return;
+                        const current = city.dataset.current || city.value;
+                        city.innerHTML = '';
+                        addOption(city, '', '请选择城市');
+                        Object.keys(tree[province.value] || {}).forEach((name) => addOption(city, name));
+                        city.value = current && tree[province.value]?.[current] ? current : '';
+                        city.dataset.current = '';
+                        fillDistricts();
+                    };
+
+                    const fillDistricts = () => {
+                        if (!isChina(country?.value)) return;
+                        const current = district.dataset.current || district.value;
+                        district.innerHTML = '';
+                        addOption(district, '', '可不选择');
+                        const districts = tree[province.value]?.[city.value] || [];
+                        const districtNames = Array.isArray(districts) ? districts : Object.keys(districts);
+                        districtNames.forEach((name) => addOption(district, name));
+                        district.value = current && districtNames.includes(current) ? current : '';
+                        district.dataset.current = '';
+                        fillStreets();
+                    };
+
+                    const fillStreets = () => {
+                        if (!isChina(country?.value)) return;
+                        const current = street.dataset.current || street.value;
+                        street.innerHTML = '';
+                        addOption(street, '', '可不选择');
+                        const districtNode = tree[province.value]?.[city.value]?.[district.value];
+                        const streets = Array.isArray(districtNode) ? districtNode : Object.keys(districtNode || {});
+                        streets.forEach((name) => addOption(street, name));
+                        street.value = current && streets.includes(current) ? current : '';
+                        street.dataset.current = '';
+                    };
+
+                    const parseAddress = () => {
+                        const text = compact(raw.value);
+                        if (!text) return;
+
+                        country.value = text.includes('中国') ? '中国' : (country.value || '中国');
+                        setChinaMode();
+
+                        const provinceName = Object.keys(tree).find((name) => text.includes(name));
+                        if (!provinceName) {
+                            detail.value = detail.value || raw.value.trim();
+                            return;
+                        }
+
+                        province.value = provinceName;
+                        fillCities();
+
+                        const cities = tree[provinceName] || {};
+                        const cityName = Object.keys(cities).find((name) => text.includes(name)) || (Object.keys(cities).length === 1 ? Object.keys(cities)[0] : '');
+                        city.value = cityName;
+                        fillDistricts();
+
+                        const districtNames = Array.isArray(cities[cityName] || []) ? (cities[cityName] || []) : Object.keys(cities[cityName] || {});
+                        const districtName = districtNames.find((name) => text.includes(name)) || '';
+                        district.value = districtName;
+
+                        let rest = text
+                            .replace('中国', '')
+                            .replace(provinceName, '')
+                            .replace(cityName, '')
+                            .replace(districtName, '');
+
+                        street.value = street.value || '';
+                        detail.value = rest || detail.value || raw.value.trim();
+                    };
+
+                    province?.addEventListener('change', fillCities);
+                    city?.addEventListener('change', fillDistricts);
+                    district?.addEventListener('change', fillStreets);
+                    country?.addEventListener('input', setChinaMode);
+                    country?.addEventListener('change', setChinaMode);
+                    [provinceFree, cityFree, districtFree, streetFree].forEach((input) => input?.addEventListener('input', syncSelectInputs));
+                    parseButton?.addEventListener('click', parseAddress);
+                    setChinaMode();
+                });
+            })();
+        </script>
+    @endif
 </x-layouts.app>

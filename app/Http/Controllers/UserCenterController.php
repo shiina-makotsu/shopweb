@@ -9,6 +9,7 @@ use App\Models\UserAddress;
 use App\Models\UserProfileChangeLog;
 use App\Services\AiUsageService;
 use App\Services\CouponService;
+use App\Support\ChinaRegions;
 use Illuminate\Support\Collection;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -69,6 +70,8 @@ class UserCenterController extends Controller
             'addresses' => $section === 'addresses'
                 ? $user->addresses()->latest()->get()
                 : null,
+            'addressProvinceOptions' => $section === 'addresses' ? ChinaRegions::provinceOptions() : [],
+            'addressRegionTree' => $section === 'addresses' ? ChinaRegions::regionTreeForForms() : [],
             'coupons' => $section === 'coupons'
                 ? $user->coupons()->with(['coupon.products', 'coupon.product'])->latest()->get()
                 : null,
@@ -245,6 +248,7 @@ class UserCenterController extends Controller
         $data = $this->validateAddress($request->all());
         $data['is_default'] = (bool) ($data['is_default'] ?? false) || ! $user->addresses()->exists();
         $data['is_visible'] = (bool) ($data['is_visible'] ?? false);
+        $data['district'] = $data['district'] ?? '';
 
         if ($data['is_default']) {
             $user->addresses()->update(['is_default' => false]);
@@ -262,6 +266,7 @@ class UserCenterController extends Controller
         $data = $this->validateAddress($request->all());
         $data['is_default'] = (bool) ($data['is_default'] ?? false);
         $data['is_visible'] = (bool) ($data['is_visible'] ?? false);
+        $data['district'] = $data['district'] ?? '';
 
         if ($data['is_default']) {
             $request->user()->addresses()->whereKeyNot($address->id)->update(['is_default' => false]);
@@ -305,8 +310,9 @@ class UserCenterController extends Controller
             'country' => ['required', 'string', 'max:100'],
             'province' => ['required', 'string', 'max:100'],
             'city' => ['required', 'string', 'max:100'],
-            'district' => ['required', 'string', 'max:100'],
+            'district' => ['nullable', 'string', 'max:100'],
             'street' => ['nullable', 'string', 'max:255'],
+            'detail' => ['nullable', 'string', 'max:255'],
             'raw_text' => ['nullable', 'string', 'max:1000'],
             'is_default' => ['nullable', 'boolean'],
             'is_visible' => ['nullable', 'boolean'],
@@ -323,7 +329,7 @@ class UserCenterController extends Controller
 
         $parsed = $this->parseChineseAddress($raw);
 
-        foreach (['country', 'province', 'city', 'district', 'street'] as $field) {
+        foreach (['country', 'province', 'city', 'district', 'street', 'detail'] as $field) {
             if (blank($input[$field] ?? null) && filled($parsed[$field] ?? null)) {
                 $input[$field] = $parsed[$field];
             }
@@ -333,35 +339,10 @@ class UserCenterController extends Controller
     }
 
     /**
-     * @return array{country?: string, province?: string, city?: string, district?: string, street?: string}
+     * @return array{country?: string, province?: string, city?: string, district?: string, street?: string, detail?: string}
      */
     private function parseChineseAddress(string $raw): array
     {
-        $text = preg_replace('/\s+/', '', $raw) ?: $raw;
-        $parsed = ['country' => str_contains($text, '中国') ? '中国' : '中国'];
-        $text = preg_replace('/^中国/u', '', $text) ?: $text;
-
-        if (preg_match('/(?P<province>[^省市区县]{2,}(?:省|自治区|特别行政区)|[^省市区县]{2,}市)/u', $text, $match, PREG_OFFSET_CAPTURE)) {
-            $parsed['province'] = $match['province'][0];
-            $text = substr($text, (int) ($match['province'][1] + strlen($match['province'][0])));
-        }
-
-        if (preg_match('/(?P<city>[^省市区县]{2,}(?:市|自治州|地区|盟))/u', $text, $match, PREG_OFFSET_CAPTURE)) {
-            $parsed['city'] = $match['city'][0];
-            $text = substr($text, (int) ($match['city'][1] + strlen($match['city'][0])));
-        } elseif (isset($parsed['province']) && str_ends_with($parsed['province'], '市')) {
-            $parsed['city'] = $parsed['province'];
-        }
-
-        if (preg_match('/(?P<district>[^省市区县]{2,}(?:区|县|旗|市))/u', $text, $match, PREG_OFFSET_CAPTURE)) {
-            $parsed['district'] = $match['district'][0];
-            $text = substr($text, (int) ($match['district'][1] + strlen($match['district'][0])));
-        }
-
-        if (trim($text) !== '') {
-            $parsed['street'] = trim($text);
-        }
-
-        return $parsed;
+        return ChinaRegions::parseAddress($raw);
     }
 }
