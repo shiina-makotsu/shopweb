@@ -19,6 +19,10 @@ class CostEntry extends Model
         'category',
         'name',
         'amount_cents',
+        'currency_code',
+        'currency_unit',
+        'original_amount',
+        'exchange_rate',
         'country',
         'tax_rate',
         'is_auto',
@@ -29,6 +33,8 @@ class CostEntry extends Model
     {
         return [
             'tax_rate' => 'decimal:4',
+            'original_amount' => 'decimal:4',
+            'exchange_rate' => 'decimal:6',
             'is_auto' => 'boolean',
         ];
     }

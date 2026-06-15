@@ -54,6 +54,7 @@ class ReportExportController extends Controller
         $dateFrom = $this->parseDate($request->query('date_from'));
         $dateTo = $this->parseDate($request->query('date_to'));
         $summary = $metrics->summary($dateFrom, $dateTo);
+        $formulaResultName = $metrics->profitFormulaConfig()['result_name'];
         $warehouseRows = collect($metrics->warehouseBreakdown($dateFrom, $dateTo))
             ->map(fn (array $row): array => [
                 $row['warehouse_name'],
@@ -104,7 +105,7 @@ class ReportExportController extends Controller
             ],
             [],
             ['仓库利润', '仓库', '销售额', '成本', '利润', '利润率', '完成订单'],
-            ['交付类型利润', '交付类型', '销售额', '采购成本', '总成本', '毛利润', '默认利润', '公式利润', '利润率', '完成订单'],
+            ['交付类型利润', '交付类型', '销售额', '采购成本', '总成本', '毛利润', '默认利润', $formulaResultName, '利润率', '完成订单'],
             ...$fulfillmentRows,
             [],
             ...$warehouseRows,

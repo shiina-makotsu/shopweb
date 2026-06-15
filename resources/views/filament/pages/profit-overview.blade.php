@@ -30,13 +30,41 @@
     <section class="mt-6 rounded-sm border border-slate-300 bg-white">
         <div class="border-b border-slate-200 px-4 py-3">
             <h2 class="text-lg font-semibold">交付类型利润</h2>
-            <p class="mt-1 text-sm text-slate-600">线上交付、线下交付、物流交付分开归集销售额；成本按销售额占比分摊。公式可使用 sales、cost、purchase_cost、gross_profit、profit 与 + - * / ()。</p>
-            <form class="mt-4 flex flex-wrap items-end gap-3" wire:submit.prevent="saveProfitFormula">
-                <label class="min-w-80 flex-1">
-                    <span class="text-xs font-medium text-slate-600">自定义利润公式</span>
-                    <input class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" type="text" wire:model.defer="profit_formula" placeholder="sales - cost">
-                </label>
-                <button class="rounded-sm border border-blue-700 bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800" type="submit">保存公式</button>
+            <p class="mt-1 text-sm text-slate-600">线上交付、线下交付、物流交付分开归集销售额；成本按销售额占比分摊。自定义公式由变量和运算符组成，可引入商品售价、商品成本、运输成本、海关税务成本、其他成本和已录入的成本词条。</p>
+            <form class="mt-4 space-y-4" wire:submit.prevent="saveProfitFormula">
+                <div class="grid gap-3 lg:grid-cols-[minmax(180px,260px)_1fr_auto] lg:items-end">
+                    <label class="block">
+                        <span class="text-xs font-medium text-slate-600">自定义结果名</span>
+                        <input class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" type="text" wire:model.live.debounce.300ms="formula_result_name" placeholder="商品利润">
+                    </label>
+                    <div class="rounded-sm border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                        {{ $this->formulaPreview() }}
+                    </div>
+                    <button class="rounded-sm border border-blue-700 bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800" type="submit">保存公式</button>
+                </div>
+
+                <div class="space-y-2">
+                    @foreach($this->formula_items as $index => $item)
+                        <div class="grid gap-2 md:grid-cols-[120px_1fr_auto] md:items-center" wire:key="formula-item-{{ $index }}">
+                            @if($index === 0)
+                                <div class="text-xs font-medium text-slate-500">起始变量</div>
+                            @else
+                                <select class="rounded-sm border border-slate-300 px-3 py-2 text-sm" wire:model.live="formula_items.{{ $index }}.operator" aria-label="运算符">
+                                    @foreach($this->formulaOperatorOptions() as $value => $label)
+                                        <option value="{{ $value }}">{{ $label }}</option>
+                                    @endforeach
+                                </select>
+                            @endif
+                            <select class="rounded-sm border border-slate-300 px-3 py-2 text-sm" wire:model.live="formula_items.{{ $index }}.variable" aria-label="变量">
+                                @foreach($this->formulaVariableOptions() as $value => $label)
+                                    <option value="{{ $value }}">{{ $label }}</option>
+                                @endforeach
+                            </select>
+                            <button class="rounded-sm border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40" type="button" wire:click="removeFormulaItem({{ $index }})" @disabled(count($this->formula_items) <= 2)>删除</button>
+                        </div>
+                    @endforeach
+                    <button class="rounded-sm border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50" type="button" wire:click="addFormulaItem">添加变量</button>
+                </div>
             </form>
         </div>
         <div class="overflow-x-auto">
@@ -49,7 +77,7 @@
                         <th class="px-4 py-3 text-right font-medium">总成本</th>
                         <th class="px-4 py-3 text-right font-medium">毛利润</th>
                         <th class="px-4 py-3 text-right font-medium">默认利润</th>
-                        <th class="px-4 py-3 text-right font-medium">公式利润</th>
+                        <th class="px-4 py-3 text-right font-medium">{{ $this->formulaResultName() }}</th>
                         <th class="px-4 py-3 text-right font-medium">利润率</th>
                         <th class="px-4 py-3 text-right font-medium">完成订单</th>
                     </tr>

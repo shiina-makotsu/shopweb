@@ -22,6 +22,7 @@ use App\Services\CouponService;
 use App\Services\OrderService;
 use App\Services\WarehouseService;
 use App\Support\AdminAccess;
+use App\Support\CurrencyUnit;
 use App\Support\ProfitMetrics;
 
 it('syncs procurement into an incoming product, auto costs, and allocated presale users', function (): void {
@@ -143,6 +144,15 @@ it('calculates profit from fulfilled orders minus costs', function (): void {
         'completed_orders' => 1,
     ])->and($summary['gross_profit_rate'])->toBe(1.0)
         ->and($summary['profit_rate'])->toBe(0.7);
+});
+
+it('converts custom cost currencies and units into settlement cents', function (): void {
+    expect(CurrencyUnit::unitOptions('CNY'))->toHaveKeys(['yuan', 'jiao', 'fen'])
+        ->and(CurrencyUnit::unitOptions('FRF'))->toHaveKeys(['franc', 'centime'])
+        ->and(CurrencyUnit::unitOptions('BEF'))->toHaveKeys(['franc', 'centime'])
+        ->and(CurrencyUnit::unitOptions('ATS'))->toHaveKeys(['schilling', 'groschen'])
+        ->and(CurrencyUnit::toSettlementCents(50, 'USD', 'cent', 7.2))->toBe(360)
+        ->and(CurrencyUnit::toSettlementCents(12, 'CNY', 'jiao', 1))->toBe(120);
 });
 
 it('calculates gross profit and warehouse profit breakdowns', function (): void {
@@ -276,6 +286,68 @@ it('calculates gross profit and warehouse profit breakdowns', function (): void 
         'profit_cents' => -300,
         'profit_rate' => null,
     ]);
+});
+
+it('calculates fulfillment profit with named multi variable formulas', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+    $category = Category::query()->create(['name' => '公式分类', 'slug' => 'formula-category', 'is_active' => true]);
+    $product = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => '公式商品',
+        'slug' => 'formula-product',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_LOGISTICS,
+    ]);
+    $variant = ProductVariant::query()->create([
+        'product_id' => $product->id,
+        'sku' => 'FORMULA-1',
+        'price_cents' => 10000,
+        'stock' => 5,
+        'is_active' => true,
+    ]);
+    $order = Order::query()->create([
+        'user_id' => $user->id,
+        'order_number' => 'FORMULA-1',
+        'status' => Order::STATUS_FULFILLED,
+        'payment_status' => Order::PAYMENT_CONFIRMED,
+        'subtotal_cents' => 10000,
+        'total_cents' => 10000,
+        'contact_name' => 'Buyer',
+        'contact_phone' => '1',
+    ]);
+    OrderItem::query()->create([
+        'order_id' => $order->id,
+        'product_id' => $product->id,
+        'product_variant_id' => $variant->id,
+        'product_title' => $product->title,
+        'product_status' => Product::STATUS_PUBLISHED,
+        'variant_sku' => $variant->sku,
+        'unit_price_cents' => 10000,
+        'quantity' => 1,
+        'line_total_cents' => 10000,
+    ]);
+    CostEntry::query()->create(['category' => CostEntry::CATEGORY_PURCHASE, 'name' => '商品成本', 'amount_cents' => 3000]);
+    CostEntry::query()->create(['category' => CostEntry::CATEGORY_SHIPPING, 'name' => '运输成本', 'amount_cents' => 500]);
+    CostEntry::query()->create(['category' => CostEntry::CATEGORY_OTHER, 'name' => '账号成本', 'amount_cents' => 800]);
+
+    $metrics = app(ProfitMetrics::class);
+    $metrics->updateProfitFormulaConfig([
+        'result_name' => '商品利润',
+        'items' => [
+            ['variable' => 'sales'],
+            ['operator' => ProfitMetrics::OPERATOR_SUBTRACT, 'variable' => 'purchase_cost'],
+            ['operator' => ProfitMetrics::OPERATOR_SUBTRACT, 'variable' => 'shipping_cost'],
+            ['operator' => ProfitMetrics::OPERATOR_ADD, 'variable' => $metrics->costNameVariableKey('账号成本')],
+        ],
+    ]);
+
+    $row = collect($metrics->fulfillmentBreakdown())
+        ->firstWhere('type', Product::FULFILLMENT_LOGISTICS);
+
+    expect($metrics->profitFormula())->toBe('商品利润 = sales - purchase_cost - shipping_cost + '.$metrics->costNameVariableKey('账号成本'))
+        ->and($row)->not->toBeNull()
+        ->and($row['formula_result_name'])->toBe('商品利润')
+        ->and($row['formula_profit_cents'])->toBe(7300);
 });
 
 it('lets users submit after sales requests and contact support with their order only', function (): void {

@@ -13,6 +13,11 @@ use Illuminate\Support\Str;
 class ProfitMetrics
 {
     public const DEFAULT_FORMULA = 'sales - cost';
+    public const DEFAULT_FORMULA_RESULT_NAME = '公式利润';
+    public const OPERATOR_ADD = '+';
+    public const OPERATOR_SUBTRACT = '-';
+    public const OPERATOR_MULTIPLY = '*';
+    public const OPERATOR_DIVIDE = '/';
 
     /**
      * @return array{sales_cents:int,purchase_cost_cents:int,cost_cents:int,gross_profit_cents:int,profit_cents:int,gross_profit_rate:?float,profit_rate:?float,completed_orders:int}
@@ -110,7 +115,7 @@ class ProfitMetrics
     }
 
     /**
-     * @return array<int, array{type:string,label:string,sales_cents:int,cost_cents:int,purchase_cost_cents:int,gross_profit_cents:int,profit_cents:int,formula_profit_cents:int,profit_rate:?float,orders_count:int}>
+     * @return array<int, array{type:string,label:string,sales_cents:int,cost_cents:int,purchase_cost_cents:int,shipping_cost_cents:int,customs_cost_cents:int,other_cost_cents:int,gross_profit_cents:int,profit_cents:int,formula_profit_cents:int,formula_result_name:string,profit_rate:?float,orders_count:int}>
      */
     public function fulfillmentBreakdown(?CarbonInterface $dateFrom = null, ?CarbonInterface $dateTo = null): array
     {
@@ -138,20 +143,33 @@ class ProfitMetrics
                     });
             });
 
-        $purchaseCost = (int) (clone $this->costEntryQuery($dateFrom, $dateTo))
-            ->where('category', CostEntry::CATEGORY_PURCHASE)
-            ->sum('amount_cents');
-        $totalCost = (int) (clone $this->costEntryQuery($dateFrom, $dateTo))->sum('amount_cents');
-        $sales = max(1, array_sum(array_column($rows, 'sales_cents')));
+        $costsByCategory = $this->costEntryQuery($dateFrom, $dateTo)
+            ->selectRaw('category, SUM(amount_cents) as amount_cents')
+            ->groupBy('category')
+            ->pluck('amount_cents', 'category')
+            ->map(fn ($amount): int => (int) $amount);
+
+        $purchaseCost = (int) ($costsByCategory[CostEntry::CATEGORY_PURCHASE] ?? 0);
+        $shippingCost = (int) ($costsByCategory[CostEntry::CATEGORY_SHIPPING] ?? 0);
+        $customsCost = (int) ($costsByCategory[CostEntry::CATEGORY_CUSTOMS] ?? 0);
+        $otherCost = (int) ($costsByCategory[CostEntry::CATEGORY_OTHER] ?? 0);
+        $totalCost = $purchaseCost + $shippingCost + $customsCost + $otherCost;
+        $totalSales = max(1, array_sum(array_column($rows, 'sales_cents')));
 
         foreach ($rows as &$row) {
-            $costShare = (int) round($totalCost * ($row['sales_cents'] / $sales));
-            $purchaseShare = (int) round($purchaseCost * ($row['sales_cents'] / $sales));
+            $ratio = $row['sales_cents'] / $totalSales;
+            $costShare = (int) round($totalCost * $ratio);
+            $purchaseShare = (int) round($purchaseCost * $ratio);
             $row['cost_cents'] = $costShare;
             $row['purchase_cost_cents'] = $purchaseShare;
+            $row['shipping_cost_cents'] = (int) round($shippingCost * $ratio);
+            $row['customs_cost_cents'] = (int) round($customsCost * $ratio);
+            $row['other_cost_cents'] = (int) round($otherCost * $ratio);
+            $row['_total_sales_cents'] = $totalSales;
             $row['gross_profit_cents'] = $row['sales_cents'] - $purchaseShare;
             $row['profit_cents'] = $row['sales_cents'] - $costShare;
-            $row['formula_profit_cents'] = $this->formulaProfit($row);
+            $row['formula_profit_cents'] = $this->formulaProfit($row, $dateFrom, $dateTo);
+            $row['formula_result_name'] = $this->profitFormulaConfig()['result_name'];
             $row['profit_rate'] = $this->rate((int) $row['formula_profit_cents'], (int) $row['sales_cents']);
             $row['orders_count'] = count($row['orders']);
             unset($row['orders']);
@@ -162,16 +180,102 @@ class ProfitMetrics
 
     public function profitFormula(): string
     {
-        $formula = trim((string) SiteSetting::query()->value('profit_formula'));
+        $config = $this->profitFormulaConfig();
 
-        return $formula !== '' ? $formula : self::DEFAULT_FORMULA;
+        return sprintf(
+            '%s = %s',
+            $config['result_name'],
+            $this->formulaExpression($config),
+        );
+    }
+
+    /**
+     * @return array{result_name:string,items:array<int, array{variable:string,operator?:string}>}
+     */
+    public function profitFormulaConfig(): array
+    {
+        $stored = trim((string) SiteSetting::query()->value('profit_formula'));
+
+        if ($stored !== '' && str_starts_with($stored, '{')) {
+            $decoded = json_decode($stored, true);
+
+            if (is_array($decoded)) {
+                return $this->normalizeFormulaConfig($decoded);
+            }
+        }
+
+        return $this->legacyFormulaConfig($stored);
     }
 
     public function updateProfitFormula(?string $formula): void
     {
         $formula = trim((string) $formula);
+        $this->storeProfitFormula($formula !== '' ? $formula : null);
+    }
+
+    /**
+     * @param  array<string, mixed>  $config
+     */
+    public function updateProfitFormulaConfig(array $config): void
+    {
+        $config = $this->normalizeFormulaConfig($config);
+        $this->storeProfitFormula(json_encode($config, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function operatorOptions(): array
+    {
+        return [
+            self::OPERATOR_ADD => '+',
+            self::OPERATOR_SUBTRACT => '-',
+            self::OPERATOR_MULTIPLY => '*',
+            self::OPERATOR_DIVIDE => '/',
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function formulaVariableOptions(?CarbonInterface $dateFrom = null, ?CarbonInterface $dateTo = null): array
+    {
+        $options = [
+            'sales' => '商品售价',
+            'cost' => '全部成本',
+            'purchase_cost' => '商品成本',
+            'shipping_cost' => '运输成本',
+            'customs_cost' => '海关税务成本',
+            'other_cost' => '其他成本',
+            'gross_profit' => '毛利润',
+            'profit' => '默认利润',
+        ];
+
+        CostEntry::query()
+            ->select('name')
+            ->whereNotNull('name')
+            ->when($dateFrom, fn ($query) => $query->where('created_at', '>=', $dateFrom->copy()->startOfDay()))
+            ->when($dateTo, fn ($query) => $query->where('created_at', '<=', $dateTo->copy()->endOfDay()))
+            ->distinct()
+            ->orderBy('name')
+            ->limit(80)
+            ->pluck('name')
+            ->each(function (string $name) use (&$options): void {
+                $options[$this->costNameVariableKey($name)] = '成本词条：'.$name;
+            });
+
+        return $options;
+    }
+
+    public function costNameVariableKey(string $name): string
+    {
+        return 'cost_name:'.sha1($name);
+    }
+
+    private function storeProfitFormula(?string $value): void
+    {
         $settings = SiteSetting::query()->firstOrCreate([], ['site_name' => config('app.name', 'ShopWeb')]);
-        $settings->profit_formula = $formula !== '' ? $formula : null;
+        $settings->profit_formula = $value;
         $settings->save();
     }
 
@@ -196,6 +300,9 @@ class ProfitMetrics
             'sales_cents' => 0,
             'cost_cents' => 0,
             'purchase_cost_cents' => 0,
+            'shipping_cost_cents' => 0,
+            'customs_cost_cents' => 0,
+            'other_cost_cents' => 0,
             'gross_profit_cents' => 0,
             'profit_cents' => 0,
             'formula_profit_cents' => 0,
@@ -217,45 +324,193 @@ class ProfitMetrics
     /**
      * @param  array<string, mixed>  $row
      */
-    private function formulaProfit(array $row): int
+    private function formulaProfit(array $row, ?CarbonInterface $dateFrom = null, ?CarbonInterface $dateTo = null): int
     {
-        $variables = [
+        $config = $this->profitFormulaConfig();
+        $variables = $this->formulaVariableValues($row, $dateFrom, $dateTo);
+
+        return (int) round($this->evaluateFormulaConfig($config, $variables) * 100);
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     * @return array<string, float|int>
+     */
+    private function formulaVariableValues(array $row, ?CarbonInterface $dateFrom = null, ?CarbonInterface $dateTo = null): array
+    {
+        $values = [
             'sales' => ((int) $row['sales_cents']) / 100,
             'cost' => ((int) $row['cost_cents']) / 100,
             'purchase_cost' => ((int) $row['purchase_cost_cents']) / 100,
+            'shipping_cost' => ((int) ($row['shipping_cost_cents'] ?? 0)) / 100,
+            'customs_cost' => ((int) ($row['customs_cost_cents'] ?? 0)) / 100,
+            'other_cost' => ((int) ($row['other_cost_cents'] ?? 0)) / 100,
             'gross_profit' => ((int) $row['gross_profit_cents']) / 100,
             'profit' => ((int) $row['profit_cents']) / 100,
         ];
 
-        return (int) round($this->evaluateFormula($this->profitFormula(), $variables) * 100);
+        $sales = max(1, (int) ($row['_total_sales_cents'] ?? $row['sales_cents'] ?? 0));
+        $ratio = max(0, (int) $row['sales_cents']) / $sales;
+
+        $this->costEntryQuery($dateFrom, $dateTo)
+            ->selectRaw('name, SUM(amount_cents) as amount_cents')
+            ->whereNotNull('name')
+            ->groupBy('name')
+            ->get()
+            ->each(function (CostEntry $entry) use (&$values, $ratio): void {
+                $values[$this->costNameVariableKey((string) $entry->name)] = ((int) round(((int) $entry->amount_cents) * $ratio)) / 100;
+            });
+
+        return $values;
     }
 
     /**
+     * @param  array{result_name:string,items:array<int, array{variable:string,operator?:string}>}  $config
      * @param  array<string, float|int>  $variables
      */
-    private function evaluateFormula(string $formula, array $variables): float
+    private function evaluateFormulaConfig(array $config, array $variables): float
     {
-        $expression = Str::lower(trim($formula));
+        $values = [];
+        $operators = [];
 
-        if ($expression === '') {
-            $expression = self::DEFAULT_FORMULA;
+        foreach ($config['items'] as $index => $item) {
+            $value = (float) ($variables[$item['variable']] ?? 0);
+
+            if ($index === 0) {
+                $values[] = $value;
+
+                continue;
+            }
+
+            $operator = $item['operator'] ?? self::OPERATOR_ADD;
+
+            if ($operator === self::OPERATOR_MULTIPLY) {
+                $values[array_key_last($values)] *= $value;
+
+                continue;
+            }
+
+            if ($operator === self::OPERATOR_DIVIDE) {
+                $values[array_key_last($values)] = abs($value) < 0.000001 ? 0.0 : $values[array_key_last($values)] / $value;
+
+                continue;
+            }
+
+            $operators[] = $operator;
+            $values[] = $value;
         }
 
-        foreach ($variables as $name => $value) {
-            $expression = preg_replace('/\b'.preg_quote($name, '/').'\b/', '('.((float) $value).')', $expression) ?? $expression;
+        $result = array_shift($values) ?? 0.0;
+
+        foreach ($values as $index => $value) {
+            $result = ($operators[$index] ?? self::OPERATOR_ADD) === self::OPERATOR_SUBTRACT
+                ? $result - $value
+                : $result + $value;
         }
 
-        if (preg_match('/[^0-9+\-*\/().\s]/', $expression)) {
-            $expression = str_replace(['sales', 'cost'], ['('.$variables['sales'].')', '('.$variables['cost'].')'], self::DEFAULT_FORMULA);
+        return $result;
+    }
+
+    /**
+     * @param  array<string, mixed>  $config
+     * @return array{result_name:string,items:array<int, array{variable:string,operator?:string}>}
+     */
+    private function normalizeFormulaConfig(array $config): array
+    {
+        $resultName = trim((string) ($config['result_name'] ?? ''));
+        $rawItems = $config['items'] ?? null;
+
+        if (! is_array($rawItems) || $rawItems === []) {
+            $rawItems = [
+                ['variable' => $config['left_variable'] ?? 'sales'],
+                [
+                    'operator' => $config['operator'] ?? self::OPERATOR_SUBTRACT,
+                    'variable' => $config['right_variable'] ?? 'cost',
+                ],
+            ];
         }
 
-        try {
-            $result = eval('return '.$expression.';');
-        } catch (\Throwable) {
-            $result = $variables['sales'] - $variables['cost'];
+        $items = [];
+
+        foreach ($rawItems as $index => $rawItem) {
+            if (! is_array($rawItem)) {
+                continue;
+            }
+
+            $variable = trim((string) ($rawItem['variable'] ?? ''));
+
+            if ($variable === '') {
+                continue;
+            }
+
+            $item = ['variable' => $variable];
+
+            if ($index > 0) {
+                $operator = trim((string) ($rawItem['operator'] ?? self::OPERATOR_ADD));
+                $item['operator'] = array_key_exists($operator, $this->operatorOptions())
+                    ? $operator
+                    : self::OPERATOR_ADD;
+            }
+
+            $items[] = $item;
         }
 
-        return is_numeric($result) && is_finite((float) $result) ? (float) $result : 0.0;
+        if (count($items) < 2) {
+            $items = [
+                ['variable' => 'sales'],
+                ['operator' => self::OPERATOR_SUBTRACT, 'variable' => 'cost'],
+            ];
+        }
+
+        return [
+            'result_name' => $resultName !== '' ? $resultName : self::DEFAULT_FORMULA_RESULT_NAME,
+            'items' => array_values($items),
+        ];
+    }
+
+    /**
+     * @return array{result_name:string,items:array<int, array{variable:string,operator?:string}>}
+     */
+    private function legacyFormulaConfig(string $formula): array
+    {
+        $formula = Str::lower(trim($formula));
+
+        if (preg_match_all('/([+\-*\/])?\s*([a-z_][a-z0-9_:]*)/', $formula, $matches, PREG_SET_ORDER) && count($matches) >= 2) {
+            $items = [];
+
+            foreach ($matches as $index => $match) {
+                $item = ['variable' => $match[2]];
+
+                if ($index > 0) {
+                    $item['operator'] = $match[1] !== '' ? $match[1] : self::OPERATOR_ADD;
+                }
+
+                $items[] = $item;
+            }
+
+            return $this->normalizeFormulaConfig([
+                'result_name' => self::DEFAULT_FORMULA_RESULT_NAME,
+                'items' => $items,
+            ]);
+        }
+
+        return $this->normalizeFormulaConfig([
+            'result_name' => self::DEFAULT_FORMULA_RESULT_NAME,
+            'items' => [
+                ['variable' => 'sales'],
+                ['operator' => self::OPERATOR_SUBTRACT, 'variable' => 'cost'],
+            ],
+        ]);
+    }
+
+    /**
+     * @param  array{result_name:string,items:array<int, array{variable:string,operator?:string}>}  $config
+     */
+    private function formulaExpression(array $config): string
+    {
+        return collect($config['items'])
+            ->map(fn (array $item, int $index): string => ($index === 0 ? '' : ($item['operator'] ?? self::OPERATOR_ADD).' ').$item['variable'])
+            ->implode(' ');
     }
 
     private function completedOrderQuery(?CarbonInterface $dateFrom = null, ?CarbonInterface $dateTo = null)
