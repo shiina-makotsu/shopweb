@@ -17,6 +17,7 @@ use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Contracts\HasSchemas;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Support\Facades\Schema as DbSchema;
 use UnitEnum;
 
 class CurrencySettingsPage extends Page implements HasSchemas
@@ -54,6 +55,23 @@ class CurrencySettingsPage extends Page implements HasSchemas
     {
         $settings = $this->settings();
         $base = CurrencyUnit::baseCurrency();
+
+        if (! $this->hasCurrencyColumns()) {
+            $this->form->fill([
+                'currency_base_locked' => false,
+                'store_currency' => $base,
+                'currency_base_unit' => CurrencyUnit::defaultUnit($base),
+                'currency_gold_price' => null,
+                'currency_gold_unit' => 'gram',
+            ]);
+
+            $this->converter_to = $base;
+            $this->converter_to_unit = CurrencyUnit::defaultUnit($base);
+            $this->converter_from = $base === 'USD' ? 'CNY' : 'USD';
+            $this->converter_from_unit = CurrencyUnit::defaultUnit($this->converter_from);
+
+            return;
+        }
 
         $this->form->fill([
             'currency_base_locked' => (bool) ($settings->currency_base_locked ?? false),
@@ -113,6 +131,12 @@ class CurrencySettingsPage extends Page implements HasSchemas
 
     public function save(): void
     {
+        if (! $this->hasCurrencyColumns()) {
+            $this->sendMigrationMissingNotification();
+
+            return;
+        }
+
         $settings = $this->settings();
         $state = $this->normalizedState($this->form->getState());
 
@@ -127,6 +151,12 @@ class CurrencySettingsPage extends Page implements HasSchemas
 
     public function refreshRates(): void
     {
+        if (! $this->hasCurrencyColumns()) {
+            $this->sendMigrationMissingNotification();
+
+            return;
+        }
+
         $settings = $this->settings();
         $settings->update($this->normalizedState($this->form->getState()));
 
@@ -141,6 +171,12 @@ class CurrencySettingsPage extends Page implements HasSchemas
 
     public function convertCurrency(): void
     {
+        if (! $this->hasCurrencyColumns()) {
+            $this->converter_result = '货币字段尚未迁移，请先运行 php artisan migrate。';
+
+            return;
+        }
+
         $settings = $this->settings();
         $rates = $settings->currency_exchange_rates ?: [CurrencyUnit::baseCurrency() => 1];
         $amount = (float) ($this->converter_amount ?: 0);
@@ -192,6 +228,16 @@ class CurrencySettingsPage extends Page implements HasSchemas
      */
     public function rateRows(): array
     {
+        if (! $this->hasCurrencyColumns()) {
+            $base = CurrencyUnit::baseCurrency();
+
+            return [[
+                'code' => $base,
+                'name' => CurrencyUnit::currencyOptions()[$base] ?? $base,
+                'rate' => '1',
+            ]];
+        }
+
         $rates = $this->settings()->currency_exchange_rates ?: [CurrencyUnit::baseCurrency() => 1];
 
         return collect($rates)
@@ -215,11 +261,19 @@ class CurrencySettingsPage extends Page implements HasSchemas
 
     public function ratesUpdatedAt(): string
     {
+        if (! $this->hasCurrencyColumns()) {
+            return '尚未迁移';
+        }
+
         return $this->settings()->currency_rates_updated_at?->format('Y-m-d H:i') ?? '尚未刷新';
     }
 
     public function goldSummary(): string
     {
+        if (! $this->hasCurrencyColumns()) {
+            return '尚未迁移';
+        }
+
         $settings = $this->settings();
 
         if (! $settings->currency_gold_price) {
@@ -259,5 +313,29 @@ class CurrencySettingsPage extends Page implements HasSchemas
     private function settings(): SiteSetting
     {
         return SiteSetting::query()->firstOrCreate([], ['site_name' => config('app.name', 'ShopWeb')]);
+    }
+
+    private function hasCurrencyColumns(): bool
+    {
+        try {
+            return DbSchema::hasTable('site_settings')
+                && DbSchema::hasColumn('site_settings', 'currency_base_locked')
+                && DbSchema::hasColumn('site_settings', 'currency_base_unit')
+                && DbSchema::hasColumn('site_settings', 'currency_exchange_rates')
+                && DbSchema::hasColumn('site_settings', 'currency_gold_price')
+                && DbSchema::hasColumn('site_settings', 'currency_gold_unit')
+                && DbSchema::hasColumn('site_settings', 'currency_rates_updated_at');
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    private function sendMigrationMissingNotification(): void
+    {
+        Notification::make()
+            ->title('货币数据库字段尚未迁移')
+            ->body('请在服务器执行 php artisan migrate 后再刷新国际汇率与黄金快照。')
+            ->danger()
+            ->send();
     }
 }

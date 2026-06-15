@@ -5,11 +5,16 @@ namespace App\Services;
 use App\Models\SiteSetting;
 use App\Support\CurrencyUnit;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Schema;
 
 class CurrencyRateService
 {
     public function refresh(SiteSetting $settings): SiteSetting
     {
+        if (! $this->hasCurrencyColumns()) {
+            return $settings;
+        }
+
         $base = CurrencyUnit::normalizeCurrency($settings->currency_base_locked ? $settings->store_currency : CurrencyUnit::baseCurrency());
         $rates = $this->fetchExchangeRates($base);
         $goldPrice = $this->fetchGoldPrice($base);
@@ -105,5 +110,20 @@ class CurrencyRateService
         }
 
         return $amount * $fromRate / $toRate;
+    }
+
+    private function hasCurrencyColumns(): bool
+    {
+        try {
+            return Schema::hasTable('site_settings')
+                && Schema::hasColumn('site_settings', 'currency_base_locked')
+                && Schema::hasColumn('site_settings', 'currency_base_unit')
+                && Schema::hasColumn('site_settings', 'currency_exchange_rates')
+                && Schema::hasColumn('site_settings', 'currency_gold_price')
+                && Schema::hasColumn('site_settings', 'currency_gold_unit')
+                && Schema::hasColumn('site_settings', 'currency_rates_updated_at');
+        } catch (\Throwable) {
+            return false;
+        }
     }
 }
