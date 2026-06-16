@@ -29,10 +29,10 @@
                         <button class="inline-flex h-10 w-10 items-center justify-center rounded-full text-zinc-600 hover:bg-zinc-100" type="button" data-download-latest title="下载最近图片" aria-label="下载最近图片">
                             <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
                         </button>
-                        <button class="inline-flex h-10 w-10 items-center justify-center rounded-full text-zinc-600 hover:bg-zinc-100" type="button" data-help-toggle title="鎻愮ず" aria-label="鎻愮ず">
+                        <button class="inline-flex h-10 w-10 items-center justify-center rounded-full text-zinc-600 hover:bg-zinc-100" type="button" data-help-toggle title="提示" aria-label="提示">
                             <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.2 9a3 3 0 1 1 4.6 2.5c-.9.5-1.8 1.2-1.8 2.5"/><path d="M12 18h.01"/></svg>
                         </button>
-                        <button class="inline-flex h-10 w-10 items-center justify-center rounded-full text-zinc-600 hover:bg-zinc-100" type="button" data-settings-toggle title="璁剧疆" aria-label="璁剧疆">
+                        <button class="inline-flex h-10 w-10 items-center justify-center rounded-full text-zinc-600 hover:bg-zinc-100" type="button" data-settings-toggle title="设置" aria-label="设置">
                             <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="2"><path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1A2 2 0 1 1 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1A2 2 0 1 1 19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.5 1h.1a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>
                         </button>
                     </div>
@@ -73,7 +73,7 @@
                 <div class="mx-auto grid min-h-[calc(100vh-260px)] max-w-6xl gap-4 lg:grid-cols-[16rem_1fr]">
                     <aside class="rounded-3xl border border-zinc-200 bg-white p-3 shadow-sm lg:sticky lg:top-20 lg:self-start">
                         <div class="flex items-center justify-between gap-2 px-2 py-1">
-                            <h2 class="text-sm font-semibold text-zinc-950">浼氳瘽</h2>
+                            <h2 class="text-sm font-semibold text-zinc-950">会话</h2>
                             <button class="inline-flex h-9 w-9 items-center justify-center rounded-full bg-zinc-950 text-white hover:bg-zinc-800" type="button" data-chat-new title="新增会话" aria-label="新增会话">
                                 <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="2"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
                             </button>
@@ -126,7 +126,7 @@
                         <input class="hidden" type="file" name="chat_files" multiple data-chat-files-input>
 
                         <div class="flex flex-wrap items-end gap-2" data-image-controls>
-                            <button class="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-600 hover:bg-zinc-200" type="button" data-reference-button title="娣诲姞鍙傝€冨浘" aria-label="娣诲姞鍙傝€冨浘">
+                            <button class="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-600 hover:bg-zinc-200" type="button" data-reference-button title="添加参考图" aria-label="添加参考图">
                                 <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="2"><path d="M21.4 11.6 12 21a6 6 0 0 1-8.5-8.5l10-10a4 4 0 1 1 5.7 5.7l-10 10a2 2 0 0 1-2.8-2.8l9.3-9.3"/></svg>
                             </button>
 
@@ -197,7 +197,7 @@
                         </div>
 
                         <div class="hidden flex-1 flex-wrap items-end gap-2" data-chat-controls>
-                            <button class="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-600 hover:bg-zinc-200" type="button" data-chat-files-button title="闄勫姞鏂囦欢" aria-label="闄勫姞鏂囦欢">
+                            <button class="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-600 hover:bg-zinc-200" type="button" data-chat-files-button title="附加文件" aria-label="附加文件">
                                 <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="2"><path d="M21.4 11.6 12 21a6 6 0 0 1-8.5-8.5l10-10a4 4 0 1 1 5.7 5.7l-10 10a2 2 0 0 1-2.8-2.8l9.3-9.3"/></svg>
                             </button>
 
@@ -211,7 +211,7 @@
                                 </select>
                             </label>
 
-                            <button class="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-400 transition hover:bg-zinc-200" type="button" data-chat-web-search aria-label="鑱旂綉鎼滅储" title="鑱旂綉鎼滅储" aria-pressed="false">
+                            <button class="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-400 transition hover:bg-zinc-200" type="button" data-chat-web-search aria-label="联网搜索" title="联网搜索" aria-pressed="false">
                                 <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="2">
                                     <circle cx="12" cy="12" r="10"/>
                                     <path d="M2 12h20"/>
@@ -221,9 +221,9 @@
                             </button>
 
                             <label class="ml-auto min-w-48 flex-1 text-xs font-medium text-zinc-400 sm:max-w-64 sm:flex-none">
-                                妯″瀷
+                                模型
                                 <select class="mt-1 h-9 w-full rounded-2xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-900" name="chat_model" data-chat-model-select>
-                                    <option value="">榛樿妯″瀷 gpt-5.5</option>
+                                    <option value="">默认模型 gpt-5.5</option>
                                 </select>
                             </label>
                         </div>
@@ -240,7 +240,7 @@
             <aside class="fixed inset-y-0 right-0 z-50 w-full max-w-md translate-x-full border-l border-zinc-200 bg-white shadow-2xl transition-transform duration-200" data-settings-panel>
                 <div class="flex items-center justify-between border-b border-zinc-200 px-5 py-4">
                     <h2 class="text-base font-semibold">生成设置</h2>
-                    <button class="inline-flex h-9 w-9 items-center justify-center rounded-full text-zinc-500 hover:bg-zinc-100" type="button" data-settings-close aria-label="鍏抽棴璁剧疆">
+                    <button class="inline-flex h-9 w-9 items-center justify-center rounded-full text-zinc-500 hover:bg-zinc-100" type="button" data-settings-close aria-label="关闭设置">
                         <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
                     </button>
                 </div>
@@ -641,13 +641,13 @@
                     customConfigActions?.classList.toggle('hidden', !custom);
 
                     if (!custom && !configName.value.trim()) {
-                        configName.value = '榛樿閰嶇疆';
+                        configName.value = '默认配置';
                     }
                 };
 
                 configMode.addEventListener('change', () => {
                     if (configMode.value === 'default') {
-                        configName.value = configName.value.trim() || '榛樿閰嶇疆';
+                        configName.value = configName.value.trim() || '默认配置';
                     }
                     updateConfigMode();
                 });
@@ -929,7 +929,7 @@
 
                 const syncChatModelOptions = () => {
                     const current = chatModelSelect.value;
-                    chatModelSelect.innerHTML = `<option value="">榛樿妯″瀷 ${defaultChatModel}</option>`;
+                    chatModelSelect.innerHTML = `<option value="">默认模型 ${defaultChatModel}</option>`;
 
                     Array.from(modelSelect.options).forEach((option) => {
                         if (!option.value) return;
@@ -1081,7 +1081,7 @@
                                 <span class="block truncate text-xs font-medium text-zinc-700">${escapeHtml(item.file.name)}</span>
                                 <span class="block text-[11px] text-zinc-400">${formatBytes(item.file.size)}</span>
                             </span>
-                            <button class="hidden h-6 w-6 items-center justify-center rounded-full bg-zinc-100 text-zinc-500 group-hover:flex" type="button" data-remove-chat-file="${index}" aria-label="绉婚櫎闄勪欢">脳</button>
+                            <button class="hidden h-6 w-6 items-center justify-center rounded-full bg-zinc-100 text-zinc-500 group-hover:flex" type="button" data-remove-chat-file="${index}" aria-label="移除附件">x</button>
                         `;
                         chatFilesPreview.appendChild(chip);
                     });
@@ -1179,7 +1179,7 @@
                         const url = reference.previewUrl;
                         item.innerHTML = `
                             <img class="aspect-square w-full object-cover" src="${escapeAttribute(url)}" alt="">
-                            <span class="absolute right-1 top-1 hidden rounded-full bg-zinc-950/70 px-2 py-1 text-[10px] text-white group-hover:block">绉婚櫎</span>
+                            <span class="absolute right-1 top-1 hidden rounded-full bg-zinc-950/70 px-2 py-1 text-[10px] text-white group-hover:block">移除</span>
                         `;
                         item.addEventListener('click', () => {
                             removeReference(index);
@@ -1188,16 +1188,16 @@
                         });
                         item.querySelector('img')?.addEventListener('load', () => {}, { once: true });
                         item.innerHTML = `
-                            <button class="block h-full w-full" type="button" data-edit-reference="${index}" aria-label="缂栬緫鍙傝€冨浘">
+                            <button class="block h-full w-full" type="button" data-edit-reference="${index}" aria-label="编辑参考图">
                                 <img class="h-full w-full object-cover transition duration-150 group-hover:brightness-50" src="${escapeAttribute(reference.previewUrl)}" alt="">
                                 <span class="absolute inset-0 hidden items-center justify-center text-white group-hover:flex">
                                     <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
                                 </span>
                                 <span class="absolute bottom-1 left-1 rounded-full bg-zinc-950/75 px-1.5 py-0.5 text-[10px] font-semibold text-white">${index + 1}</span>
-                                ${reference.maskFile ? '<span class="absolute bottom-1 right-1 rounded-full bg-emerald-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">閬僵</span>' : ''}
+                                ${reference.maskFile ? '<span class="absolute bottom-1 right-1 rounded-full bg-emerald-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">遮罩</span>' : ''}
                                 ${reference.editNote ? '<span class="absolute inset-x-0 bottom-0 h-1 bg-blue-500"></span>' : ''}
                             </button>
-                            <button class="absolute right-1 top-1 hidden h-5 w-5 items-center justify-center rounded-full bg-zinc-950/75 text-xs font-bold leading-none text-white group-hover:flex" type="button" data-remove-reference="${index}" aria-label="鍒犻櫎鍙傝€冨浘">脳</button>
+                            <button class="absolute right-1 top-1 hidden h-5 w-5 items-center justify-center rounded-full bg-zinc-950/75 text-xs font-bold leading-none text-white group-hover:flex" type="button" data-remove-reference="${index}" aria-label="删除参考图">x</button>
                         `;
                         item.addEventListener('click', (event) => {
                             event.stopImmediatePropagation();
@@ -1423,7 +1423,7 @@
                         payload.append('chat_endpoint', chatEndpointInput.value);
                         payload.append('chat_api_key', chatApiKeyInput.value);
                     }
-                    setStatus(currentMode === 'chat' ? '姝ｅ湪鑾峰彇鍙敤鑱婂ぉ妯″瀷...' : '姝ｅ湪鑾峰彇鍙敤鍥剧墖妯″瀷...');
+                    setStatus(currentMode === 'chat' ? '正在获取可用聊天模型...' : '正在获取可用图片模型...');
 
                     try {
                         const response = await fetch(root.dataset.modelsUrl, {
@@ -1436,7 +1436,7 @@
                         if (!response.ok) throw new Error(data.message || '模型列表获取失败。');
 
                         const targetSelect = currentMode === 'chat' ? chatModelSelect : modelSelect;
-                        targetSelect.innerHTML = currentMode === 'chat' ? `<option value="">榛樿妯″瀷 ${defaultChatModel}</option>` : `<option value="">榛樿妯″瀷 ${defaultImageModel}</option>`;
+                        targetSelect.innerHTML = currentMode === 'chat' ? `<option value="">默认模型 ${defaultChatModel}</option>` : `<option value="">默认模型 ${defaultImageModel}</option>`;
                         if (!data.models?.length && currentMode !== 'chat') {
                             targetSelect.insertAdjacentHTML('beforeend', '<option value="">没有识别到模型，请手动填写</option>');
                         } else {
@@ -1878,7 +1878,7 @@
 
                 const captureConfig = () => ({
                     source: configMode.value === 'default'
-                        ? (configName.value.trim() || '榛樿閰嶇疆')
+                        ? (configName.value.trim() || '默认配置')
                         : (endpointInput.value ? new URL(endpointInput.value).host : '未设置'),
                     configMode: configMode.value,
                     configName: configName.value.trim() || (configMode.value === 'default' ? '默认配置' : '自定义配置'),
@@ -2174,8 +2174,8 @@
                 };
 
                 const taskDimensionLabel = (task) => {
-                    if (task.actualWidth && task.actualHeight) return `${task.actualWidth}脳${task.actualHeight}`;
-                    if (task.config.requestedSize && task.config.requestedSize !== 'auto') return task.config.requestedSize.replace('x', '脳');
+                    if (task.actualWidth && task.actualHeight) return `${task.actualWidth}x${task.actualHeight}`;
+                    if (task.config.requestedSize && task.config.requestedSize !== 'auto') return task.config.requestedSize.replace('x', 'x');
                     return task.status === 'failed' ? '失败' : '完成';
                 };
 
