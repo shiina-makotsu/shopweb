@@ -159,6 +159,13 @@ Windows 本地如使用仓库内嵌 PHP，可执行：
 .\.tools\php\php.exe artisan test
 ```
 
+检查数据库迁移状态：
+
+```bash
+php artisan shop:database-health
+php artisan shop:database-health --fix
+```
+
 构建前端资源：
 
 ```bash
@@ -178,6 +185,7 @@ php artisan serve
 
 - 生产环境 Web 根目录必须指向 `public`。
 - 首次部署可访问 `/install` 完成安装向导。
+- 已安装站点默认会在启动/首次请求时检查未执行迁移并自动补齐，可通过 `SHOP_AUTO_MIGRATE_ON_BOOT=false` 关闭；手动自查可运行 `php artisan shop:database-health`。
 - 建议使用 MySQL/MariaDB，并配置稳定的队列、缓存和文件存储策略。
 - 需要确保 `storage`、`bootstrap/cache` 和上传目录可写。
 - 域名、反向代理、Cloudflare 等环境请检查 `APP_URL`、代理头和 HTTPS 设置。

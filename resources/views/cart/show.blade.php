@@ -20,7 +20,7 @@
                                 <div class="flex h-20 w-20 shrink-0 items-center justify-center rounded-sm bg-slate-100 text-xs text-slate-500">无图</div>
                             @endif
                             <div class="min-w-0 flex-1">
-                                <a class="block truncate font-medium hover:text-blue-800" href="{{ route('products.show', $item['product']) }}">{{ $item['product']->title }}</a>
+                                <a class="block truncate font-medium hover:text-blue-800" href="{{ $item['product']->showUrl() }}">{{ $item['product']->title }}</a>
                                 <p class="mt-1 text-xs text-slate-500">SKU {{ $item['variant']->sku }}</p>
                                 <p class="mt-1 text-sm text-slate-600">{{ $item['variant']->specLabel() }}</p>
                                 <div class="mt-2 flex items-center justify-between gap-3 text-sm">
@@ -70,7 +70,7 @@
                                             <div class="flex h-14 w-14 items-center justify-center rounded-sm bg-slate-100 text-xs text-slate-500">无图</div>
                                         @endif
                                         <div>
-                                            <a class="font-medium hover:text-blue-800" href="{{ route('products.show', $item['product']) }}">{{ $item['product']->title }}</a>
+                                            <a class="font-medium hover:text-blue-800" href="{{ $item['product']->showUrl() }}">{{ $item['product']->title }}</a>
                                             <p class="mt-1 text-xs text-slate-500">SKU {{ $item['variant']->sku }}</p>
                                         </div>
                                     </div>

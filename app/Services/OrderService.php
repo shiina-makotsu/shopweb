@@ -147,12 +147,14 @@ class OrderService
         });
     }
 
-    public function markPaymentSubmitted(Order $order, string $path): void
+    public function markPaymentSubmitted(Order $order, ?string $path, ?string $textProof = null): void
     {
-        $autoResult = $this->autoCheckPaymentProof($order, $path);
+        $textProof = trim((string) $textProof);
+        $autoResult = $path ? $this->autoCheckPaymentProof($order, $path) : Order::AUTO_CHECK_PENDING;
 
         $order->update([
             'payment_proof_path' => $path,
+            'payment_text_proof' => $textProof !== '' ? $textProof : null,
             'payment_status' => Order::PAYMENT_SUBMITTED,
             'payment_submitted_at' => now(),
             'payment_auto_checked_at' => now(),
@@ -170,12 +172,14 @@ class OrderService
             'metadata' => [
                 'payment_status' => Order::PAYMENT_SUBMITTED,
                 'auto_checked_at' => now()->toDateTimeString(),
-                'checker' => 'local_v1_placeholder',
+                'checker' => $path ? 'local_v1_placeholder' : 'manual_text_proof',
+                'payment_text_proof' => $textProof !== '' ? $textProof : null,
             ],
         ]);
 
         $this->activity->log('payment_proof_submitted', $order, $order->order_number, [
             'path' => $path,
+            'payment_text_proof' => $textProof !== '' ? $textProof : null,
             'payment_status' => Order::PAYMENT_SUBMITTED,
             'payment_auto_check_status' => $order->payment_auto_check_status,
         ], $order->user);

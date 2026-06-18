@@ -170,7 +170,7 @@
             @forelse($flashSales as $flashSale)
                 @php($product = $flashSale->product)
                 <article class="bg-white p-3">
-                    <a href="{{ route('products.show', $product) }}" class="block">
+                    <a href="{{ $product->showUrl() }}" class="block">
                         @if($product->coverMedia)
                             @if($product->coverMedia->isVideo())
                                 <video src="{{ $product->coverMedia->url() }}" class="aspect-square w-full rounded-sm bg-black object-contain" muted preload="metadata"></video>
@@ -182,7 +182,7 @@
                         @endif
                     </a>
                     <div class="mt-3 space-y-2">
-                        <a href="{{ route('products.show', $product) }}" class="block min-h-10 text-sm font-medium leading-5 hover:text-blue-800">{{ $product->title }}</a>
+                        <a href="{{ $product->showUrl() }}" class="block min-h-10 text-sm font-medium leading-5 hover:text-blue-800">{{ $product->title }}</a>
                         <p class="text-base font-semibold text-red-700">@money($flashSale->sale_price_cents)</p>
                         @if($flashSale->starts_at->isFuture())
                             <p class="text-xs text-slate-600">下次秒杀：{{ $flashSale->starts_at->format('m-d H:i') }}</p>

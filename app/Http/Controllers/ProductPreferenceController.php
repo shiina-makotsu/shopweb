@@ -10,6 +10,15 @@ use Illuminate\Http\Request;
 
 class ProductPreferenceController extends Controller
 {
+    public function toggleWishlistByStatus(Request $request, string $statusSlug, string $productSlug): RedirectResponse
+    {
+        $product = Product::findPublicForStatusRoute($statusSlug, $productSlug);
+
+        abort_unless($product, 404);
+
+        return $this->toggleWishlist($request, $product);
+    }
+
     public function toggleWishlist(Request $request, Product $product): RedirectResponse
     {
         $user = $request->user();
@@ -31,6 +40,15 @@ class ProductPreferenceController extends Controller
         ]);
 
         return back()->with('status', '已加入愿望单。');
+    }
+
+    public function toggleFavoriteByStatus(Request $request, string $statusSlug, string $productSlug): RedirectResponse
+    {
+        $product = Product::findPublicForStatusRoute($statusSlug, $productSlug);
+
+        abort_unless($product, 404);
+
+        return $this->toggleFavorite($request, $product);
     }
 
     public function toggleFavorite(Request $request, Product $product): RedirectResponse

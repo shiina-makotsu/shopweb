@@ -3,7 +3,7 @@
 namespace App\Filament\Resources\SupportQuickReplyResource\Pages;
 
 use App\Filament\Resources\SupportQuickReplyResource;
-use Filament\Resources\Pages\CreateRecord;
+use App\Filament\Resources\Pages\CreateRecord;
 
 class CreateSupportQuickReply extends CreateRecord
 {

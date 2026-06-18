@@ -272,23 +272,50 @@ class ChinaRegions
     }
 
     /**
-     * @return array{country:string, province?:string, city?:string, district?:string, street?:string, detail?:string}
+     * @return array{country:string, province?:string, city?:string, district?:string, street?:string, detail?:string, name?:string, phone?:string}
      */
     public static function parseAddress(string $raw): array
     {
+        $raw = trim($raw);
+        $parsed = ['country' => '中国'];
+
+        if (preg_match('/(?<!\d)(?P<phone>\+?\d[\d\s-]{6,18}\d)(?!\d)/u', $raw, $phoneMatch)) {
+            $parsed['phone'] = self::normalizePhoneNumber($phoneMatch['phone']);
+            $raw = self::removeFirst($raw, $phoneMatch['phone']);
+        }
+
+        $raw = preg_replace('/\s+/u', ' ', trim($raw)) ?: trim($raw);
+
+        if ($raw !== '' && preg_match('/^(?P<name>[\p{Han}A-Za-z][\p{Han}A-Za-z·.\s]{0,30}?)\s*(?=(中国|中华人民共和国|[^\p{Han}A-Za-z·.]*(?:省|自治区|特别行政区|市辖区)|北京|天津|上海|重庆|河北|山西|辽宁|吉林|黑龙江|江苏|浙江|安徽|福建|江西|山东|河南|湖北|湖南|广东|广西|海南|四川|贵州|云南|西藏|陕西|甘肃|青海|宁夏|新疆|香港|澳门|台湾))/u', $raw, $nameMatch)) {
+            $name = trim($nameMatch['name']);
+
+            if ($name !== '' && ! str_contains($name, '中国')) {
+                $parsed['name'] = $name;
+                $raw = mb_substr($raw, mb_strlen($nameMatch['name']));
+            }
+        }
+
         $text = preg_replace('/\s+/', '', trim($raw)) ?: trim($raw);
-        $parsed = ['country' => str_contains($text, '中国') ? '中国' : '中国'];
+
+        if (! isset($parsed['phone']) && preg_match('/(?<!\d)(?P<phone>\+?\d[\d\s-]{6,18}\d)(?!\d)/u', $text, $phoneMatch)) {
+            $parsed['phone'] = self::normalizePhoneNumber($phoneMatch['phone']);
+            $text = self::removeFirst($text, $phoneMatch['phone']);
+        }
+
         $text = preg_replace('/^中国/u', '', $text) ?: $text;
+        $text = preg_replace('/^中华人民共和国/u', '', $text) ?: $text;
 
         foreach (self::regionTreeForForms() as $province => $cities) {
-            if (! str_starts_with($text, $province) && ! str_contains($text, $province)) {
+            $provinceMatch = self::findAdministrativeMatch($text, [$province]);
+
+            if ($provinceMatch === null) {
                 continue;
             }
 
             $provinceText = in_array($province, ['北京', '天津', '上海', '重庆'], true) && str_contains($text, $province.'市')
                 ? $province.'市'
-                : $province;
-            $parsed['province'] = $provinceText;
+                : $provinceMatch;
+            $parsed['province'] = in_array($province, ['北京', '天津', '上海', '重庆'], true) ? $province.'市' : $province;
             $text = self::removeFirst($text, $provinceText);
             foreach (['省', '市', '壮族自治区', '回族自治区', '维吾尔自治区', '自治区', '特别行政区'] as $suffix) {
                 if (str_starts_with($text, $suffix)) {
@@ -297,14 +324,11 @@ class ChinaRegions
                 }
             }
 
-            foreach ($cities as $city => $districts) {
-                if (! str_starts_with($text, $city) && ! str_contains($text, $city)) {
-                    continue;
-                }
+            $city = self::findAdministrativeMatch($text, array_keys($cities));
 
-                $parsed['city'] = $city;
+            if ($city !== null) {
+                $parsed['city'] = self::canonicalAdministrativeName($city, array_keys($cities)) ?? $city;
                 $text = self::removeFirst($text, $city);
-                break;
             }
 
             if (! isset($parsed['city']) && count($cities) === 1) {
@@ -313,29 +337,26 @@ class ChinaRegions
 
             $districts = $cities[$parsed['city'] ?? ''] ?? [];
             $districtNames = array_is_list($districts) ? $districts : array_keys($districts);
+            $district = self::findAdministrativeMatch($text, $districtNames);
 
-            foreach ($districtNames as $district) {
-                if (! str_starts_with($text, $district) && ! str_contains($text, $district)) {
-                    continue;
-                }
-
-                $parsed['district'] = $district;
+            if ($district !== null) {
+                $parsed['district'] = self::canonicalAdministrativeName($district, $districtNames) ?? $district;
                 $text = self::removeFirst($text, $district);
-                break;
             }
 
-            $streets = isset($parsed['district']) && ! array_is_list($districts)
-                ? ($districts[$parsed['district']] ?? [])
-                : [];
+            if (preg_match('/(?P<street>[\p{Han}A-Za-z0-9]+?(?:大道|大街|街道|街|路|巷|弄|里|村|镇|乡|屯|庄|道))/u', $text, $match)) {
+                $parsed['street'] = $match['street'];
+                $text = self::removeFirst($text, $match['street']);
+            } else {
+                $streets = isset($parsed['district']) && ! array_is_list($districts)
+                    ? ($districts[$parsed['district']] ?? [])
+                    : [];
+                $street = self::findAdministrativeMatch($text, $streets);
 
-            foreach ($streets as $street) {
-                if (! str_starts_with($text, $street) && ! str_contains($text, $street)) {
-                    continue;
+                if ($street !== null) {
+                    $parsed['street'] = self::canonicalAdministrativeName($street, $streets) ?? $street;
+                    $text = self::removeFirst($text, $street);
                 }
-
-                $parsed['street'] = $street;
-                $text = self::removeFirst($text, $street);
-                break;
             }
 
             break;
@@ -360,18 +381,95 @@ class ChinaRegions
             $text = self::removeFirst($text, $match['district']);
         }
 
+        if (! isset($parsed['street']) && preg_match('/(?P<street>[\p{Han}A-Za-z0-9]+?(?:大道|大街|街道|街|路|巷|弄|里|村|镇|乡|屯|庄|道))/u', $text, $match)) {
+            $parsed['street'] = $match['street'];
+            $text = self::removeFirst($text, $match['street']);
+        }
+
         $text = trim($text);
         if ($text !== '') {
             $parsed['detail'] = $text;
-            $parsed['street'] ??= $text;
         }
 
         return $parsed;
     }
 
+    /**
+     * @param  array<int, string>  $candidates
+     */
+    private static function findAdministrativeMatch(string $text, array $candidates): ?string
+    {
+        $matches = [];
+
+        foreach ($candidates as $candidate) {
+            foreach (array_unique([$candidate, self::withoutAdministrativeSuffix($candidate)]) as $alias) {
+                if ($alias === '') {
+                    continue;
+                }
+
+                $position = mb_strpos($text, $alias);
+
+                if ($position !== false) {
+                    $matches[] = [
+                        'alias' => $alias,
+                        'position' => $position,
+                        'length' => mb_strlen($alias),
+                    ];
+                }
+            }
+        }
+
+        if ($matches === []) {
+            return null;
+        }
+
+        usort($matches, fn (array $a, array $b): int => [$a['position'], -$a['length']] <=> [$b['position'], -$b['length']]);
+
+        return $matches[0]['alias'];
+    }
+
+    /**
+     * @param  array<int, string>  $candidates
+     */
+    private static function canonicalAdministrativeName(string $match, array $candidates): ?string
+    {
+        foreach ($candidates as $candidate) {
+            if ($match === $candidate || $match === self::withoutAdministrativeSuffix($candidate)) {
+                return $candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private static function withoutAdministrativeSuffix(string $name): string
+    {
+        $value = preg_replace('/(壮族自治区|回族自治区|维吾尔自治区|特别行政区|自治州|自治区|地区|盟|省|市|区|县|旗|街道|镇|乡)$/u', '', $name);
+
+        return trim((string) $value);
+    }
+
+    private static function normalizePhoneNumber(string $phone): string
+    {
+        $phone = trim($phone);
+        $prefix = str_starts_with($phone, '+') ? '+' : '';
+        $digits = preg_replace('/\D+/', '', $phone) ?: '';
+
+        return $prefix.$digits;
+    }
+
     private static function removeFirst(string $text, string $needle): string
     {
         $position = mb_strpos($text, $needle);
+
+        if ($position === false) {
+            $alias = self::withoutAdministrativeSuffix($needle);
+
+            if ($alias !== '' && $alias !== $needle) {
+                $position = mb_strpos($text, $alias);
+                $needle = $alias;
+            }
+        }
 
         if ($position === false) {
             return $text;

@@ -22,6 +22,7 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
@@ -69,21 +70,39 @@ class WarehouseStockResource extends Resource
                     ->searchable()
                     ->preload(),
                 Select::make('product_variant_id')
-                    ->label('SKU')
+                    ->label('商品 SKU')
                     ->options(fn (): array => ProductVariant::query()->with('product')->latest()->limit(200)->get()
                         ->mapWithKeys(fn (ProductVariant $variant): array => [
                             $variant->id => trim(($variant->product?->title ?: '未关联商品').' / '.$variant->sku),
                         ])
                         ->all())
                     ->searchable()
-                    ->preload(),
+                    ->preload()
+                    ->live()
+                    ->afterStateUpdated(function (?int $state, callable $set): void {
+                        $variant = $state ? ProductVariant::query()->with('product')->find($state) : null;
+
+                        if (! $variant) {
+                            $set('sku', null);
+                            return;
+                        }
+
+                        $set('product_id', $variant->product_id);
+                        $set('sku', $variant->sku);
+                        $set('name', $variant->product?->title ?: $variant->sku);
+                    }),
                 Select::make('procurement_id')
                     ->label('关联采购')
                     ->options(fn (): array => Procurement::query()->latest()->limit(100)->pluck('name', 'id')->all())
                     ->searchable()
                     ->preload(),
                 TextInput::make('name')->label('条目名称')->required()->maxLength(255),
-                TextInput::make('sku')->label('仓库 SKU')->maxLength(255),
+                TextInput::make('sku')
+                    ->label('SKU')
+                    ->disabled()
+                    ->dehydrated()
+                    ->helperText('仓库库存直接使用商品 SKU；选择上方商品 SKU 后自动同步。')
+                    ->formatStateUsing(fn ($state, Get $get): ?string => $state ?: ProductVariant::query()->whereKey((int) $get('product_variant_id'))->value('sku')),
                 TextInput::make('quantity')->label('仓内数量')->numeric()->default(0)->required(),
                 TextInput::make('reserved_quantity')->label('预留数量')->numeric()->minValue(0)->default(0),
                 Textarea::make('note')->label('备注')->rows(3)->columnSpanFull(),
@@ -143,6 +162,27 @@ class WarehouseStockResource extends Resource
                         );
                     }),
             ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    public static function normalizeFormData(array $data): array
+    {
+        $variant = filled($data['product_variant_id'] ?? null)
+            ? ProductVariant::query()->with('product')->find((int) $data['product_variant_id'])
+            : null;
+
+        if ($variant) {
+            $data['product_id'] = $variant->product_id;
+            $data['sku'] = $variant->sku;
+            $data['name'] = blank($data['name'] ?? null)
+                ? ($variant->product?->title ?: $variant->sku)
+                : $data['name'];
+        }
+
+        return $data;
     }
 
     public static function getPages(): array

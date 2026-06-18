@@ -3,7 +3,7 @@
 namespace App\Filament\Resources\ResourceAssetResource\Pages;
 
 use App\Filament\Resources\ResourceAssetResource;
-use Filament\Resources\Pages\EditRecord;
+use App\Filament\Resources\Pages\EditRecord;
 
 class EditResourceAsset extends EditRecord
 {

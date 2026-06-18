@@ -38,7 +38,7 @@
                                 <label class="block">
                                     <span class="text-sm font-medium">智能地址识别</span>
                                     <div class="mt-1 flex flex-col gap-2 sm:flex-row">
-                                        <textarea class="min-h-20 w-full rounded-sm border border-slate-300 bg-white px-3 py-2 text-sm leading-6" name="shipping_address" data-address-raw rows="2" required>{{ $defaultRawAddress }}</textarea>
+                                        <textarea class="min-h-20 w-full rounded-sm border border-slate-300 bg-white px-3 py-2 text-sm leading-6" name="shipping_address" data-address-raw rows="2">{{ $defaultRawAddress }}</textarea>
                                         <button class="rounded-sm border border-blue-700 bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800 sm:self-start" type="button" data-address-parse>识别</button>
                                     </div>
                                 </label>
@@ -75,7 +75,7 @@
                                     </label>
                                     <label class="block">
                                         <span class="text-sm font-medium">详细地址</span>
-                                        <input class="mt-1 w-full rounded-sm border border-slate-300 bg-white px-3 py-2 text-sm" name="shipping_detail" data-address-detail value="{{ $defaultDetail }}">
+                                        <input class="mt-1 w-full rounded-sm border border-slate-300 bg-white px-3 py-2 text-sm" name="shipping_detail" data-address-detail value="{{ $defaultDetail }}" required>
                                     </label>
                                 </div>
                             </div>
@@ -206,6 +206,8 @@
                     const detail = root.querySelector('[data-address-detail]');
                     const raw = root.querySelector('[data-address-raw]');
                     const parseButton = root.querySelector('[data-address-parse]');
+                    const contactName = document.querySelector('[name="contact_name"]');
+                    const contactPhone = document.querySelector('[name="contact_phone"]');
                     const pairs = [
                         [province, provinceFree],
                         [city, cityFree],
@@ -299,39 +301,93 @@
                         street.dataset.current = '';
                     };
 
+                    const withoutSuffix = (value) => String(value || '').replace(/(壮族自治区|回族自治区|维吾尔自治区|特别行政区|自治州|自治区|地区|盟|省|市|区|县|旗|街道|镇|乡)$/u, '');
+                    const findMatch = (text, candidates) => {
+                        const matches = [];
+                        candidates.forEach((candidate) => {
+                            [candidate, withoutSuffix(candidate)].filter(Boolean).forEach((alias) => {
+                                const position = text.indexOf(alias);
+                                if (position >= 0) matches.push({ alias, candidate, position, length: alias.length });
+                            });
+                        });
+                        matches.sort((a, b) => a.position - b.position || b.length - a.length);
+
+                        return matches[0] || null;
+                    };
+                    const removeFirst = (text, value) => {
+                        if (!value) return text;
+                        const values = [value, withoutSuffix(value)].filter(Boolean);
+                        for (const item of values) {
+                            const position = text.indexOf(item);
+                            if (position >= 0) {
+                                return text.slice(0, position) + text.slice(position + item.length);
+                            }
+                        }
+
+                        return text;
+                    };
+                    const extractRoad = (text) => {
+                        const match = text.match(/([\u4e00-\u9fa5A-Za-z0-9]+?(?:大道|大街|街道|街|路|巷|弄|里|村|镇|乡|屯|庄|道))/u);
+
+                        return match ? match[1] : '';
+                    };
+
                     const parseAddress = () => {
-                        const text = compact(raw.value);
+                        let original = String(raw.value || '').trim();
+                        const phoneMatch = original.match(/(?<!\d)(\+?\d[\d\s-]{6,18}\d)(?!\d)/u);
+                        if (phoneMatch) {
+                            contactPhone.value = contactPhone.value || ((phoneMatch[0].trim().startsWith('+') ? '+' : '') + phoneMatch[0].replace(/\D+/g, ''));
+                            original = original.replace(phoneMatch[0], '').trim();
+                        }
+                        const nameMatch = original.match(/^([\u4e00-\u9fa5A-Za-z][\u4e00-\u9fa5A-Za-z·.\s]{0,30}?)\s*(?=(中国|中华人民共和国|北京|天津|上海|重庆|河北|山西|辽宁|吉林|黑龙江|江苏|浙江|安徽|福建|江西|山东|河南|湖北|湖南|广东|广西|海南|四川|贵州|云南|西藏|陕西|甘肃|青海|宁夏|新疆|香港|澳门|台湾))/u);
+                        if (nameMatch) {
+                            contactName.value = contactName.value || nameMatch[1].trim();
+                            original = original.slice(nameMatch[1].length).trim();
+                        }
+                        const text = compact(original);
                         if (!text) return;
 
                         country.value = text.includes('中国') ? '中国' : (country.value || '中国');
                         setChinaMode();
 
-                        const provinceName = Object.keys(tree).find((name) => text.includes(name));
+                        let remaining = text.replace(/^中华人民共和国|^中国/, '');
+                        const provinceMatch = findMatch(remaining, Object.keys(tree));
+                        const provinceName = provinceMatch?.candidate || '';
                         if (!provinceName) {
-                            detail.value = detail.value || raw.value.trim();
+                            detail.value = detail.value || original;
                             return;
                         }
 
                         province.value = provinceName;
+                        remaining = removeFirst(remaining, provinceMatch.alias);
                         fillCities();
 
                         const cities = tree[provinceName] || {};
-                        const cityName = Object.keys(cities).find((name) => text.includes(name)) || (Object.keys(cities).length === 1 ? Object.keys(cities)[0] : '');
+                        const cityMatch = findMatch(remaining, Object.keys(cities));
+                        const cityName = cityMatch?.candidate || (Object.keys(cities).length === 1 ? Object.keys(cities)[0] : '');
                         city.value = cityName;
+                        remaining = removeFirst(remaining, cityMatch?.alias || cityName);
                         fillDistricts();
 
                         const districtNames = Array.isArray(cities[cityName] || []) ? (cities[cityName] || []) : Object.keys(cities[cityName] || {});
-                        const districtName = districtNames.find((name) => text.includes(name)) || '';
+                        const districtMatch = findMatch(remaining, districtNames);
+                        const districtName = districtMatch?.candidate || '';
                         district.value = districtName;
+                        remaining = removeFirst(remaining, districtMatch?.alias || districtName);
+                        fillStreets();
 
-                        let rest = text
-                            .replace('中国', '')
-                            .replace(provinceName, '')
-                            .replace(cityName, '')
-                            .replace(districtName, '');
+                        const streetNode = tree[province.value]?.[city.value]?.[district.value] || [];
+                        const streetNames = Array.isArray(streetNode) ? streetNode : Object.keys(streetNode);
+                        const roadName = extractRoad(remaining);
+                        const streetMatch = roadName ? null : findMatch(remaining, streetNames);
+                        const streetName = roadName || streetMatch?.candidate || '';
 
-                        street.value = street.value || '';
-                        detail.value = rest || detail.value || raw.value.trim();
+                        if (streetName && street) {
+                            street.value = streetName;
+                            remaining = removeFirst(remaining, streetMatch?.alias || streetName);
+                        }
+
+                        detail.value = remaining.trim();
                     };
 
                     province?.addEventListener('change', fillCities);

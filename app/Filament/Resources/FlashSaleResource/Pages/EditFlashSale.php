@@ -3,7 +3,7 @@
 namespace App\Filament\Resources\FlashSaleResource\Pages;
 
 use App\Filament\Resources\FlashSaleResource;
-use Filament\Resources\Pages\EditRecord;
+use App\Filament\Resources\Pages\EditRecord;
 
 class EditFlashSale extends EditRecord
 {

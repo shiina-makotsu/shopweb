@@ -50,15 +50,21 @@ class OrderController extends Controller
         $this->authorizeVisibleOrder($request, $order);
 
         $data = $request->validate([
-            'payment_proof' => ['required', 'image', 'max:5120'],
+            'payment_proof' => ['nullable', 'image', 'max:5120'],
+            'payment_text_proof' => ['nullable', 'string', 'max:1000'],
         ]);
 
-        if ($order->payment_proof_path) {
+        abort_if(! $request->hasFile('payment_proof') && blank($data['payment_text_proof'] ?? null), 422);
+
+        if ($request->hasFile('payment_proof') && $order->payment_proof_path) {
             Storage::disk('payment_proofs')->delete($order->payment_proof_path);
         }
 
-        $path = $data['payment_proof']->store($order->order_number, 'payment_proofs');
-        $orders->markPaymentSubmitted($order, $path);
+        $path = $request->hasFile('payment_proof')
+            ? $data['payment_proof']->store($order->order_number, 'payment_proofs')
+            : $order->payment_proof_path;
+
+        $orders->markPaymentSubmitted($order, $path, $data['payment_text_proof'] ?? null);
 
         return back()->with('payment_success', true);
     }

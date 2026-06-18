@@ -270,7 +270,7 @@ class PageBlockRenderer
             return '';
         }
 
-        return self::sectionGrid($title, $products->map(fn (Product $product): string => '<a class="rounded-sm border border-slate-200 bg-white px-4 py-4 hover:border-blue-200 hover:bg-blue-50" href="'.e(route('products.show', $product)).'"><h3 class="font-semibold text-slate-950">'.e($product->title).'</h3><p class="mt-2 text-sm text-slate-600">'.e($product->priceRangeLabel()).'</p></a>')->implode(''));
+        return self::sectionGrid($title, $products->map(fn (Product $product): string => '<a class="rounded-sm border border-slate-200 bg-white px-4 py-4 hover:border-blue-200 hover:bg-blue-50" href="'.e($product->showUrl()).'"><h3 class="font-semibold text-slate-950">'.e($product->title).'</h3><p class="mt-2 text-sm text-slate-600">'.e($product->priceRangeLabel()).'</p></a>')->implode(''));
     }
 
     private static function articles(array $data): string

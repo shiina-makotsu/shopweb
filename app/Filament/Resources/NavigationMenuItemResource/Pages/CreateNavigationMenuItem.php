@@ -3,7 +3,7 @@
 namespace App\Filament\Resources\NavigationMenuItemResource\Pages;
 
 use App\Filament\Resources\NavigationMenuItemResource;
-use Filament\Resources\Pages\CreateRecord;
+use App\Filament\Resources\Pages\CreateRecord;
 
 class CreateNavigationMenuItem extends CreateRecord
 {

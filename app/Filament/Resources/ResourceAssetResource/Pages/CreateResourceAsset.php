@@ -4,7 +4,7 @@ namespace App\Filament\Resources\ResourceAssetResource\Pages;
 
 use App\Filament\Resources\ResourceAssetResource;
 use App\Models\MediaAsset;
-use Filament\Resources\Pages\CreateRecord;
+use App\Filament\Resources\Pages\CreateRecord;
 
 class CreateResourceAsset extends CreateRecord
 {

@@ -8,7 +8,7 @@ use App\Models\Coupon;
 use App\Models\UserCoupon;
 use App\Support\AdminAccess;
 use App\Services\CouponService;
-use Filament\Resources\Pages\EditRecord;
+use App\Filament\Resources\Pages\EditRecord;
 
 class EditAfterSalesRequest extends EditRecord
 {

@@ -4,7 +4,7 @@ namespace App\Filament\Resources\SupportTicketResource\Pages;
 
 use App\Filament\Resources\SupportTicketResource;
 use App\Models\SupportTicket;
-use Filament\Resources\Pages\EditRecord;
+use App\Filament\Resources\Pages\EditRecord;
 
 class EditSupportTicket extends EditRecord
 {

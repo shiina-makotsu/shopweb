@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Category;
+use App\Models\AdminActivityLog;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\PaymentVerificationLog;
@@ -13,9 +14,11 @@ use App\Models\User;
 use App\Services\OrderService;
 use App\Support\OrderPrivacy;
 use App\Support\Url;
+use App\Filament\Resources\OrderResource\Pages\EditOrder;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
+use Livewire\Livewire;
 
 it('shows domestic tracking by default and hides international tracking until opened for the user', function (): void {
     $settings = SiteSetting::query()->create([
@@ -135,6 +138,35 @@ it('shows payment proof images to admins and a payment success state to customer
         'contact_name' => 'A',
         'contact_phone' => '1',
     ]);
+    $category = Category::query()->create(['name' => 'Admin Order Category', 'slug' => 'admin-order-category', 'is_active' => true]);
+    $product = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => 'Admin Visible Product',
+        'slug' => 'admin-visible-product',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_LOGISTICS,
+    ]);
+    $variant = ProductVariant::query()->create([
+        'product_id' => $product->id,
+        'sku' => 'ORDER-SKU-1',
+        'spec_name' => 'Large Pack',
+        'price_cents' => 100,
+        'stock' => 5,
+        'is_active' => true,
+    ]);
+    OrderItem::query()->create([
+        'order_id' => $order->id,
+        'product_id' => $product->id,
+        'product_variant_id' => $variant->id,
+        'product_title' => $product->title,
+        'product_status' => $product->status,
+        'variant_sku' => $variant->sku,
+        'variant_specs' => ['Size' => 'Large'],
+        'unit_price_cents' => 100,
+        'quantity' => 1,
+        'line_total_cents' => 100,
+        'status' => $order->status,
+    ]);
 
     $this->actingAs($user)
         ->post(route('orders.payment-proof', $order), [
@@ -162,8 +194,120 @@ it('shows payment proof images to admins and a payment success state to customer
     $this->actingAs($admin)
         ->get("/admin/orders/{$order->id}/edit")
         ->assertOk()
+        ->assertSee('订单商品')
+        ->assertSee('Admin Visible Product')
+        ->assertSee('ORDER-SKU-1')
+        ->assertSee('Large Pack')
         ->assertSee('付款凭证图片')
         ->assertSee(Url::route('admin.payment-proofs.show', $order), false);
+
+    $this->actingAs($admin)
+        ->get('/admin/orders')
+        ->assertOk()
+        ->assertSee('data-shopweb-order-template', false)
+        ->assertSee('更新物流')
+        ->assertSee('电话')
+        ->assertSee('邮箱')
+        ->assertSee('Admin Visible Product');
+});
+
+it('preloads payment codes and accepts red packet text as a manual payment fallback', function (): void {
+    SiteSetting::query()->create([
+        'site_name' => 'ShopWeb',
+        'payment_qr_path' => 'payments/main.png',
+        'payment_fallback_config' => [
+            'fallback_qr_path' => 'payments/fallback.png',
+            'friend_qr_path' => 'payments/friend.png',
+            'password_red_packet_enabled' => true,
+            'password_red_packet_note' => '支付失败时请提交口令红包。',
+            'wallet_enabled' => true,
+            'wallet_note' => '可联系客服充值钱包。',
+            'support_enabled' => true,
+        ],
+    ]);
+
+    $user = User::factory()->create(['role' => 'customer']);
+    $order = Order::query()->create([
+        'user_id' => $user->id,
+        'order_number' => 'PAY-FALLBACK-1',
+        'status' => Order::STATUS_PENDING_PAYMENT,
+        'payment_status' => Order::PAYMENT_PENDING,
+        'subtotal_cents' => 9900,
+        'total_cents' => 9900,
+        'contact_name' => 'Fallback User',
+        'contact_phone' => '10086',
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('orders.show', $order))
+        ->assertOk()
+        ->assertSee('rel="preload"', false)
+        ->assertSee('/uploads/payments/main.png', false)
+        ->assertSee('/uploads/payments/fallback.png', false)
+        ->assertSee('/uploads/payments/friend.png', false)
+        ->assertSee('支付受限时的备选方案')
+        ->assertSee('支付失败时请提交口令红包。')
+        ->assertSee('可联系客服充值钱包。');
+
+    $this->actingAs($user)
+        ->post(route('orders.payment-proof', $order), [
+            'payment_text_proof' => '支付宝口令红包：枫桦林-114514',
+        ])
+        ->assertRedirect()
+        ->assertSessionHas('payment_success', true);
+
+    expect($order->fresh()->payment_text_proof)->toBe('支付宝口令红包：枫桦林-114514')
+        ->and($order->fresh()->payment_status)->toBe(Order::PAYMENT_SUBMITTED)
+        ->and($order->fresh()->payment_auto_check_status)->toBe(Order::AUTO_CHECK_PENDING);
+
+    $this->assertDatabaseHas('payment_verification_logs', [
+        'order_id' => $order->id,
+        'payment_proof_path' => null,
+        'auto_result' => Order::AUTO_CHECK_PENDING,
+    ]);
+});
+
+it('lets admins add shipping information from the expanded order row', function (): void {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $user = User::factory()->create(['role' => 'customer']);
+    $carrier = ShippingCarrier::query()->create([
+        'name' => 'Row Carrier',
+        'code' => 'ROW',
+        'tracking_url_template' => 'https://track.example.test/{tracking_number}',
+        'is_active' => true,
+    ]);
+    $order = Order::query()->create([
+        'user_id' => $user->id,
+        'order_number' => 'ROW-SHIP-1',
+        'status' => Order::STATUS_PENDING_SHIPMENT,
+        'payment_status' => Order::PAYMENT_CONFIRMED,
+        'subtotal_cents' => 100,
+        'total_cents' => 100,
+        'contact_name' => 'A',
+        'contact_phone' => '1',
+    ]);
+
+    $this->actingAs($admin)
+        ->post(route('admin.orders.quick-shipping', $order), [
+            'shipping_carrier_id' => $carrier->id,
+            'tracking_number' => 'ROW-TRACK-1',
+            'admin_note' => '列表展开层补充物流',
+        ])
+        ->assertRedirect();
+
+    $order->refresh();
+
+    expect($order->shipping_carrier_id)->toBe($carrier->id)
+        ->and($order->tracking_number)->toBe('ROW-TRACK-1')
+        ->and($order->tracking_url)->toBe('https://track.example.test/ROW-TRACK-1');
+
+    $this->assertDatabaseHas('admin_activity_logs', [
+        'user_id' => $admin->id,
+        'action' => 'order_quick_shipping_updated',
+        'subject_type' => Order::class,
+        'subject_id' => $order->id,
+        'description' => '列表展开层补充物流',
+    ]);
 });
 
 it('keeps awaiting receipt orders open until the customer confirms receipt', function (): void {
@@ -197,6 +341,91 @@ it('keeps awaiting receipt orders open until the customer confirms receipt', fun
 
     expect($order->fresh()->status)->toBe(Order::STATUS_FULFILLED)
         ->and($order->fresh()->fulfilled_at)->not->toBeNull();
+});
+
+it('lets admins edit order details only with a manual update note and records the change', function (): void {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $user = User::factory()->create(['role' => 'customer']);
+    $order = Order::query()->create([
+        'user_id' => $user->id,
+        'order_number' => 'ADMIN-EDIT-1',
+        'status' => Order::STATUS_PENDING_PAYMENT,
+        'payment_status' => Order::PAYMENT_PENDING,
+        'subtotal_cents' => 100,
+        'total_cents' => 100,
+        'contact_name' => 'Old Name',
+        'contact_phone' => '10086',
+        'shipping_address' => 'Old Address',
+    ]);
+
+    $this->actingAs($admin);
+
+    Livewire::test(EditOrder::class, ['record' => $order->id])
+        ->fillForm([
+            'status' => Order::STATUS_PENDING_PAYMENT,
+            'payment_status' => Order::PAYMENT_PENDING,
+            'contact_name' => 'New Name',
+            'contact_phone' => '10086',
+            'contact_email' => null,
+            'shipping_address' => 'Old Address',
+            'shipping_province' => null,
+            'shipping_city' => null,
+            'shipping_district' => null,
+            'shipping_street' => null,
+            'shipping_detail' => null,
+            'shipping_carrier_id' => null,
+            'tracking_number' => null,
+            'tracking_url' => null,
+            'digital_delivery_content' => null,
+            'digital_delivery_code' => null,
+            'admin_note' => null,
+            'manual_update_note' => '',
+        ])
+        ->call('save')
+        ->assertHasFormErrors(['manual_update_note']);
+
+    expect($order->fresh()->contact_name)->toBe('Old Name');
+
+    Livewire::test(EditOrder::class, ['record' => $order->id])
+        ->fillForm([
+            'status' => Order::STATUS_PENDING_SHIPMENT,
+            'payment_status' => Order::PAYMENT_CONFIRMED,
+            'contact_name' => 'New Name',
+            'contact_phone' => '10086',
+            'contact_email' => null,
+            'shipping_address' => 'New Address',
+            'shipping_province' => null,
+            'shipping_city' => null,
+            'shipping_district' => null,
+            'shipping_street' => null,
+            'shipping_detail' => null,
+            'shipping_carrier_id' => null,
+            'tracking_number' => null,
+            'tracking_url' => null,
+            'digital_delivery_content' => null,
+            'digital_delivery_code' => null,
+            'admin_note' => '后台已协助修正',
+            'manual_update_note' => '用户下单信息填错，后台按客服确认内容修正',
+        ])
+        ->call('save')
+        ->assertHasNoFormErrors();
+
+    $order->refresh();
+
+    expect($order->status)->toBe(Order::STATUS_PENDING_SHIPMENT)
+        ->and($order->payment_status)->toBe(Order::PAYMENT_CONFIRMED)
+        ->and($order->contact_name)->toBe('New Name')
+        ->and($order->shipping_address)->toBe('New Address');
+
+    $log = AdminActivityLog::query()
+        ->where('action', 'order_manually_updated')
+        ->where('subject_id', $order->id)
+        ->firstOrFail();
+
+    expect($log->description)->toBe('用户下单信息填错，后台按客服确认内容修正')
+        ->and(data_get($log->properties, 'changes.contact_name.old'))->toBe('Old Name')
+        ->and(data_get($log->properties, 'changes.contact_name.new'))->toBe('New Name')
+        ->and($log->actionLabel())->toBe('后台修改订单');
 });
 
 it('lets customers hide orders while backoffice can still see the deletion flag', function (): void {

@@ -12,6 +12,15 @@ use Illuminate\Validation\Rule;
 
 class VoteController extends Controller
 {
+    public function intentByStatus(Request $request, string $statusSlug, string $productSlug): RedirectResponse
+    {
+        $product = Product::findPublicForStatusRoute($statusSlug, $productSlug);
+
+        abort_unless($product, 404);
+
+        return $this->intent($request, $product);
+    }
+
     public function intent(Request $request, Product $product): RedirectResponse
     {
         abort_unless($product->allowsVoting(), 404);
@@ -30,6 +39,15 @@ class VoteController extends Controller
         );
 
         return back()->with('status', '购买意愿已记录。');
+    }
+
+    public function priceByStatus(Request $request, string $statusSlug, string $productSlug): RedirectResponse
+    {
+        $product = Product::findPublicForStatusRoute($statusSlug, $productSlug);
+
+        abort_unless($product, 404);
+
+        return $this->price($request, $product);
     }
 
     public function price(Request $request, Product $product): RedirectResponse

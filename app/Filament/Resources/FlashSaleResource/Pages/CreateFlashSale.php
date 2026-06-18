@@ -3,7 +3,7 @@
 namespace App\Filament\Resources\FlashSaleResource\Pages;
 
 use App\Filament\Resources\FlashSaleResource;
-use Filament\Resources\Pages\CreateRecord;
+use App\Filament\Resources\Pages\CreateRecord;
 
 class CreateFlashSale extends CreateRecord
 {

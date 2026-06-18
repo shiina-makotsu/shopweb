@@ -1151,9 +1151,35 @@
 
                 root.querySelector('[data-reference-button]')?.addEventListener('click', () => referenceInput.click());
 
-                referenceInput.addEventListener('change', () => {
+                const pastedImageName = (file, index) => {
+                    if (file.name) return file.name;
+
+                    const extension = {
+                        'image/jpeg': 'jpg',
+                        'image/png': 'png',
+                        'image/webp': 'webp',
+                        'image/gif': 'gif',
+                    }[file.type] || 'png';
+
+                    return `pasted-reference-${Date.now()}-${index + 1}.${extension}`;
+                };
+
+                const imageFilesFromClipboard = (items) => Array.from(items ?? [])
+                    .filter((item) => item.kind === 'file' && String(item.type || '').startsWith('image/'))
+                    .map((item, index) => {
+                        const file = item.getAsFile();
+                        if (!file) return null;
+
+                        return file.name
+                            ? file
+                            : new File([file], pastedImageName(file, index), { type: file.type || 'image/png', lastModified: Date.now() });
+                    })
+                    .filter(Boolean);
+
+                const addReferenceFiles = (files, successMessage = '') => {
                     const remainingSlots = Math.max(0, 6 - referenceItems.length);
-                    const incomingItems = Array.from(referenceInput.files ?? [])
+                    const incomingItems = Array.from(files ?? [])
+                        .filter((file) => String(file.type || '').startsWith('image/'))
                         .slice(0, remainingSlots)
                         .map((file) => ({
                             file,
@@ -1163,10 +1189,38 @@
                             previewUrl: URL.createObjectURL(file),
                         }));
 
+                    if (incomingItems.length === 0) {
+                        return 0;
+                    }
+
                     referenceItems = [...referenceItems, ...incomingItems].slice(0, 6);
                     referenceInput.value = '';
                     renderReferencePreview();
                     incomingItems.forEach((item) => uploadReferenceAsset(item));
+
+                    if (successMessage) {
+                        setStatus(successMessage, 'green');
+                    }
+
+                    return incomingItems.length;
+                };
+
+                referenceInput.addEventListener('change', () => {
+                    addReferenceFiles(referenceInput.files);
+                });
+
+                root.addEventListener('paste', (event) => {
+                    if (currentMode !== 'gallery') return;
+
+                    const files = imageFilesFromClipboard(event.clipboardData?.items);
+                    if (files.length === 0) return;
+
+                    event.preventDefault();
+                    const added = addReferenceFiles(files, '已将粘贴图片添加为参考图。');
+
+                    if (added === 0) {
+                        setStatus('参考图最多 6 张，请先移除旧参考图。', 'red');
+                    }
                 });
 
                 const renderReferencePreview = () => {

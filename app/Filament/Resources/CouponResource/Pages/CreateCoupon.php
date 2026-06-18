@@ -4,7 +4,7 @@ namespace App\Filament\Resources\CouponResource\Pages;
 
 use App\Filament\Resources\CouponResource;
 use App\Models\Coupon;
-use Filament\Resources\Pages\CreateRecord;
+use App\Filament\Resources\Pages\CreateRecord;
 
 class CreateCoupon extends CreateRecord
 {

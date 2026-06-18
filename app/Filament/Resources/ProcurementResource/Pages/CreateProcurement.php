@@ -4,7 +4,7 @@ namespace App\Filament\Resources\ProcurementResource\Pages;
 
 use App\Filament\Resources\ProcurementResource;
 use App\Services\ProcurementService;
-use Filament\Resources\Pages\CreateRecord;
+use App\Filament\Resources\Pages\CreateRecord;
 
 class CreateProcurement extends CreateRecord
 {

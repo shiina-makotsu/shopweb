@@ -10,7 +10,7 @@ use App\Services\SupportChatService;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
-use Filament\Resources\Pages\EditRecord;
+use App\Filament\Resources\Pages\EditRecord;
 
 class EditSupportChatSession extends EditRecord
 {

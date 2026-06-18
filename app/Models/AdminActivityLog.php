@@ -25,6 +25,8 @@ class AdminActivityLog extends Model
         'order_payment_rejected' => '驳回付款凭证',
         'order_fulfilled' => '订单标记为已完成',
         'order_cancelled' => '取消订单',
+        'order_manually_updated' => '后台修改订单',
+        'order_quick_shipping_updated' => '后台补充物流',
         'customers_csv_imported' => '导入前台用户 CSV',
         'products_csv_imported' => '导入商品/SKU CSV',
     ];
@@ -58,6 +60,20 @@ class AdminActivityLog extends Model
         'skipped' => '跳过数量',
         'rows' => '行数',
         'message' => '消息',
+        'changes' => '变更字段',
+        'old' => '原值',
+        'new' => '新值',
+        'contact_name' => '联系人',
+        'contact_phone' => '电话',
+        'contact_email' => '邮箱',
+        'shipping_address' => '收货地址',
+        'shipping_province' => '收货省份',
+        'shipping_city' => '收货城市',
+        'shipping_district' => '收货区县',
+        'shipping_street' => '收货街道',
+        'shipping_detail' => '详细地址',
+        'digital_delivery_content' => '线上交付内容',
+        'digital_delivery_code' => '线上交付码',
     ];
 
     protected $fillable = [

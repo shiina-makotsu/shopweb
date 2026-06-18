@@ -192,14 +192,66 @@
                         {{ session('status') }}
                     </div>
                 @endif
+                @php
+                    $addressMode = $addressMode ?? 'index';
+                    $editingAddress = $editingAddress ?? null;
+                    $addressFormRecords = $addressMode === 'edit' && $editingAddress ? collect([$editingAddress]) : collect();
+                @endphp
 
+                @if($addressMode === 'index')
+                    <section class="rounded-sm border border-slate-300">
+                        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
+                            <div>
+                                <h2 class="text-sm font-semibold">我的地址</h2>
+                                <p class="mt-1 text-xs text-slate-500">点击地址卡片查看或编辑详细地址。</p>
+                            </div>
+                            <a class="rounded-sm border border-blue-700 bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800" href="{{ route('user.addresses.create') }}">新增地址</a>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3 p-4 lg:grid-cols-3">
+                            @forelse($addresses as $address)
+                                <a class="group min-w-0 rounded-sm border border-slate-200 bg-white p-4 hover:border-blue-300 hover:bg-blue-50" href="{{ route('user.addresses.edit', $address) }}">
+                                    <div class="flex items-start justify-between gap-2">
+                                        <div class="min-w-0">
+                                            <p class="truncate text-sm font-semibold text-slate-950">{{ $address->recipient_name }}</p>
+                                            <p class="mt-1 truncate text-xs text-slate-500">{{ $address->phone }}</p>
+                                        </div>
+                                        <div class="flex shrink-0 flex-col items-end gap-1">
+                                            @if($address->is_default)
+                                                <span class="rounded-sm border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[11px] font-medium text-blue-700">默认</span>
+                                            @endif
+                                            @if($address->is_visible)
+                                                <span class="rounded-sm border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700">公开</span>
+                                            @endif
+                                        </div>
+                                    </div>
+                                    <p class="mt-3 line-clamp-2 text-xs leading-5 text-slate-600">
+                                        {{ trim(implode(' ', array_filter([$address->country, $address->province, $address->city, $address->district]))) ?: '未填写地区' }}
+                                    </p>
+                                </a>
+                            @empty
+                                <div class="col-span-full rounded-sm border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center text-sm text-slate-600">
+                                    暂无地址。
+                                    <a class="ml-2 text-blue-700 hover:text-blue-900" href="{{ route('user.addresses.create') }}">新增地址</a>
+                                </div>
+                            @endforelse
+                        </div>
+                    </section>
+                @endif
+
+                @if($addressMode === 'create')
                 <section class="rounded-sm border border-slate-300">
-                    <h2 class="border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold">新增地址</h2>
+                    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
+                        <h2 class="text-sm font-semibold">新增地址</h2>
+                        <a class="text-sm text-blue-700 hover:text-blue-900" href="{{ route('user.section', 'addresses') }}">返回地址列表</a>
+                    </div>
                     <form class="grid gap-4 p-4 md:grid-cols-2" method="POST" action="{{ route('user.addresses.store') }}">
                         @csrf
                         <label class="block md:col-span-2">
                             <span class="text-sm font-medium text-slate-700">智能识别地址</span>
-                            <textarea class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm leading-6" name="raw_text" rows="2" placeholder="例如：中国北京市朝阳区某某街道 88 号">{{ old('raw_text') }}</textarea>
+                            <div class="mt-1 flex flex-col gap-2 sm:flex-row">
+                                <textarea class="w-full rounded-sm border border-slate-300 px-3 py-2 text-sm leading-6" name="raw_text" data-address-raw rows="2" placeholder="例如：中国北京市朝阳区某某街道 88 号">{{ old('raw_text') }}</textarea>
+                                <button class="rounded-sm border border-blue-700 bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800 sm:self-start" type="button" data-address-parse>识别</button>
+                            </div>
                             <span class="mt-1 block text-xs text-slate-500">提交时会尝试从这段文字里识别国家、省、市、区/县和街道；你也可以手动填写或修正下面的字段。</span>
                         </label>
                         <label class="block">
@@ -241,7 +293,7 @@
                         </label>
                         <label class="block md:col-span-2">
                             <span class="text-sm font-medium text-slate-700">详细地址</span>
-                            <input class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" name="detail" value="{{ old('detail') }}">
+                            <input class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" name="detail" value="{{ old('detail') }}" required>
                         </label>
                         <div class="flex flex-wrap gap-4 md:col-span-2">
                             <label class="inline-flex items-center gap-2 text-sm">
@@ -263,11 +315,16 @@
                         </div>
                     </form>
                 </section>
+                @endif
 
+                @if($addressMode === 'edit')
                 <section class="rounded-sm border border-slate-300">
-                    <h2 class="border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold">我的地址</h2>
+                    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3">
+                        <h2 class="text-sm font-semibold">编辑地址</h2>
+                        <a class="text-sm text-blue-700 hover:text-blue-900" href="{{ route('user.section', 'addresses') }}">返回地址列表</a>
+                    </div>
                     <div class="divide-y divide-slate-100">
-                        @forelse($addresses as $address)
+                        @forelse($addressFormRecords as $address)
                             <article class="p-4">
                                 <form class="grid gap-3 md:grid-cols-2" method="POST" action="{{ route('user.addresses.update', $address) }}">
                                     @csrf
@@ -311,7 +368,7 @@
                                     </label>
                                     <label class="block md:col-span-2">
                                         <span class="text-xs text-slate-500">详细地址</span>
-                                        <input class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" name="detail" value="{{ old('detail', $address->detail) }}">
+                                        <input class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" name="detail" value="{{ old('detail', $address->detail) }}" required>
                                     </label>
                                     <div class="flex flex-wrap items-center gap-4 md:col-span-2">
                                         <label class="inline-flex items-center gap-2 text-sm">
@@ -344,7 +401,9 @@
                         @endforelse
                     </div>
                 </section>
+                @endif
 
+                @if(in_array($addressMode, ['create', 'edit'], true))
                 <script type="application/json" id="user-address-region-tree">@json($addressRegionTree, JSON_UNESCAPED_UNICODE)</script>
                 <script>
                     (() => {
@@ -368,6 +427,11 @@
                             const city = form.querySelector('[data-address-city]');
                             const district = form.querySelector('[data-address-district]');
                             const street = form.querySelector('[data-address-street]');
+                            const raw = form.querySelector('[data-address-raw]');
+                            const parseButton = form.querySelector('[data-address-parse]');
+                            const detail = form.querySelector('[name="detail"]');
+                            const recipient = form.querySelector('[name="recipient_name"]');
+                            const phone = form.querySelector('[name="phone"]');
                             const provinceFree = form.querySelector('[data-address-province-free]');
                             const cityFree = form.querySelector('[data-address-city-free]');
                             const districtFree = form.querySelector('[data-address-district-free]');
@@ -472,9 +536,114 @@
                                 fillDistricts();
                             };
 
+                            const withoutSuffix = (value) => String(value || '').replace(/(壮族自治区|回族自治区|维吾尔自治区|特别行政区|自治州|自治区|地区|盟|省|市|区|县|旗|街道|镇|乡)$/u, '');
+                            const findMatch = (text, candidates) => {
+                                const matches = [];
+                                candidates.forEach((candidate) => {
+                                    [candidate, withoutSuffix(candidate)].filter(Boolean).forEach((alias) => {
+                                        const position = text.indexOf(alias);
+                                        if (position >= 0) matches.push({ alias, candidate, position, length: alias.length });
+                                    });
+                                });
+                                matches.sort((a, b) => a.position - b.position || b.length - a.length);
+
+                                return matches[0] || null;
+                            };
+                            const removeFirst = (text, value) => {
+                                if (!value) return text;
+                                const values = [value, withoutSuffix(value)].filter(Boolean);
+                                for (const item of values) {
+                                    const position = text.indexOf(item);
+                                    if (position >= 0) {
+                                        return text.slice(0, position) + text.slice(position + item.length);
+                                    }
+                                }
+
+                                return text;
+                            };
+                            const extractRoad = (text) => {
+                                const match = text.match(/([\u4e00-\u9fa5A-Za-z0-9]+?(?:大道|大街|街道|街|路|巷|弄|里|村|镇|乡|屯|庄|道))/u);
+
+                                return match ? match[1] : '';
+                            };
+
+                            const parseAddress = () => {
+                                let original = String(raw?.value || '').trim();
+                                const phoneMatch = original.match(/(?<!\d)(\+?\d[\d\s-]{6,18}\d)(?!\d)/u);
+                                if (phoneMatch) {
+                                    phone.value = phone.value || ((phoneMatch[0].trim().startsWith('+') ? '+' : '') + phoneMatch[0].replace(/\D+/g, ''));
+                                    original = original.replace(phoneMatch[0], '').trim();
+                                }
+                                const nameMatch = original.match(/^([\u4e00-\u9fa5A-Za-z][\u4e00-\u9fa5A-Za-z·.\s]{0,30}?)\s*(?=(中国|中华人民共和国|北京|天津|上海|重庆|河北|山西|辽宁|吉林|黑龙江|江苏|浙江|安徽|福建|江西|山东|河南|湖北|湖南|广东|广西|海南|四川|贵州|云南|西藏|陕西|甘肃|青海|宁夏|新疆|香港|澳门|台湾))/u);
+                                if (nameMatch) {
+                                    recipient.value = recipient.value || nameMatch[1].trim();
+                                    original = original.slice(nameMatch[1].length).trim();
+                                }
+                                let text = original.replace(/\s+/g, '');
+                                if (!text) return;
+
+                                country.value = text.includes('中国') || text.includes('中华人民共和国') ? '中国' : (country.value || '中国');
+                                setChinaMode();
+
+                                if (!isChina(country.value)) {
+                                    if (detail && !detail.value) {
+                                        detail.value = text;
+                                    }
+
+                                    return;
+                                }
+
+                                let remaining = text.replace(/^中华人民共和国|^中国/, '').trim();
+                                const provinceMatch = findMatch(remaining, Object.keys(tree));
+                                const provinceName = provinceMatch?.candidate || '';
+
+                                if (provinceName) {
+                                    province.value = provinceName;
+                                    remaining = removeFirst(remaining, provinceMatch.alias);
+                                    fillCities();
+                                }
+
+                                const cities = Object.keys(tree[province.value] || {});
+                                const cityMatch = findMatch(remaining, cities);
+                                const cityName = cityMatch?.candidate || (cities.length === 1 ? cities[0] : '');
+
+                                if (cityName) {
+                                    city.value = cityName;
+                                    remaining = removeFirst(remaining, cityMatch?.alias || cityName);
+                                    fillDistricts();
+                                }
+
+                                const districtNode = tree[province.value]?.[city.value] || {};
+                                const districtNames = Array.isArray(districtNode) ? districtNode : Object.keys(districtNode);
+                                const districtMatch = findMatch(remaining, districtNames);
+                                const districtName = districtMatch?.candidate || '';
+
+                                if (districtName) {
+                                    district.value = districtName;
+                                    remaining = removeFirst(remaining, districtMatch?.alias || districtName);
+                                    fillStreets();
+                                }
+
+                                const streetNode = tree[province.value]?.[city.value]?.[district.value] || [];
+                                const streetNames = Array.isArray(streetNode) ? streetNode : Object.keys(streetNode);
+                                const roadName = extractRoad(remaining);
+                                const streetMatch = roadName ? null : findMatch(remaining, streetNames);
+                                const streetName = roadName || streetMatch?.candidate || '';
+
+                                if (streetName && street) {
+                                    street.value = streetName;
+                                    remaining = removeFirst(remaining, streetMatch?.alias || streetName);
+                                }
+
+                                if (detail) {
+                                    detail.value = remaining.trim();
+                                }
+                            };
+
                             province.addEventListener('change', fillCities);
                             city.addEventListener('change', fillDistricts);
                             district.addEventListener('change', fillStreets);
+                            parseButton?.addEventListener('click', parseAddress);
                             country?.addEventListener('input', setChinaMode);
                             country?.addEventListener('change', setChinaMode);
                             [provinceFree, cityFree, districtFree, streetFree].forEach((input) => input?.addEventListener('input', syncSelectInputs));
@@ -482,6 +651,7 @@
                         });
                     })();
                 </script>
+                @endif
             </div>
         @elseif($section === 'coupons')
             <div class="space-y-5 px-4 py-5">

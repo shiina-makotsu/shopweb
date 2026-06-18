@@ -4,7 +4,7 @@ namespace App\Filament\Resources\FlashSaleCampaignResource\Pages;
 
 use App\Filament\Resources\FlashSaleCampaignResource;
 use App\Services\FlashSaleCampaignService;
-use Filament\Resources\Pages\CreateRecord;
+use App\Filament\Resources\Pages\CreateRecord;
 
 class CreateFlashSaleCampaign extends CreateRecord
 {

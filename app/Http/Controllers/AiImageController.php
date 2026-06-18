@@ -576,11 +576,51 @@ class AiImageController extends Controller
 
         $usedConfig['image_api_mode'] = $usedMode;
 
-        $images = $this->extractImages($providerPayload);
+        $images = $this->extractImagesFromResponse($providerPayload, $response, $usedConfig);
+
+        if ($images === [] && ($data['image_api_mode'] ?? 'auto') === 'auto') {
+            $failedMode = $usedMode;
+
+            foreach ($this->fallbackImageApiModes($data, $failedMode) as $fallbackMode) {
+                if ($fallbackMode === $failedMode || $fallbackMode === $usedMode) {
+                    continue;
+                }
+
+                $startedAt = microtime(true);
+
+                try {
+                    $fallbackResponse = $sendAttempt($fallbackMode);
+                } catch (ConnectionException $exception) {
+                    return response()->json([
+                        'message' => '图片生成失败：'.$exception->getMessage(),
+                    ], 502);
+                }
+
+                if ($fallbackResponse === null || $fallbackResponse->failed()) {
+                    continue;
+                }
+
+                $fallbackPayload = (array) $fallbackResponse->json();
+                $fallbackImages = $this->extractImagesFromResponse($fallbackPayload, $fallbackResponse, $usedConfig);
+
+                if ($fallbackImages === []) {
+                    continue;
+                }
+
+                $response = $fallbackResponse;
+                $requestMs = (int) round((microtime(true) - $startedAt) * 1000);
+                $providerPayload = $fallbackPayload;
+                $usedMode = $fallbackMode;
+                $usedConfig['image_api_mode'] = $usedMode;
+                $images = $fallbackImages;
+                break;
+            }
+        }
 
         if ($images === []) {
             return response()->json([
                 'message' => '服务商没有返回可识别的图片数据。',
+                'provider_payload_preview' => $this->providerPayloadPreview($providerPayload),
             ], 502);
         }
 
@@ -1369,10 +1409,6 @@ class AiImageController extends Controller
             }
         }
 
-        if (isset($payload['n'])) {
-            $responsePayload['tools'][0]['n'] = $payload['n'];
-        }
-
         if (isset($payload['stream'])) {
             $responsePayload['stream'] = (bool) $payload['stream'];
         }
@@ -1500,21 +1536,14 @@ class AiImageController extends Controller
      */
     private function extractImages(array $payload): array
     {
-        $items = [];
-
-        foreach (['data', 'images', 'artifacts', 'output'] as $key) {
-            if (isset($payload[$key]) && is_array($payload[$key])) {
-                $items = [...$items, ...array_values($payload[$key])];
-            }
-        }
-
-        if ($items === []) {
-            $items = [$payload];
-        }
-
         $images = [];
+        $items = [$payload];
+        $scanned = 0;
 
-        foreach ($items as $item) {
+        while ($items !== [] && $scanned < 500) {
+            $item = array_shift($items);
+            $scanned++;
+
             if (is_string($item)) {
                 $this->appendImageString($images, $item);
 
@@ -1526,30 +1555,58 @@ class AiImageController extends Controller
             }
 
             if (($item['type'] ?? null) === 'image_generation_call' && is_string($item['result'] ?? null)) {
-                $this->appendImageString($images, $item['result']);
+                $images[] = [
+                    'data_url' => $this->dataUrl($item['result'], (string) ($item['mime_type'] ?? 'image/png')),
+                    'revised_prompt' => (string) ($item['revised_prompt'] ?? ''),
+                ];
             }
 
-            if (isset($item['content']) && is_array($item['content'])) {
-                $items = [...$items, ...array_values($item['content'])];
+            foreach (['data', 'images', 'artifacts', 'output', 'choices', 'content', 'message', 'delta', 'result', 'results', 'image', 'output_image', 'image_file'] as $key) {
+                if (! isset($item[$key]) || ! is_array($item[$key])) {
+                    continue;
+                }
+
+                $items = [
+                    ...$items,
+                    ...(array_is_list($item[$key]) ? array_values($item[$key]) : [$item[$key]]),
+                ];
             }
 
-            foreach (['url', 'image_url'] as $key) {
+            foreach (['url', 'image_url', 'imageUrl', 'file_url', 'download_url', 'content_url', 'src'] as $key) {
                 $source = $item[$key] ?? null;
 
-                if (is_string($source) && $this->isSafeImageSource($source)) {
-                    $sourceKey = str_starts_with($source, 'data:image/') ? 'data_url' : 'url';
+                if (is_array($source)) {
+                    $items[] = $source;
 
-                    $images[] = [
-                        $sourceKey => $source,
-                        'revised_prompt' => (string) ($item['revised_prompt'] ?? ''),
-                    ];
+                    continue;
+                }
+
+                if (is_string($source)) {
+                    $this->appendImageString($images, $source, (string) ($item['revised_prompt'] ?? ''));
                 }
             }
 
-            foreach (['b64_json', 'base64', 'image', 'partial_image_b64', 'partial_image', 'image_b64', 'result'] as $key) {
+            foreach (['content', 'text', 'output_text', 'message'] as $key) {
                 if (is_string($item[$key] ?? null)) {
+                    $this->appendImageString($images, $item[$key], (string) ($item['revised_prompt'] ?? ''));
+                }
+            }
+
+            foreach (['b64_json', 'base64', 'b64', 'image', 'output_image', 'partial_image_b64', 'partial_image', 'image_b64', 'image_base64', 'result'] as $key) {
+                $value = $item[$key] ?? null;
+
+                if (is_string($value)) {
+                    if (in_array($key, ['image', 'result'], true)) {
+                        $countBefore = count($images);
+                        $this->appendImageString($images, $value, (string) ($item['revised_prompt'] ?? ''));
+
+                        if (count($images) > $countBefore) {
+                            continue;
+                        }
+                    }
+
                     $images[] = [
-                        'data_url' => $this->dataUrl($item[$key], (string) ($item['mime_type'] ?? 'image/png')),
+                        'data_url' => $this->dataUrl($value, (string) ($item['mime_type'] ?? 'image/png')),
                         'revised_prompt' => (string) ($item['revised_prompt'] ?? ''),
                     ];
                 }
@@ -1563,19 +1620,201 @@ class AiImageController extends Controller
     }
 
     /**
+     * @param  array<string, mixed>  $payload
+     * @return array<int, array<string, string>>
+     */
+    private function extractImagesFromResponse(array $payload, \Illuminate\Http\Client\Response $response, array $config): array
+    {
+        $images = $this->extractImages($payload);
+
+        if ($images !== []) {
+            return $images;
+        }
+
+        $contentType = Str::lower($response->header('Content-Type') ?: '');
+
+        if (str_starts_with($contentType, 'image/')) {
+            return [[
+                'data_url' => $this->dataUrl(base64_encode($response->body()), $contentType),
+                'revised_prompt' => '',
+            ]];
+        }
+
+        $fileIds = $this->extractImageFileIds($payload);
+
+        if ($fileIds === []) {
+            return [];
+        }
+
+        $baseUrl = $this->apiBaseUrl((string) ($config['endpoint'] ?? ''));
+        $apiKey = $config['api_key'] ?? null;
+        $resolved = [];
+
+        foreach ($fileIds as $fileId) {
+            try {
+                $fileResponse = $this->aiHttp(120)
+                    ->accept('*/*')
+                    ->withHeaders($this->apiHeaders($apiKey))
+                    ->get($baseUrl.'/files/'.rawurlencode($fileId).'/content');
+            } catch (ConnectionException) {
+                continue;
+            }
+
+            if ($fileResponse->failed()) {
+                continue;
+            }
+
+            $fileContentType = Str::lower($fileResponse->header('Content-Type') ?: 'image/png');
+
+            if (str_contains($fileContentType, 'json')) {
+                $resolved = [
+                    ...$resolved,
+                    ...$this->extractImages((array) $fileResponse->json()),
+                ];
+
+                continue;
+            }
+
+            $resolved[] = [
+                'data_url' => $this->dataUrl(base64_encode($fileResponse->body()), str_starts_with($fileContentType, 'image/') ? $fileContentType : 'image/png'),
+                'revised_prompt' => '',
+            ];
+        }
+
+        return collect($resolved)
+            ->unique(fn (array $image): string => $image['url'] ?? $image['data_url'] ?? '')
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<int, string>
+     */
+    private function extractImageFileIds(array $payload): array
+    {
+        $ids = [];
+        $items = [$payload];
+        $scanned = 0;
+
+        while ($items !== [] && $scanned < 500) {
+            $item = array_shift($items);
+            $scanned++;
+
+            if (! is_array($item)) {
+                continue;
+            }
+
+            foreach (['data', 'images', 'artifacts', 'output', 'choices', 'content', 'message', 'delta', 'result', 'results', 'image', 'output_image', 'image_file'] as $key) {
+                if (isset($item[$key]) && is_array($item[$key])) {
+                    $items = [
+                        ...$items,
+                        ...(array_is_list($item[$key]) ? array_values($item[$key]) : [$item[$key]]),
+                    ];
+                }
+            }
+
+            foreach (['file_id', 'fileId', 'image_file_id', 'imageFileId', 'id'] as $key) {
+                $value = $item[$key] ?? null;
+
+                if (! is_string($value) || trim($value) === '') {
+                    continue;
+                }
+
+                $type = Str::lower((string) ($item['type'] ?? $item['object'] ?? ''));
+
+                if ($key !== 'id' || str_contains($type, 'image') || str_contains($type, 'file')) {
+                    $ids[] = trim($value);
+                }
+            }
+        }
+
+        return collect($ids)->unique()->values()->all();
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function providerPayloadPreview(array $payload): array
+    {
+        $preview = [];
+
+        foreach (['id', 'object', 'model', 'message', 'detail', 'msg', 'error', 'data', 'output', 'choices', 'result', 'results'] as $key) {
+            if (array_key_exists($key, $payload)) {
+                $preview[$key] = $payload[$key];
+            }
+        }
+
+        return json_decode(json_encode($preview, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PARTIAL_OUTPUT_ON_ERROR) ?: '[]', true) ?: [];
+    }
+
+    /**
      * @param  array<int, array<string, string>>  $images
      */
-    private function appendImageString(array &$images, string $value): void
+    private function appendImageString(array &$images, string $value, string $revisedPrompt = ''): void
     {
+        $value = trim($value);
+
+        if ($value === '') {
+            return;
+        }
+
+        $decoded = json_decode($value, true);
+
+        if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+            $images = [...$images, ...$this->extractImages($decoded)];
+
+            return;
+        }
+
+        foreach ($this->imageSourcesFromText($value) as $source) {
+            $sourceKey = str_starts_with($source, 'data:image/') ? 'data_url' : 'url';
+            $images[] = [
+                $sourceKey => $source,
+                'revised_prompt' => $revisedPrompt,
+            ];
+        }
+
         if (str_starts_with($value, 'data:image/')) {
-            $images[] = ['data_url' => $value];
+            $images[] = [
+                'data_url' => $value,
+                'revised_prompt' => $revisedPrompt,
+            ];
 
             return;
         }
 
         if ($this->isSafeImageSource($value)) {
-            $images[] = ['url' => $value];
+            $images[] = [
+                'url' => $value,
+                'revised_prompt' => $revisedPrompt,
+            ];
         }
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function imageSourcesFromText(string $value): array
+    {
+        $sources = [];
+
+        preg_match_all('/data:image\/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+\/=\s]+/', $value, $dataUrlMatches);
+        $sources = [...$sources, ...($dataUrlMatches[0] ?? [])];
+
+        preg_match_all('/!\[[^\]]*]\(([^)\s]+)(?:\s+"[^"]*")?\)/', $value, $markdownMatches);
+        $sources = [...$sources, ...($markdownMatches[1] ?? [])];
+
+        preg_match_all('/https?:\/\/[^\s<>"\']+/i', $value, $urlMatches);
+        $sources = [...$sources, ...($urlMatches[0] ?? [])];
+
+        return collect($sources)
+            ->map(fn (string $source): string => trim($source, " \t\n\r\0\x0B'\"),.;]}>"))
+            ->filter(fn (string $source): bool => $this->isSafeImageSource($source))
+            ->unique()
+            ->values()
+            ->all();
     }
 
     private function isSafeImageSource(string $value): bool

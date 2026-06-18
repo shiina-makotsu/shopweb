@@ -10,12 +10,16 @@ use App\Models\PrivateMessage;
 use App\Models\SiteSetting;
 use App\Services\AdminLoginLogger;
 use App\Services\CartService;
+use App\Services\DatabaseMigrationHealth;
 use App\Support\RelativeUrlRewriter;
+use Filament\Actions\CreateAction;
 use Illuminate\Auth\Events\Failed;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Foundation\Http\Events\RequestHandled;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 use Throwable;
@@ -29,6 +33,9 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        $this->autoRepairDatabaseSchema();
+        $this->configureFilamentActions();
+
         Blade::directive('money', function (string $expression): string {
             return "<?php echo App\\Support\\Money::format($expression); ?>";
         });
@@ -93,6 +100,17 @@ class AppServiceProvider extends ServiceProvider
         }
     }
 
+    private function configureFilamentActions(): void
+    {
+        CreateAction::configureUsing(function (CreateAction $action): void {
+            $action
+                ->modalSubmitActionLabel('保存')
+                ->createAnotherAction(function (\Filament\Actions\Action $createAnotherAction) use ($action): \Filament\Actions\Action {
+                    return $createAnotherAction->label('保存并创建新' . ($action->getModelLabel() ?: '记录'));
+                });
+        });
+    }
+
     private function navigationMenuItems(string $placement)
     {
         try {
@@ -126,5 +144,72 @@ class AppServiceProvider extends ServiceProvider
         } catch (\Throwable) {
             return false;
         }
+    }
+
+    private function autoRepairDatabaseSchema(): void
+    {
+        if (! (bool) config('shop.auto_migrate_on_boot', true)) {
+            return;
+        }
+
+        if (! file_exists(storage_path('app/install.lock'))) {
+            return;
+        }
+
+        if ($this->runningMigrationCommand()) {
+            return;
+        }
+
+        $stamp = storage_path('framework/shop_database_health_checked_at');
+        $ttl = max(0, (int) config('shop.auto_migrate_check_ttl', 60));
+
+        if ($ttl > 0 && File::exists($stamp) && (time() - (int) File::get($stamp)) < $ttl) {
+            return;
+        }
+
+        File::ensureDirectoryExists(dirname($stamp));
+        File::put($stamp, (string) time());
+
+        $lockPath = storage_path('framework/shop_database_migration.lock');
+        $lock = fopen($lockPath, 'c');
+
+        if (! $lock) {
+            return;
+        }
+
+        try {
+            if (! flock($lock, LOCK_EX | LOCK_NB)) {
+                return;
+            }
+
+            $result = app(DatabaseMigrationHealth::class)->repair();
+
+            if ($result['migrated']) {
+                Log::info('Database migration health check repaired schema.', [
+                    'ok' => $result['ok'],
+                    'pending_before' => $result['pending_before'],
+                    'pending_after' => $result['pending_after'],
+                    'error' => $result['error'],
+                ]);
+            }
+        } catch (Throwable $exception) {
+            Log::error('Database migration health check failed.', ['exception' => $exception]);
+        } finally {
+            flock($lock, LOCK_UN);
+            fclose($lock);
+        }
+    }
+
+    private function runningMigrationCommand(): bool
+    {
+        if (! $this->app->runningInConsole()) {
+            return false;
+        }
+
+        $command = implode(' ', $_SERVER['argv'] ?? []);
+
+        return str_contains($command, 'migrate')
+            || str_contains($command, 'shop:install')
+            || str_contains($command, 'shop:database-health');
     }
 }

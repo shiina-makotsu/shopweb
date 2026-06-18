@@ -419,7 +419,7 @@ TEXT);
         $price = $product->starting_price_cents !== null
             ? Money::format($product->starting_price_cents)
             : '暂无价格';
-        $url = route('products.show', $product);
+        $url = $product->showUrl();
         $summary = trim((string) $product->summary);
 
         return trim(<<<TEXT

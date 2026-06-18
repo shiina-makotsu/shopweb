@@ -44,6 +44,7 @@ class PaymentSettingsPage extends Page implements HasSchemas
             'payment_enabled_methods',
             'payment_gateway_config',
             'payment_gateway_notes',
+            'payment_fallback_config',
         ]));
     }
 
@@ -96,6 +97,25 @@ class PaymentSettingsPage extends Page implements HasSchemas
                     TextInput::make('payment_gateway_config.secret_key_hint')->label('密钥备注')->maxLength(255),
                     Textarea::make('payment_gateway_notes')->label('接口备注')->rows(3)->columnSpanFull(),
                 ])->columns(2)->columnSpanFull(),
+                Section::make('备用付款方案')
+                    ->description('用于主付款码被风控、加载失败或无法完成支付时展示。用户提交口令红包后，后台订单详情会显示文字凭证，管理员可人工确认付款。')
+                    ->schema([
+                        self::imagePathSelect('payment_fallback_config.fallback_qr_path', '备用付款码', '主付款码不可用时显示的备用收款码。'),
+                        self::imagePathSelect('payment_fallback_config.friend_qr_path', '好友码 / 联系码', '可填写支付宝好友码、微信联系码或其他联系二维码。'),
+                        Toggle::make('payment_fallback_config.password_red_packet_enabled')->label('允许提交口令红包')->default(false),
+                        Textarea::make('payment_fallback_config.password_red_packet_note')
+                            ->label('口令红包说明')
+                            ->rows(3)
+                            ->helperText('例如：支付失败时可填写支付宝口令红包，提交后等待后台人工确认。')
+                            ->columnSpanFull(),
+                        Toggle::make('payment_fallback_config.wallet_enabled')->label('显示钱包充值占位')->default(false),
+                        Textarea::make('payment_fallback_config.wallet_note')
+                            ->label('钱包充值说明')
+                            ->rows(3)
+                            ->helperText('钱包扣款链路暂作为预留说明，可引导用户用兑换码或联系客服充值。')
+                            ->columnSpanFull(),
+                        Toggle::make('payment_fallback_config.support_enabled')->label('显示联系客服兜底')->default(true),
+                    ])->columns(2)->columnSpanFull(),
             ]);
     }
 

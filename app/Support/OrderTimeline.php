@@ -152,6 +152,8 @@ class OrderTimeline
             'order_payment_rejected' => '驳回付款凭证',
             'order_fulfilled' => '后台标记完成',
             'order_cancelled' => '取消订单',
+            'order_manually_updated' => '后台修改订单',
+            'order_quick_shipping_updated' => '后台补充物流',
         ][$action] ?? $action;
     }
 }

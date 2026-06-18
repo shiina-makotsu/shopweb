@@ -3,7 +3,7 @@
 namespace App\Filament\Resources\WarehouseResource\Pages;
 
 use App\Filament\Resources\WarehouseResource;
-use Filament\Resources\Pages\CreateRecord;
+use App\Filament\Resources\Pages\CreateRecord;
 
 class CreateWarehouse extends CreateRecord
 {

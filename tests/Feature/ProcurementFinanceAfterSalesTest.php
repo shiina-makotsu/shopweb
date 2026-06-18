@@ -997,3 +997,42 @@ it('receives procurement into warehouse stock and ships allocated orders out of 
         ->and(WarehouseMovement::query()->where('type', WarehouseMovement::TYPE_RETURNED)->where('delta', 2)->exists())->toBeTrue()
         ->and(InventoryMovement::query()->where('product_variant_id', $incomingVariant->id)->where('reason', 'warehouse_returned')->exists())->toBeTrue();
 });
+
+it('uses product sku as the warehouse sku when creating warehouse stock', function (): void {
+    $category = Category::query()->create(['name' => '仓库 SKU', 'slug' => 'warehouse-sku', 'is_active' => true]);
+    $product = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => '仓库 SKU 商品',
+        'slug' => 'warehouse-sku-product',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_LOGISTICS,
+    ]);
+    $variant = ProductVariant::query()->create([
+        'product_id' => $product->id,
+        'sku' => 'UNIFIED-SKU-1',
+        'price_cents' => 1000,
+        'stock' => 0,
+        'is_active' => true,
+    ]);
+    $warehouse = Warehouse::query()->create([
+        'name' => '统一 SKU 仓库',
+        'is_active' => true,
+    ]);
+
+    $data = \App\Filament\Resources\WarehouseStockResource::normalizeFormData([
+        'warehouse_id' => $warehouse->id,
+        'product_id' => null,
+        'product_variant_id' => $variant->id,
+        'name' => '',
+        'sku' => 'OLD-WAREHOUSE-SKU',
+        'quantity' => 3,
+        'reserved_quantity' => 0,
+    ]);
+
+    $stock = WarehouseStock::query()->create($data);
+
+    expect($stock->product_id)->toBe($product->id)
+        ->and($stock->sku)->toBe('UNIFIED-SKU-1')
+        ->and($stock->name)->toBe('仓库 SKU 商品')
+        ->and($stock->variant->sku)->toBe('UNIFIED-SKU-1');
+});

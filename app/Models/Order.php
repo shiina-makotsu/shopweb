@@ -63,6 +63,7 @@ class Order extends Model
         'digital_delivery_completed_at',
         'customer_note',
         'payment_proof_path',
+        'payment_text_proof',
         'payment_submitted_at',
         'payment_auto_checked_at',
         'payment_auto_check_status',

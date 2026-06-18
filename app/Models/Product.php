@@ -195,6 +195,63 @@ class Product extends Model
         return 'slug';
     }
 
+    /**
+     * @return array<string, string>
+     */
+    public static function statusRouteSlugs(): array
+    {
+        return [
+            self::STATUS_CONCEPT => 'concept',
+            self::STATUS_PRESALE => 'presale',
+            self::STATUS_INCOMING => 'incoming',
+            self::STATUS_PUBLISHED => 'in-stock',
+            self::STATUS_SOLD_OUT => 'sold-out',
+        ];
+    }
+
+    public static function statusFromRouteSlug(string $slug): ?string
+    {
+        $slug = Str::lower(trim($slug));
+
+        return array_flip(self::statusRouteSlugs())[$slug] ?? null;
+    }
+
+    public static function findPublicForStatusRoute(string $statusSlug, string $productSlug): ?self
+    {
+        $status = self::statusFromRouteSlug($statusSlug);
+
+        if ($status === null) {
+            return null;
+        }
+
+        return self::query()
+            ->publiclyVisible()
+            ->where('status', $status)
+            ->where('slug', $productSlug)
+            ->first();
+    }
+
+    public function statusRouteSlug(): string
+    {
+        return self::statusRouteSlugs()[$this->status] ?? Str::slug((string) $this->status);
+    }
+
+    /**
+     * @return array{statusSlug: string, productSlug: string}
+     */
+    public function showRouteParameters(): array
+    {
+        return [
+            'statusSlug' => $this->statusRouteSlug(),
+            'productSlug' => $this->slug,
+        ];
+    }
+
+    public function showUrl(): string
+    {
+        return route('products.status.show', $this->showRouteParameters());
+    }
+
     public function requiresShipping(): bool
     {
         return in_array($this->fulfillment_type, [self::FULFILLMENT_LOGISTICS, self::FULFILLMENT_SHIPPING_LEGACY], true);
@@ -382,12 +439,18 @@ class Product extends Model
     private static function uniqueSlug(self $product): string
     {
         $current = trim((string) $product->slug);
+        $status = $product->status ?: self::STATUS_DRAFT;
 
         if (
             $product->exists
             && $current !== ''
             && $product->getOriginal('slug') === $current
             && preg_match('/^[A-Za-z0-9][A-Za-z0-9_-]*$/', $current)
+            && ! static::query()
+                ->where('status', $status)
+                ->where('slug', $current)
+                ->whereKeyNot($product->getKey())
+                ->exists()
         ) {
             return $current;
         }
@@ -403,6 +466,7 @@ class Product extends Model
 
         while (static::query()
             ->where('slug', $slug)
+            ->where('status', $status)
             ->when($product->getKey(), fn (Builder $query) => $query->whereKeyNot($product->getKey()))
             ->exists()) {
             $suffix = '-'.$index++;

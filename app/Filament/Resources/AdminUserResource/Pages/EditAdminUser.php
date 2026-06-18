@@ -3,7 +3,7 @@
 namespace App\Filament\Resources\AdminUserResource\Pages;
 
 use App\Filament\Resources\AdminUserResource;
-use Filament\Resources\Pages\EditRecord;
+use App\Filament\Resources\Pages\EditRecord;
 
 class EditAdminUser extends EditRecord
 {

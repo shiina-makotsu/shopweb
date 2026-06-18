@@ -6,7 +6,7 @@ use App\Filament\Resources\CostEntryResource;
 use App\Models\CostEntry;
 use App\Support\CurrencyUnit;
 use Filament\Actions\DeleteAction;
-use Filament\Resources\Pages\EditRecord;
+use App\Filament\Resources\Pages\EditRecord;
 
 class EditCostEntry extends EditRecord
 {

@@ -618,6 +618,82 @@ it('sends references through responses image generation as multimodal input', fu
         && str_contains($request->body(), '"input_image"'));
 });
 
+it('tries alternate image modes when a successful provider response contains no image data', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+
+    Http::fake([
+        'https://api.example.test/v1/images/generations' => Http::response([
+            'id' => 'task-without-image',
+            'status' => 'completed',
+            'message' => 'ok',
+        ]),
+        'https://api.example.test/v1/images' => Http::response([
+            'id' => 'root-task-without-image',
+            'status' => 'completed',
+        ]),
+        'https://api.example.test/v1/responses' => Http::response([
+            'output' => [
+                [
+                    'type' => 'image_generation_call',
+                    'result' => base64_encode('fallback-response-image'),
+                ],
+            ],
+        ]),
+    ]);
+
+    $this->actingAs($user)->postJson(route('ai-image.generate'), [
+        'endpoint' => 'https://api.example.test/v1',
+        'api_key' => 'test-key',
+        'chat_endpoint' => 'https://api.example.test/v1',
+        'chat_api_key' => 'test-key',
+        'model' => 'gpt-image-1',
+        'prompt' => 'fallback when provider returns no image',
+        'count' => 1,
+        'size_mode' => 'auto',
+        'quality' => 'auto',
+        'output_format' => 'png',
+        'image_api_mode' => 'auto',
+        'timeout_seconds' => 600,
+    ])
+        ->assertOk()
+        ->assertJsonPath('images.0.data_url', 'data:image/png;base64,'.base64_encode('fallback-response-image'))
+        ->assertJsonPath('meta.image_api_mode', 'responses');
+});
+
+it('downloads generated image content when provider returns a file id', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+
+    Http::fake([
+        'https://api.example.test/v1/images/generations' => Http::response([
+            'output' => [
+                [
+                    'type' => 'image_generation_call',
+                    'file_id' => 'file-image-123',
+                ],
+            ],
+        ]),
+        'https://api.example.test/v1/files/file-image-123/content' => Http::response('file-image-bytes', 200, [
+            'Content-Type' => 'image/png',
+        ]),
+    ]);
+
+    $this->actingAs($user)->postJson(route('ai-image.generate'), [
+        'endpoint' => 'https://api.example.test/v1',
+        'api_key' => 'test-key',
+        'model' => 'gpt-image-1',
+        'prompt' => 'provider returns file id',
+        'count' => 1,
+        'size_mode' => 'auto',
+        'quality' => 'auto',
+        'output_format' => 'png',
+        'timeout_seconds' => 600,
+    ])
+        ->assertOk()
+        ->assertJsonPath('images.0.data_url', 'data:image/png;base64,'.base64_encode('file-image-bytes'));
+
+    Http::assertSent(fn ($request): bool => $request->url() === 'https://api.example.test/v1/files/file-image-123/content');
+});
+
 it('generates images with prompt dimensions and references', function (): void {
     $user = User::factory()->create(['role' => 'customer']);
 
@@ -695,6 +771,62 @@ it('generates auto sized transparent png images without sending a size', functio
         && str_contains($request->body(), '"output_format":"png"')
         && str_contains($request->body(), '"background":"transparent"')
         && ! str_contains($request->body(), '"size"'));
+});
+
+it('extracts provider image urls from nested chat style payloads', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+
+    Http::fake([
+        'https://api.example.test/v1/images/generations' => Http::response([
+            'choices' => [
+                [
+                    'message' => [
+                        'content' => '生成完成：![image](https://cdn.example.test/aijuhe-output.png)',
+                    ],
+                ],
+            ],
+        ]),
+    ]);
+
+    $this->actingAs($user)->postJson(route('ai-image.generate'), [
+        'endpoint' => 'https://api.example.test/v1',
+        'api_key' => 'test-key',
+        'model' => 'gpt-image-1',
+        'prompt' => '兼容嵌套返回图片',
+        'count' => 1,
+        'size_mode' => 'auto',
+        'quality' => 'auto',
+        'output_format' => 'png',
+        'timeout_seconds' => 600,
+    ])
+        ->assertOk()
+        ->assertJsonPath('images.0.url', 'https://cdn.example.test/aijuhe-output.png');
+});
+
+it('extracts provider image urls from result fields', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+
+    Http::fake([
+        'https://api.example.test/v1/images/generations' => Http::response([
+            'data' => [
+                ['result' => 'https://cdn.example.test/result-field.png'],
+            ],
+        ]),
+    ]);
+
+    $this->actingAs($user)->postJson(route('ai-image.generate'), [
+        'endpoint' => 'https://api.example.test/v1',
+        'api_key' => 'test-key',
+        'model' => 'gpt-image-1',
+        'prompt' => '兼容 result 链接',
+        'count' => 1,
+        'size_mode' => 'auto',
+        'quality' => 'auto',
+        'output_format' => 'png',
+        'timeout_seconds' => 600,
+    ])
+        ->assertOk()
+        ->assertJsonPath('images.0.url', 'https://cdn.example.test/result-field.png');
 });
 
 it('registers the streaming image route used by the workbench', function (): void {

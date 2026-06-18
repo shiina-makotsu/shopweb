@@ -11,6 +11,7 @@ use App\Models\Product;
 use App\Models\ProductMedia;
 use App\Models\ProductVariant;
 use App\Support\MediaPath;
+use App\Support\CurrencyUnit;
 use App\Support\MoneyInput;
 use App\Support\RegexSearch;
 use Filament\Actions\Action;
@@ -36,6 +37,7 @@ use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Validation\Rules\Unique;
 use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
 
@@ -87,7 +89,10 @@ class ProductResource extends Resource
                 TextInput::make('title')->label('标题')->required()->maxLength(255)
                     ->live(onBlur: true)
                     ->afterStateUpdated(fn ($state, callable $set) => $set('slug', Str::slug($state))),
-                TextInput::make('slug')->label('Slug')->unique(ignoreRecord: true)->helperText('可留空；保存时会自动生成可访问的商品路径。'),
+                TextInput::make('slug')
+                    ->label('Slug')
+                    ->unique(ignoreRecord: true, modifyRuleUsing: fn (Unique $rule, Get $get): Unique => $rule->where('status', $get('status') ?: Product::STATUS_DRAFT))
+                    ->helperText('可留空；保存时会自动生成可访问的商品路径。同一状态内不能重复，不同状态允许相同 slug。'),
                 Textarea::make('summary')->label('简介')->rows(3)->columnSpanFull(),
                 RichEditor::make('description')->label('详情')->columnSpanFull(),
                 Select::make('status')->label('状态')->required()->options(fn (?Product $record): array => $record?->status === Product::STATUS_SOLD_OUT
@@ -119,56 +124,91 @@ class ProductResource extends Resource
             ])->visible(fn (Get $get): bool => $get('status') === Product::STATUS_INCOMING)->columns(2)->columnSpanFull(),
 
             Section::make('SKU 与库存')->schema([
+                Select::make('variant_price_currency_code')
+                    ->label('SKU 默认货币')
+                    ->options(CurrencyUnit::currencyOptions())
+                    ->default(fn (): string => CurrencyUnit::baseCurrency())
+                    ->searchable()
+                    ->live()
+                    ->dehydrated(false)
+                    ->afterStateUpdated(function (callable $set, ?string $state): void {
+                        $set('variant_price_currency_unit', CurrencyUnit::defaultUnit($state));
+                    }),
+                Select::make('variant_price_currency_unit')
+                    ->label('SKU 默认金额单位')
+                    ->options(fn (Get $get): array => CurrencyUnit::unitOptions($get('variant_price_currency_code') ?: CurrencyUnit::baseCurrency()))
+                    ->default(fn (): string => CurrencyUnit::baseUnit())
+                    ->dehydrated(false),
                 Repeater::make('variants')->label('SKU 规格')
                     ->addActionLabel('添加规格值')
                     ->relationship()
                     ->schema([
-                        TextInput::make('sku')->label('SKU')->required()->maxLength(255),
-                        TextInput::make('spec_name')
-                            ->label('规格参数名')
-                            ->placeholder('例如 10片装、20mg 常规装')
-                            ->helperText('这是该 SKU 的前台显示名，类似对外展示名称；不填则使用下方规格列表生成。')
-                            ->maxLength(255),
+                        Section::make('SKU 基础')
+                            ->schema([
+                                TextInput::make('sku')->label('SKU')->required()->maxLength(255),
+                                TextInput::make('spec_name')
+                                    ->label('规格参数名')
+                                    ->placeholder('例如 10片装、20mg 常规装')
+                                    ->helperText('前台优先显示这个名称；不填时才使用右侧规格值生成展示名。')
+                                    ->maxLength(255),
+                            ])
+                            ->columns(1)
+                            ->columnSpan(1),
                         KeyValue::make('specs')
                             ->label('规格值')
                             ->keyLabel('规格名')
                             ->valueLabel('规格值')
-                            ->addActionLabel('添加规格名/值')
-                            ->helperText('这里填写该 SKU 的具体规格明细，例如 mg=20、片=10；商品详情页会按表格显示规格名和规格值。未填写上方“规格参数名”时，规格选项才会用“20mg * 10片”作为展示名。')
-                            ->columnSpanFull(),
-                        TextInput::make('image_path')
-                            ->label('SKU 图片链接或路径')
-                            ->placeholder('https://example.com/sku.jpg 或 products/sku.jpg')
-                            ->helperText('可粘贴外部图片 URL、/uploads/... 路径或 public/uploads 下的相对路径；也可以在旁边从资源库选择或点击 + 上传。')
-                            ->live(debounce: 500)
-                            ->maxLength(2048)
-                            ->dehydrateStateUsing(fn (?string $state): ?string => blank($state) ? null : trim($state))
-                            ->columnSpan(2),
-                        static::imageAssetPicker('image_path', '资源库 / 上传图片'),
-                        Placeholder::make('image_preview')
-                            ->label('SKU 图片预览')
-                            ->content(fn (Get $get): HtmlString => static::imagePreviewHtml($get('image_path')))
-                            ->html(),
-                        ...MoneyInput::convertedCents(TextInput::make('price_cents')->label('价格')->required()),
-                        TextInput::make('stock')
-                            ->label('库存')
-                            ->numeric()
-                            ->required()
-                            ->default(0)
-                            ->helperText(fn (Get $get): string => $get('../../fulfillment_type') === Product::FULFILLMENT_ONLINE
-                                ? '线上交付商品前台按不限库存处理，此处数值仅作备注或改成交付类型后的初始库存。'
-                                : '物流/当面交付商品会按库存限制下单。'),
-                        TextInput::make('low_stock_threshold')->label('低库存阈值')->numeric()->default(5),
-                        Toggle::make('is_active')->label('启用')->default(true),
+                            ->addActionLabel('添加规格')
+                            ->helperText('填写该 SKU 的规格明细，例如 mg=20、片=10。')
+                            ->columnSpan(1),
+                        Section::make('SKU 图片')
+                            ->schema([
+                                TextInput::make('image_path')
+                                    ->label('图片链接')
+                                    ->placeholder('https://example.com/sku.jpg 或 products/sku.jpg')
+                                    ->helperText('粘贴链接，或使用右侧 + 选择资源库文件/上传。')
+                                    ->live(debounce: 500)
+                                    ->maxLength(2048)
+                                    ->dehydrateStateUsing(fn (?string $state): ?string => blank($state) ? null : trim($state)),
+                                static::imageAssetPicker('image_path', '+'),
+                                Placeholder::make('image_preview')
+                                    ->label('')
+                                    ->content(fn (Get $get): HtmlString => static::compactImagePreviewHtml($get('image_path')))
+                                    ->html()
+                                    ->columnSpanFull(),
+                            ])
+                            ->columns(2)
+                            ->columnSpan(1),
+                        Section::make('价格与库存')
+                            ->schema([
+                                ...MoneyInput::convertedCents(
+                                    TextInput::make('price_cents')->label('价格')->required(),
+                                    defaultCurrencyField: '../../variant_price_currency_code',
+                                    defaultUnitField: '../../variant_price_currency_unit',
+                                    includeControls: false,
+                                ),
+                                TextInput::make('stock')
+                                    ->label('库存')
+                                    ->numeric()
+                                    ->required()
+                                    ->default(0)
+                                    ->helperText(fn (Get $get): string => $get('../../fulfillment_type') === Product::FULFILLMENT_ONLINE
+                                        ? '线上交付前台按不限库存处理。'
+                                        : '物流/当面交付会按库存限制下单。'),
+                                TextInput::make('low_stock_threshold')->label('低库存阈值')->numeric()->default(5),
+                                Toggle::make('is_active')->label('启用')->default(true),
+                            ])
+                            ->columns(1)
+                            ->columnSpan(1),
                     ])
-                    ->columns(3)
+                    ->columns(2)
                     ->defaultItems(1)
                     ->itemLabel(fn (array $state): ?string => filled($state['spec_name'] ?? null)
                         ? (string) $state['spec_name']
                         : (filled($state['sku'] ?? null) ? (string) $state['sku'] : null))
                     ->helperText('每一项就是一个可售 SKU，可维护多个规格名/规格值、独立基础价格、库存和 SKU 图片；折扣价与折扣时间请到交易菜单的“商品折扣”页面设置。')
                     ->columnSpanFull(),
-            ])->columnSpanFull(),
+            ])->columns(2)->columnSpanFull(),
 
             Section::make('商品媒体')->schema([
                 Repeater::make('media')->label('图片 / 视频')
@@ -239,6 +279,7 @@ class ProductResource extends Resource
             ->afterStateUpdated(function (?string $state, callable $set) use ($targetField): void {
                 if (filled($state)) {
                     $set($targetField, $state);
+                    $set($targetField.'_asset_picker', null);
                 }
             })
             ->createOptionForm([
@@ -459,6 +500,21 @@ class ProductResource extends Resource
 
         return new HtmlString(<<<HTML
 <img src="{$escapedUrl}" alt="图片预览" style="width:72px;height:72px;object-fit:cover;border:1px solid #cbd5e1;border-radius:4px;background:#f8fafc;">
+HTML);
+    }
+
+    private static function compactImagePreviewHtml(?string $path): HtmlString
+    {
+        $url = MediaPath::url($path);
+
+        if (! $url) {
+            return new HtmlString('');
+        }
+
+        $escapedUrl = e($url);
+
+        return new HtmlString(<<<HTML
+<img src="{$escapedUrl}" alt="图片预览" style="display:block;width:100%;max-width:260px;max-height:180px;object-fit:contain;border:1px solid #cbd5e1;border-radius:6px;background:#f8fafc;">
 HTML);
     }
 

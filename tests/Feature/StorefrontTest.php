@@ -43,6 +43,69 @@ it('formats sku specification labels with value before name', function (): void 
         ->and($variant->detailSpecLabel())->toBe('白色颜色 * M尺码');
 });
 
+it('allows identical product slugs in different status routes', function (): void {
+    $category = Category::query()->create([
+        'name' => '演示分类',
+        'slug' => 'demo-category',
+        'is_active' => true,
+    ]);
+
+    $published = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => '现货同名商品',
+        'slug' => 'same-item',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_LOGISTICS,
+    ]);
+
+    $presale = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => '预售同名商品',
+        'slug' => 'same-item',
+        'status' => Product::STATUS_PRESALE,
+        'fulfillment_type' => Product::FULFILLMENT_LOGISTICS,
+    ]);
+
+    ProductVariant::query()->create([
+        'product_id' => $published->id,
+        'sku' => 'SAME-PUBLISHED',
+        'price_cents' => 1000,
+        'stock' => 5,
+        'is_active' => true,
+    ]);
+
+    ProductVariant::query()->create([
+        'product_id' => $presale->id,
+        'sku' => 'SAME-PRESALE',
+        'price_cents' => 2000,
+        'stock' => 0,
+        'is_active' => true,
+    ]);
+
+    $this->get(route('products.status.show', $published->showRouteParameters()))
+        ->assertOk()
+        ->assertSee('现货同名商品')
+        ->assertDontSee('预售同名商品');
+
+    $this->get(route('products.status.show', $presale->showRouteParameters()))
+        ->assertOk()
+        ->assertSee('预售同名商品')
+        ->assertDontSee('现货同名商品');
+});
+
+it('parses recipient phone and compact chinese address without leaking them into detail', function (): void {
+    $parsed = \App\Support\ChinaRegions::parseAddress('狗狗 12365478945 中国广东广州荔湾区花地大道中市');
+
+    expect($parsed['name'] ?? null)->toBe('狗狗')
+        ->and($parsed['phone'] ?? null)->toBe('12365478945')
+        ->and($parsed['country'] ?? null)->toBe('中国')
+        ->and($parsed['province'] ?? null)->toBe('广东')
+        ->and($parsed['city'] ?? null)->toBe('广州市')
+        ->and($parsed['district'] ?? null)->toBe('荔湾区')
+        ->and($parsed['street'] ?? null)->toBe('花地大道')
+        ->and($parsed['detail'] ?? null)->toBe('中市');
+});
+
 it('allows a customer to add a sku to cart and create an order', function (): void {
     $this->seed();
 
@@ -1281,8 +1344,8 @@ it('shows media library upload pickers beside product image inputs', function ()
     $this->actingAs($admin);
 
     Livewire::test(EditProduct::class, ['record' => $product->id])
-        ->assertSee('SKU 图片链接或路径')
-        ->assertSee('资源库 / 上传图片')
+        ->assertSee('图片链接')
+        ->assertSee('选择资源库文件/上传')
         ->assertSee('图片/视频链接或路径')
         ->assertSee('资源库 / 上传文件');
 });
@@ -1662,6 +1725,22 @@ it('lets users manage addresses and preloads the default address during checkout
         'is_default' => true,
         'is_visible' => true,
     ]);
+
+    $address = $user->addresses()->firstOrFail();
+
+    $this->actingAs($user)
+        ->get(route('user.section', 'addresses'))
+        ->assertOk()
+        ->assertSee('我的地址')
+        ->assertSee('新增地址')
+        ->assertSee(route('user.addresses.edit', $address, false), false)
+        ->assertDontSee('智能识别地址');
+
+    $this->actingAs($user)
+        ->get(route('user.addresses.create'))
+        ->assertOk()
+        ->assertSee('智能识别地址')
+        ->assertSee('详细地址');
 
     $this->post(route('cart.items.store'), [
         'variant_id' => $variant->id,

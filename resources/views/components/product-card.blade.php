@@ -39,10 +39,12 @@
     $favoriteActive = auth()->check()
         ? auth()->user()->favorites()->where('product_id', $product->id)->exists()
         : false;
+    $productUrl = $product->showUrl();
+    $productRoute = $product->showRouteParameters();
 @endphp
 
 <article class="min-w-0 overflow-hidden bg-white">
-    <a href="{{ route('products.show', $product) }}" class="relative block border-b border-slate-100 bg-white p-2 sm:p-3">
+    <a href="{{ $productUrl }}" class="relative block border-b border-slate-100 bg-white p-2 sm:p-3">
         @if($isSoldOut)
             <span class="absolute left-4 top-4 z-10 rounded-sm bg-slate-950/85 px-2 py-1 text-xs font-semibold text-white shadow">售罄</span>
         @endif
@@ -63,7 +65,7 @@
         @if($product->category)
             <p class="text-xs text-slate-500">{{ $product->category->name }}</p>
         @endif
-        <a href="{{ route('products.show', $product) }}" class="block min-h-10 min-w-0 break-words text-sm font-medium leading-5 hover:text-blue-800">{{ $product->title }}</a>
+        <a href="{{ $productUrl }}" class="block min-h-10 min-w-0 break-words text-sm font-medium leading-5 hover:text-blue-800">{{ $product->title }}</a>
         @if($product->summary)
             <p class="line-clamp-2 min-h-10 text-xs leading-5 text-slate-600">{{ $product->summary }}</p>
         @endif
@@ -97,7 +99,7 @@
                     <button class="w-full rounded-sm border border-blue-700 bg-blue-700 px-3 py-2 text-xs font-medium text-white hover:bg-blue-800" type="submit">加入购物车</button>
                 </form>
             @elseif($product->allowsCrowdfunding())
-                <a href="{{ route('products.show', $product) }}#concept-votes" class="rounded-sm border border-blue-700 bg-blue-700 px-3 py-2 text-center text-xs font-medium text-white hover:bg-blue-800">投票</a>
+                <a href="{{ $productUrl }}#concept-votes" class="rounded-sm border border-blue-700 bg-blue-700 px-3 py-2 text-center text-xs font-medium text-white hover:bg-blue-800">投票</a>
                 @if($variant)
                     <form method="post" action="{{ route('cart.buy-now') }}">
                         @csrf
@@ -106,21 +108,21 @@
                         <button class="w-full rounded-sm border border-pink-600 bg-pink-600 px-3 py-2 text-xs font-medium text-white hover:bg-pink-700" type="submit">筹款</button>
                     </form>
                 @else
-                    <a href="{{ route('products.show', $product) }}" class="rounded-sm border border-pink-600 bg-pink-600 px-3 py-2 text-center text-xs font-medium text-white hover:bg-pink-700">筹款</a>
+                    <a href="{{ $productUrl }}" class="rounded-sm border border-pink-600 bg-pink-600 px-3 py-2 text-center text-xs font-medium text-white hover:bg-pink-700">筹款</a>
                 @endif
             @else
-                <a href="{{ route('products.show', $product) }}" class="rounded-sm border border-blue-700 bg-blue-700 px-3 py-2 text-center text-xs font-medium text-white hover:bg-blue-800">{{ $actionLabel }}</a>
+                <a href="{{ $productUrl }}" class="rounded-sm border border-blue-700 bg-blue-700 px-3 py-2 text-center text-xs font-medium text-white hover:bg-blue-800">{{ $actionLabel }}</a>
             @endif
         </div>
         <div class="grid gap-2 sm:grid-cols-2">
             @auth
-                <form method="post" action="{{ route('products.wishlist.toggle', $product) }}">
+                <form method="post" action="{{ route('products.wishlist.status.toggle', $productRoute) }}">
                     @csrf
                     <button class="w-full rounded-sm border px-3 py-2 text-xs font-medium {{ $wishlistActive ? 'border-pink-300 bg-pink-50 text-pink-800' : 'border-slate-300 bg-white text-slate-700 hover:bg-pink-50 hover:text-pink-800' }}" type="submit">
                         {{ $wishlistActive ? '已在愿望单' : '加入愿望单' }}
                     </button>
                 </form>
-                <form method="post" action="{{ route('products.favorite.toggle', $product) }}">
+                <form method="post" action="{{ route('products.favorite.status.toggle', $productRoute) }}">
                     @csrf
                     <button class="w-full rounded-sm border px-3 py-2 text-xs font-medium {{ $favoriteActive ? 'border-blue-300 bg-blue-50 text-blue-800' : 'border-slate-300 bg-white text-slate-700 hover:bg-blue-50 hover:text-blue-800' }}" type="submit">
                         {{ $favoriteActive ? '已收藏' : '收藏商品' }}

@@ -3,6 +3,16 @@
     @php($pendingFlashSaleItem = $order->items->first(fn ($item) => $item->flash_sale_id && ! $item->product_variant_id))
     @php($productStatuses = \App\Models\Product::statusOptions())
     @php($isPaymentPage = $order->status === \App\Models\Order::STATUS_PENDING_PAYMENT && ! in_array($order->payment_status, ['confirmed'], true))
+    @php($fallbackPayment = $settings?->payment_fallback_config ?: [])
+    @php($paymentQrUrl = $settings?->paymentQrUrl())
+    @php($fallbackQrUrl = $settings?->paymentFallbackQrUrl())
+    @php($friendQrUrl = $settings?->paymentFriendQrUrl())
+
+    @push('head')
+        @foreach(array_filter([$paymentQrUrl, $fallbackQrUrl, $friendQrUrl]) as $preloadPaymentImage)
+            <link rel="preload" as="image" href="{{ $preloadPaymentImage }}">
+        @endforeach
+    @endpush
 
     <section class="mb-4 rounded-sm border border-slate-300 bg-white">
         <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-100 px-4 py-3">
@@ -13,8 +23,8 @@
             <p class="text-2xl font-semibold text-red-700">@money($order->total_cents)</p>
         </div>
 
-        <div class="grid gap-4 p-4 lg:grid-cols-[1fr_340px]">
-            <section class="space-y-4">
+        <div class="grid min-w-0 gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,340px)]">
+            <section class="min-w-0 space-y-4">
                 @if($pendingFlashSaleItem)
                     <div class="rounded-sm border border-pink-300 bg-pink-50 px-4 py-3 text-sm text-pink-950">
                         该秒杀订单已抢到名额，但还没有选择规格。
@@ -102,8 +112,8 @@
                 <div class="rounded-sm border border-slate-300">
                     <h2 class="border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold">付款说明</h2>
                     <div class="content-body px-4 py-4 text-sm">
-                        @if($settings?->payment_qr_path)
-                            <img class="mb-4 h-40 w-40 rounded-sm border border-slate-200 object-contain" src="{{ $settings->paymentQrUrl() }}" alt="付款二维码">
+                        @if($paymentQrUrl)
+                            <img class="mb-4 h-40 w-40 rounded-sm border border-slate-200 object-contain" src="{{ $paymentQrUrl }}" alt="付款二维码" loading="eager" fetchpriority="high" decoding="async">
                         @endif
                         <div class="mb-4 rounded-sm border border-blue-200 bg-blue-50 px-3 py-3 text-blue-900">
                             <p class="font-medium">付款备注单号：{{ $order->order_number }}</p>
@@ -115,6 +125,37 @@
                             @endif
                         </div>
                         {{ \App\Support\Markdown::render($settings?->payment_instructions ?: "请按页面显示的付款备注单号完成转账，并上传付款截图。\n\n截图上传后系统会自动识别并显示付款成功。请联系管理员获取付款方式。") }}
+                        @if($isPaymentPage && ($fallbackQrUrl || $friendQrUrl || ($fallbackPayment['password_red_packet_enabled'] ?? false) || ($fallbackPayment['wallet_enabled'] ?? false) || ($fallbackPayment['support_enabled'] ?? true)))
+                            <button class="mt-4 rounded-sm border border-amber-300 bg-white px-3 py-2 text-sm font-medium text-amber-900 hover:bg-amber-50" type="button" data-payment-fallback-toggle>
+                                支付失败 / 付款码不可用
+                            </button>
+                            <div class="mt-3 hidden rounded-sm border border-amber-200 bg-amber-50 px-3 py-3 text-amber-950" data-payment-fallback-panel>
+                                <p class="font-medium">支付受限时的备选方案</p>
+                                <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                                    @if($fallbackQrUrl)
+                                        <div>
+                                            <p class="mb-2 text-xs font-medium text-amber-900">备用付款码</p>
+                                            <img class="h-32 w-32 rounded-sm border border-amber-200 bg-white object-contain" src="{{ $fallbackQrUrl }}" alt="备用付款码" loading="eager" fetchpriority="high" decoding="async">
+                                        </div>
+                                    @endif
+                                    @if($friendQrUrl)
+                                        <div>
+                                            <p class="mb-2 text-xs font-medium text-amber-900">好友码 / 联系码</p>
+                                            <img class="h-32 w-32 rounded-sm border border-amber-200 bg-white object-contain" src="{{ $friendQrUrl }}" alt="好友码" loading="eager" fetchpriority="high" decoding="async">
+                                        </div>
+                                    @endif
+                                </div>
+                                @if($fallbackPayment['password_red_packet_enabled'] ?? false)
+                                    <p class="mt-3 whitespace-pre-line text-sm">{{ $fallbackPayment['password_red_packet_note'] ?? '如果二维码支付受限，可以提交支付宝口令红包，后台人工确认后会更新订单付款状态。' }}</p>
+                                @endif
+                                @if($fallbackPayment['wallet_enabled'] ?? false)
+                                    <p class="mt-3 whitespace-pre-line text-sm">{{ $fallbackPayment['wallet_note'] ?? '钱包充值功能预留中，可使用兑换码或联系客服协助充值。' }}</p>
+                                @endif
+                                @if($fallbackPayment['support_enabled'] ?? true)
+                                    <a class="mt-3 inline-flex rounded-sm border border-amber-700 bg-white px-3 py-2 text-xs font-medium text-amber-900 hover:bg-amber-100" href="{{ route('support.index') }}">联系客服处理支付问题</a>
+                                @endif
+                            </div>
+                        @endif
                     </div>
                 </div>
 
@@ -162,7 +203,7 @@
                 @endif
             </section>
 
-            <aside class="space-y-4">
+            <aside class="min-w-0 space-y-4">
                 <div class="rounded-sm border border-slate-300">
                     <h2 class="border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold">金额</h2>
                     <dl class="space-y-2 px-4 py-4 text-sm">
@@ -193,7 +234,7 @@
                                 </div>
                                 <p data-payment-done class="hidden font-medium text-emerald-700">付款成功。</p>
                             </div>
-                        @elseif($order->payment_proof_path)
+                        @elseif($order->payment_proof_path || $order->payment_text_proof)
                             <p class="mb-3 text-emerald-700">付款成功。</p>
                         @endif
                         @if($pendingFlashSaleItem)
@@ -201,8 +242,11 @@
                         @elseif(! in_array($order->payment_status, ['confirmed'], true))
                             <form method="post" action="{{ route('orders.payment-proof', $order) }}" enctype="multipart/form-data" class="space-y-3">
                                 @csrf
-                                <input class="w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" type="file" name="payment_proof" accept="image/*" required>
-                                <button class="rounded-sm border border-emerald-700 bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800" type="submit">上传凭证</button>
+                                <input class="block w-full max-w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" type="file" name="payment_proof" accept="image/*">
+                                @if($fallbackPayment['password_red_packet_enabled'] ?? false)
+                                    <textarea class="w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" name="payment_text_proof" rows="3" placeholder="可填写支付宝口令红包、转账口令或其他文字付款凭证">{{ old('payment_text_proof') }}</textarea>
+                                @endif
+                                <button class="rounded-sm border border-emerald-700 bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800" type="submit">提交付款信息</button>
                             </form>
                         @else
                             <p class="text-emerald-700">付款已确认。</p>
@@ -273,6 +317,13 @@
         </script>
     @endif
     <script>
+        document.querySelectorAll('[data-payment-fallback-toggle]').forEach((button) => {
+            button.addEventListener('click', () => {
+                const panel = button.parentElement?.querySelector('[data-payment-fallback-panel]');
+                panel?.classList.toggle('hidden');
+            });
+        });
+
         document.querySelectorAll('[data-copy-delivery-form]').forEach((form) => {
             form.addEventListener('submit', async (event) => {
                 const button = form.querySelector('[data-copy-delivery-code]');

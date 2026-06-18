@@ -3,7 +3,7 @@
 namespace App\Filament\Resources\WarehouseResource\Pages;
 
 use App\Filament\Resources\WarehouseResource;
-use Filament\Resources\Pages\EditRecord;
+use App\Filament\Resources\Pages\EditRecord;
 
 class EditWarehouse extends EditRecord
 {

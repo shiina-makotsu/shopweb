@@ -29,6 +29,7 @@
         $favoriteActive = auth()->check()
             ? auth()->user()->favorites()->where('product_id', $product->id)->exists()
             : false;
+        $productRoute = $product->showRouteParameters();
     @endphp
 
     <section class="mb-4 rounded-sm border border-slate-300 bg-white">
@@ -112,13 +113,13 @@
                         <button class="rounded-sm border border-blue-700 bg-white px-4 py-2 text-sm font-medium text-blue-800 hover:bg-blue-50" type="submit">咨询此商品</button>
                     </form>
                     @auth
-                        <form method="post" action="{{ route('products.wishlist.toggle', $product) }}">
+                        <form method="post" action="{{ route('products.wishlist.status.toggle', $productRoute) }}">
                             @csrf
                             <button class="rounded-sm border px-4 py-2 text-sm font-medium {{ $wishlistActive ? 'border-pink-300 bg-pink-50 text-pink-800' : 'border-slate-300 bg-white text-slate-700 hover:bg-pink-50 hover:text-pink-800' }}" type="submit">
                                 {{ $wishlistActive ? '已在愿望单' : '加入愿望单' }}
                             </button>
                         </form>
-                        <form method="post" action="{{ route('products.favorite.toggle', $product) }}">
+                        <form method="post" action="{{ route('products.favorite.status.toggle', $productRoute) }}">
                             @csrf
                             <button class="rounded-sm border px-4 py-2 text-sm font-medium {{ $favoriteActive ? 'border-blue-300 bg-blue-50 text-blue-800' : 'border-slate-300 bg-white text-slate-700 hover:bg-blue-50 hover:text-blue-800' }}" type="submit">
                                 {{ $favoriteActive ? '已收藏' : '收藏商品' }}
@@ -317,7 +318,7 @@
             </div>
             <div class="px-4 py-4">
                 @auth
-                    <form method="post" action="{{ route('votes.intent', $product) }}" class="space-y-3">
+                    <form method="post" action="{{ route('votes.status.intent', $productRoute) }}" class="space-y-3">
                         @csrf
                         @foreach(['want' => '想买', 'considering' => '考虑中', 'not_now' => '暂时不买'] as $value => $label)
                             <label class="flex items-center justify-between gap-3 rounded-sm border border-slate-200 px-3 py-2 text-sm">
@@ -342,7 +343,7 @@
             </div>
             <div class="px-4 py-4">
                 @auth
-                    <form method="post" action="{{ route('votes.price', $product) }}" class="space-y-3">
+                    <form method="post" action="{{ route('votes.status.price', $productRoute) }}" class="space-y-3">
                         @csrf
                         @forelse($priceOptions as $option)
                             <label class="flex items-center justify-between gap-3 rounded-sm border border-slate-200 px-3 py-2 text-sm">
@@ -413,7 +414,7 @@
                                     </div>
                                 @endforeach
                                 @auth
-                                    <form method="post" action="{{ route('product-comments.store', $product) }}" class="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
+                                    <form method="post" action="{{ route('product-comments.status.store', $productRoute) }}" class="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
                                         @csrf
                                         <input type="hidden" name="parent_id" value="{{ $comment->id }}">
                                         <input type="hidden" name="rating" value="{{ $comment->rating }}">
@@ -429,7 +430,7 @@
                 @endforelse
             </div>
             @auth
-                <form method="post" action="{{ route('product-comments.store', $product) }}" enctype="multipart/form-data" class="space-y-3 border-t border-slate-200 px-4 py-4 text-sm">
+                <form method="post" action="{{ route('product-comments.status.store', $productRoute) }}" enctype="multipart/form-data" class="space-y-3 border-t border-slate-200 px-4 py-4 text-sm">
                     @csrf
                     <label class="block">
                         <span class="font-medium">评分</span>

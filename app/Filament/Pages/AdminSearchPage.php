@@ -108,7 +108,7 @@ class AdminSearchPage extends Page
             ['group' => '目录', 'label' => '售罄状态', 'keywords' => '售罄 缺货', 'url' => SoldOutStatusResource::getUrl()],
             ['group' => '目录', 'label' => '数量单位', 'keywords' => '单位 件 个 kg cm', 'url' => QuantityUnitResource::getUrl()],
             ['group' => '交易', 'label' => '订单管理', 'keywords' => '订单号 用户 付款 待发货 正在运输 待收货', 'url' => OrderResource::getUrl()],
-            ['group' => '交易', 'label' => '付款设置', 'keywords' => '二维码 支付宝 PayPal Visa Mastercard Amex 付款说明', 'url' => PaymentSettingsPage::getUrl()],
+            ['group' => '交易', 'label' => '付款设置', 'keywords' => '二维码 支付宝 PayPal Visa Mastercard Amex 付款说明 备用付款码 好友码 口令红包 钱包', 'url' => PaymentSettingsPage::getUrl()],
             ['group' => '交易', 'label' => '付款校验日志', 'keywords' => '付款凭证 截图 自动校验 人工复核 订单号 金额', 'url' => PaymentVerificationLogResource::getUrl()],
             ['group' => '交易', 'label' => '优惠码', 'keywords' => '折扣 优惠码 满减 百分比', 'url' => CouponResource::getUrl()],
             ['group' => '交易', 'label' => '商品折扣', 'keywords' => '批量折扣 SKU 折扣价 折扣时间', 'url' => ProductDiscountPage::getUrl()],

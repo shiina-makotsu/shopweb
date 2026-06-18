@@ -55,7 +55,7 @@
             <div class="divide-y divide-slate-100">
                 @forelse($recentHistories as $history)
                     @if($history->product)
-                        <a class="flex items-center gap-3 px-4 py-3 hover:bg-slate-50" href="{{ route('products.show', $history->product) }}">
+                        <a class="flex items-center gap-3 px-4 py-3 hover:bg-slate-50" href="{{ $history->product->showUrl() }}">
                             @if($history->product->coverMedia)
                                 <img class="h-12 w-12 rounded-sm object-cover" src="{{ $history->product->coverMedia->url() }}" alt="{{ $history->product->title }}">
                             @else

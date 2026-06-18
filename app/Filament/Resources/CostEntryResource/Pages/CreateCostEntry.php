@@ -4,7 +4,7 @@ namespace App\Filament\Resources\CostEntryResource\Pages;
 
 use App\Filament\Resources\CostEntryResource;
 use App\Support\CurrencyUnit;
-use Filament\Resources\Pages\CreateRecord;
+use App\Filament\Resources\Pages\CreateRecord;
 
 class CreateCostEntry extends CreateRecord
 {

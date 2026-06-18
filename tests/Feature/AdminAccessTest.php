@@ -1,5 +1,6 @@
 <?php
 
+use App\Filament\Resources\CategoryResource\Pages\CreateCategory;
 use App\Models\User;
 use App\Filament\Resources\PageResource\Pages\Concerns\HandlesPageCoverUpload;
 use App\Models\MediaAsset;
@@ -7,6 +8,7 @@ use App\Models\OrderStatusSetting;
 use App\Models\Page;
 use App\Models\Product;
 use App\Models\SiteSetting;
+use Livewire\Livewire;
 
 it('prevents customers from accessing the admin panel', function (): void {
     $customer = User::factory()->create(['role' => 'customer']);
@@ -78,6 +80,26 @@ it('renders admin sidebar navigation for admins', function (): void {
         ->assertSee('媒体库')
         ->assertSee('报告中心')
         ->assertSee('站点设置');
+});
+
+it('returns resource create pages to the listing and keeps create another available', function (): void {
+    $this->seed();
+
+    $admin = User::factory()->create(['role' => 'admin']);
+
+    $this->actingAs($admin);
+
+    Livewire::test(CreateCategory::class)
+        ->assertSee('保存')
+        ->assertSee('保存并创建新分类')
+        ->fillForm([
+            'name' => '自动返回分类',
+            'slug' => 'auto-return-category',
+            'sort_order' => 0,
+            'is_active' => true,
+        ])
+        ->call('create')
+        ->assertRedirect('/admin/categories');
 });
 
 it('renders role scoped sidebar navigation for operators', function (): void {

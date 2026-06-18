@@ -3,7 +3,7 @@
 namespace App\Filament\Resources\FriendLinkResource\Pages;
 
 use App\Filament\Resources\FriendLinkResource;
-use Filament\Resources\Pages\CreateRecord;
+use App\Filament\Resources\Pages\CreateRecord;
 
 class CreateFriendLink extends CreateRecord
 {

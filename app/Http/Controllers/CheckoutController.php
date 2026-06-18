@@ -52,13 +52,13 @@ class CheckoutController extends Controller
             'contact_name' => ['required', 'string', 'max:100'],
             'contact_phone' => ['required', 'string', 'max:50'],
             'contact_email' => ['nullable', 'email', 'max:255'],
-            'shipping_address' => [$requiresShipping ? 'required' : 'nullable', 'string', 'max:500'],
+            'shipping_address' => ['nullable', 'string', 'max:500'],
             'shipping_country' => [$requiresShipping ? 'required' : 'nullable', 'string', 'max:100'],
             'shipping_province' => [$requiresShipping ? 'required' : 'nullable', 'string', 'max:50'],
             'shipping_city' => [$requiresShipping ? 'required' : 'nullable', 'string', 'max:100'],
             'shipping_district' => ['nullable', 'string', 'max:100'],
             'shipping_street' => ['nullable', 'string', 'max:100'],
-            'shipping_detail' => ['nullable', 'string', 'max:255'],
+            'shipping_detail' => [$requiresShipping ? 'required' : 'nullable', 'string', 'max:255'],
             'customer_note' => ['nullable', 'string', 'max:1000'],
             'coupon_code' => ['nullable', 'string', 'max:100'],
             'coupon_items' => ['nullable', 'array'],
@@ -81,7 +81,10 @@ class CheckoutController extends Controller
         $parsed = ChinaRegions::parseAddress((string) ($input['shipping_address'] ?? ''));
 
         foreach ([
+            'contact_name' => 'name',
+            'contact_phone' => 'phone',
             'shipping_country' => 'country',
+            'shipping_province' => 'province',
             'shipping_city' => 'city',
             'shipping_district' => 'district',
             'shipping_street' => 'street',

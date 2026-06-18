@@ -51,6 +51,7 @@ class SiteSetting extends Model
         'payment_enabled_methods',
         'payment_gateway_config',
         'payment_gateway_notes',
+        'payment_fallback_config',
         'show_order_numbers_to_users',
         'show_tracking_numbers_to_users',
         'default_locale_mode',
@@ -99,6 +100,7 @@ class SiteSetting extends Model
             'payment_auto_check_enabled' => 'boolean',
             'payment_enabled_methods' => 'array',
             'payment_gateway_config' => 'array',
+            'payment_fallback_config' => 'array',
             'enabled_locales' => 'array',
             'currency_base_locked' => 'boolean',
             'currency_exchange_rates' => 'array',
@@ -139,6 +141,16 @@ class SiteSetting extends Model
     public function paymentQrUrl(): ?string
     {
         return $this->assetUrl($this->payment_qr_path);
+    }
+
+    public function paymentFallbackQrUrl(): ?string
+    {
+        return $this->assetUrl($this->payment_fallback_config['fallback_qr_path'] ?? null);
+    }
+
+    public function paymentFriendQrUrl(): ?string
+    {
+        return $this->assetUrl($this->payment_fallback_config['friend_qr_path'] ?? null);
     }
 
     /**

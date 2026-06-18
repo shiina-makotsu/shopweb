@@ -102,16 +102,30 @@ class ProductController extends Controller
         ]);
     }
 
-    public function show(Product $product): View
+    public function showByStatus(string $statusSlug, string $productSlug): View
     {
-        abort_unless(in_array($product->status, [
-            Product::STATUS_CONCEPT,
-            Product::STATUS_PRESALE,
-            Product::STATUS_INCOMING,
-            Product::STATUS_PUBLISHED,
-            Product::STATUS_SOLD_OUT,
-        ], true), 404);
+        $product = Product::findPublicForStatusRoute($statusSlug, $productSlug);
 
+        abort_unless($product, 404);
+
+        return $this->renderProduct($product);
+    }
+
+    public function showLegacy(string $productSlug): View
+    {
+        $product = Product::query()
+            ->publiclyVisible()
+            ->where('slug', $productSlug)
+            ->orderByRaw("case status when 'published' then 1 when 'presale' then 2 when 'incoming' then 3 when 'concept' then 4 when 'sold_out' then 5 else 6 end")
+            ->first();
+
+        abort_unless($product, 404);
+
+        return $this->renderProduct($product);
+    }
+
+    private function renderProduct(Product $product): View
+    {
         $product->load([
             'category',
             'media',

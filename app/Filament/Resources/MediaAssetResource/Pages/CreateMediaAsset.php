@@ -3,7 +3,7 @@
 namespace App\Filament\Resources\MediaAssetResource\Pages;
 
 use App\Filament\Resources\MediaAssetResource;
-use Filament\Resources\Pages\CreateRecord;
+use App\Filament\Resources\Pages\CreateRecord;
 
 class CreateMediaAsset extends CreateRecord
 {

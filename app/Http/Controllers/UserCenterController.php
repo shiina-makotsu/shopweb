@@ -70,6 +70,8 @@ class UserCenterController extends Controller
             'addresses' => $section === 'addresses'
                 ? $user->addresses()->latest()->get()
                 : null,
+            'addressMode' => $section === 'addresses' ? 'index' : null,
+            'editingAddress' => null,
             'addressProvinceOptions' => $section === 'addresses' ? ChinaRegions::provinceOptions() : [],
             'addressRegionTree' => $section === 'addresses' ? ChinaRegions::regionTreeForForms() : [],
             'coupons' => $section === 'coupons'
@@ -90,6 +92,40 @@ class UserCenterController extends Controller
                     'recent_logs' => $aiUsage->recentLogs($user),
                 ]
                 : null,
+        ]);
+    }
+
+    public function createAddress(Request $request): View
+    {
+        return $this->addressFormView($request, 'create');
+    }
+
+    public function editAddress(Request $request, UserAddress $address): View
+    {
+        abort_unless($address->user_id === $request->user()->id, 404);
+
+        return $this->addressFormView($request, 'edit', $address);
+    }
+
+    private function addressFormView(Request $request, string $mode, ?UserAddress $address = null): View
+    {
+        $user = $request->user();
+        $user->ensurePublicId();
+
+        return view('user.section', [
+            'user' => $user,
+            'section' => 'addresses',
+            'wishlists' => null,
+            'favorites' => null,
+            'addresses' => $user->addresses()->latest()->get(),
+            'addressMode' => $mode,
+            'editingAddress' => $address,
+            'addressProvinceOptions' => ChinaRegions::provinceOptions(),
+            'addressRegionTree' => ChinaRegions::regionTreeForForms(),
+            'coupons' => null,
+            'privateUnreadCount' => $this->privateUnreadCount($user),
+            'chatThreads' => collect(),
+            'aiQuota' => null,
         ]);
     }
 
@@ -256,7 +292,7 @@ class UserCenterController extends Controller
 
         $user->addresses()->create($data);
 
-        return back()->with('status', '地址已保存。');
+        return redirect()->route('user.section', 'addresses')->with('status', '地址已保存。');
     }
 
     public function updateAddress(Request $request, UserAddress $address): RedirectResponse
@@ -274,7 +310,7 @@ class UserCenterController extends Controller
 
         $address->update($data);
 
-        return back()->with('status', '地址已更新。');
+        return redirect()->route('user.section', 'addresses')->with('status', '地址已更新。');
     }
 
     public function setDefaultAddress(Request $request, UserAddress $address): RedirectResponse
@@ -284,7 +320,7 @@ class UserCenterController extends Controller
         $request->user()->addresses()->update(['is_default' => false]);
         $address->update(['is_default' => true]);
 
-        return back()->with('status', '默认地址已更新。');
+        return redirect()->route('user.section', 'addresses')->with('status', '默认地址已更新。');
     }
 
     public function destroyAddress(Request $request, UserAddress $address): RedirectResponse
@@ -297,7 +333,7 @@ class UserCenterController extends Controller
             $request->user()->addresses()->latest()->first()?->update(['is_default' => true]);
         }
 
-        return back()->with('status', '地址已删除。');
+        return redirect()->route('user.section', 'addresses')->with('status', '地址已删除。');
     }
 
     private function validateAddress(array $input): array
@@ -312,7 +348,7 @@ class UserCenterController extends Controller
             'city' => ['required', 'string', 'max:100'],
             'district' => ['nullable', 'string', 'max:100'],
             'street' => ['nullable', 'string', 'max:255'],
-            'detail' => ['nullable', 'string', 'max:255'],
+            'detail' => ['required', 'string', 'max:255'],
             'raw_text' => ['nullable', 'string', 'max:1000'],
             'is_default' => ['nullable', 'boolean'],
             'is_visible' => ['nullable', 'boolean'],
@@ -329,9 +365,18 @@ class UserCenterController extends Controller
 
         $parsed = $this->parseChineseAddress($raw);
 
-        foreach (['country', 'province', 'city', 'district', 'street', 'detail'] as $field) {
-            if (blank($input[$field] ?? null) && filled($parsed[$field] ?? null)) {
-                $input[$field] = $parsed[$field];
+        foreach ([
+            'country' => 'country',
+            'province' => 'province',
+            'city' => 'city',
+            'district' => 'district',
+            'street' => 'street',
+            'detail' => 'detail',
+            'recipient_name' => 'name',
+            'phone' => 'phone',
+        ] as $field => $parsedField) {
+            if (blank($input[$field] ?? null) && filled($parsed[$parsedField] ?? null)) {
+                $input[$field] = $parsed[$parsedField];
             }
         }
 

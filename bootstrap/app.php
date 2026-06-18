@@ -15,6 +15,7 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withCommands([
+        App\Console\Commands\DatabaseHealthCommand::class,
         App\Console\Commands\PruneAiTrashCommand::class,
         App\Console\Commands\RefreshCurrencySnapshotCommand::class,
         App\Console\Commands\ShopInstallCommand::class,

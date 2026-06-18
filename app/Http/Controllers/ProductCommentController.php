@@ -9,6 +9,15 @@ use Illuminate\Http\Request;
 
 class ProductCommentController extends Controller
 {
+    public function storeByStatus(Request $request, string $statusSlug, string $productSlug): RedirectResponse
+    {
+        $product = Product::findPublicForStatusRoute($statusSlug, $productSlug);
+
+        abort_unless($product, 404);
+
+        return $this->store($request, $product);
+    }
+
     public function store(Request $request, Product $product): RedirectResponse
     {
         abort_unless($product->comments_enabled, 404);

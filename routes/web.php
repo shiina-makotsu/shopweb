@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\BackupController;
 use App\Http\Controllers\Admin\CsvExportController;
+use App\Http\Controllers\Admin\OrderQuickShippingController;
 use App\Http\Controllers\Admin\PaymentProofController;
 use App\Http\Controllers\Admin\ReportExportController;
 use App\Http\Controllers\AfterSalesController;
@@ -50,7 +51,8 @@ Route::get('/', [HomeController::class, 'index'])->name('home');
 Route::get('/products', [ProductController::class, 'index'])->name('products.index');
 Route::get('/tags', [ProductController::class, 'tags'])->name('tags.index');
 Route::get('/tags/{tag:slug}', [ProductController::class, 'tag'])->name('tags.show');
-Route::get('/products/{product:slug}', [ProductController::class, 'show'])->name('products.show');
+Route::get('/products/{statusSlug}/{productSlug}', [ProductController::class, 'showByStatus'])->name('products.status.show');
+Route::get('/products/{productSlug}', [ProductController::class, 'showLegacy'])->name('products.show');
 Route::get('/search', [SearchController::class, 'index'])->name('search.index');
 Route::get('/friend-links', [FriendLinkController::class, 'index'])->name('friend-links.index');
 Route::middleware('auth')->group(function (): void {
@@ -108,6 +110,8 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/user', [UserCenterController::class, 'show'])->name('user.center');
     Route::patch('/user/profile', [UserCenterController::class, 'updateProfile'])->name('user.profile.update');
     Route::post('/user/coupons', [UserCenterController::class, 'storeCoupon'])->name('user.coupons.store');
+    Route::get('/user/addresses/create', [UserCenterController::class, 'createAddress'])->name('user.addresses.create');
+    Route::get('/user/addresses/{address}/edit', [UserCenterController::class, 'editAddress'])->name('user.addresses.edit');
     Route::post('/user/addresses', [UserCenterController::class, 'storeAddress'])->name('user.addresses.store');
     Route::patch('/user/addresses/{address}', [UserCenterController::class, 'updateAddress'])->name('user.addresses.update');
     Route::post('/user/addresses/{address}/default', [UserCenterController::class, 'setDefaultAddress'])->name('user.addresses.default');
@@ -125,6 +129,11 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/orders/{order}/digital-delivery/copied', [OrderController::class, 'markDigitalCopied'])->name('orders.digital-delivery.copied');
     Route::get('/orders/{order}/digital-delivery/{index}', [OrderController::class, 'downloadDigitalAttachment'])->name('orders.digital-delivery.download');
     Route::post('/p/{page:slug}/comments', [PageCommentController::class, 'store'])->name('page-comments.store');
+    Route::post('/products/{statusSlug}/{productSlug}/comments', [ProductCommentController::class, 'storeByStatus'])->name('product-comments.status.store');
+    Route::post('/products/{statusSlug}/{productSlug}/wishlist', [ProductPreferenceController::class, 'toggleWishlistByStatus'])->name('products.wishlist.status.toggle');
+    Route::post('/products/{statusSlug}/{productSlug}/favorite', [ProductPreferenceController::class, 'toggleFavoriteByStatus'])->name('products.favorite.status.toggle');
+    Route::post('/products/{statusSlug}/{productSlug}/intent-vote', [VoteController::class, 'intentByStatus'])->name('votes.status.intent');
+    Route::post('/products/{statusSlug}/{productSlug}/price-vote', [VoteController::class, 'priceByStatus'])->name('votes.status.price');
     Route::post('/products/{product:slug}/comments', [ProductCommentController::class, 'store'])->name('product-comments.store');
     Route::post('/products/{product:slug}/wishlist', [ProductPreferenceController::class, 'toggleWishlist'])->name('products.wishlist.toggle');
     Route::post('/products/{product:slug}/favorite', [ProductPreferenceController::class, 'toggleFavorite'])->name('products.favorite.toggle');
@@ -152,6 +161,10 @@ Route::middleware(['auth', 'admin'])->prefix('admin/exports')->name('admin.expor
 
 Route::middleware(['auth', 'admin'])->prefix('admin/payment-proofs')->name('admin.payment-proofs.')->group(function (): void {
     Route::get('/orders/{order}', [PaymentProofController::class, 'show'])->name('show');
+});
+
+Route::middleware(['auth', 'admin'])->prefix('admin/orders')->name('admin.orders.')->group(function (): void {
+    Route::post('/{order}/quick-shipping', [OrderQuickShippingController::class, 'update'])->name('quick-shipping');
 });
 
 Route::middleware(['auth', 'admin'])->prefix('admin/report-exports')->name('admin.report-exports.')->group(function (): void {
