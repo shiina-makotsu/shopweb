@@ -767,7 +767,7 @@ it('renders configurable top navigation and home information menu items separate
     preg_match_all('/>\s*商店声明\s*<\/a>/u', $html, $storeInfoMatches);
 
     expect(strpos($html, '自定义关于'))->toBeLessThan(strpos($html, '论坛入口'))
-        ->and(count($storeInfoMatches[0]))->toBe(2);
+        ->and(count($storeInfoMatches[0]))->toBe(3);
 });
 
 it('keeps store information menu managed and hides empty placeholder menus', function (): void {

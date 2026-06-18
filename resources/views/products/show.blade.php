@@ -113,13 +113,13 @@
                         <button class="rounded-sm border border-blue-700 bg-white px-4 py-2 text-sm font-medium text-blue-800 hover:bg-blue-50" type="submit">咨询此商品</button>
                     </form>
                     @auth
-                        <form method="post" action="{{ route('products.wishlist.status.toggle', $productRoute) }}">
+                        <form method="post" action="{{ route('products.wishlist.status.toggle', $productRoute) }}" data-product-preference-form>
                             @csrf
                             <button class="rounded-sm border px-4 py-2 text-sm font-medium {{ $wishlistActive ? 'border-pink-300 bg-pink-50 text-pink-800' : 'border-slate-300 bg-white text-slate-700 hover:bg-pink-50 hover:text-pink-800' }}" type="submit">
                                 {{ $wishlistActive ? '已在愿望单' : '加入愿望单' }}
                             </button>
                         </form>
-                        <form method="post" action="{{ route('products.favorite.status.toggle', $productRoute) }}">
+                        <form method="post" action="{{ route('products.favorite.status.toggle', $productRoute) }}" data-product-preference-form>
                             @csrf
                             <button class="rounded-sm border px-4 py-2 text-sm font-medium {{ $favoriteActive ? 'border-blue-300 bg-blue-50 text-blue-800' : 'border-slate-300 bg-white text-slate-700 hover:bg-blue-50 hover:text-blue-800' }}" type="submit">
                                 {{ $favoriteActive ? '已收藏' : '收藏商品' }}

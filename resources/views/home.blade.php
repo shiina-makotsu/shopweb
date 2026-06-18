@@ -100,7 +100,7 @@
         </section>
     @endif
 
-    <section class="mb-4 grid gap-3 md:grid-cols-4">
+    <section class="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-5">
         <a class="rounded-sm border border-violet-200 bg-white px-4 py-4 hover:bg-violet-50" href="{{ route('ai-image.index') }}">
             <span class="block text-base font-semibold text-violet-900">AI</span>
             <span class="mt-1 block text-sm text-slate-600">接入自定义模型接口，用提示词、参考图和尺寸参数生成图片。</span>
@@ -112,6 +112,10 @@
         <a class="rounded-sm border border-pink-200 bg-white px-4 py-4 hover:bg-pink-50" href="{{ route('support.demands') }}">
             <span class="block text-base font-semibold text-pink-900">客服工单</span>
             <span class="mt-1 block text-sm text-slate-600">提交投诉反馈、账号问题或其他需要后台处理的问题。</span>
+        </a>
+        <a class="rounded-sm border border-emerald-200 bg-white px-4 py-4 hover:bg-emerald-50" href="{{ route('forum.index') }}">
+            <span class="block text-base font-semibold text-emerald-900">论坛</span>
+            <span class="mt-1 block text-sm text-slate-600">进入讨论区查看帖子、发布内容或参与站内交流。</span>
         </a>
         <a class="rounded-sm border border-slate-200 bg-white px-4 py-4 hover:bg-blue-50" href="{{ route('friend-links.index') }}">
             <span class="block text-base font-semibold text-slate-900">友情链接</span>
