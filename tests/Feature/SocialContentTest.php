@@ -127,6 +127,54 @@ it('lets users create forum threads and replies', function (): void {
     ]);
 });
 
+it('renders forum markdown bodies after publishing', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+    $viewer = User::factory()->create(['role' => 'customer']);
+    $section = ForumSection::query()->create([
+        'name' => 'Markdown Section',
+        'slug' => 'markdown-section',
+        'is_active' => true,
+    ]);
+
+    $this->actingAs($user)
+        ->post(route('forum.threads.store', $section), [
+            'title' => 'Markdown Thread',
+            'body' => "**加粗标题**\n\n- 第一项",
+        ])
+        ->assertRedirect();
+
+    $thread = $section->threads()->firstOrFail();
+
+    $this->actingAs($user)
+        ->post(route('forum.comments.store', [$section, $thread]), [
+            'body' => '[链接](https://example.com)',
+        ])
+        ->assertRedirect();
+
+    $this->actingAs($viewer)
+        ->get(route('forum.threads.show', [$section, $thread]))
+        ->assertOk()
+        ->assertSee('<strong>加粗标题</strong>', false)
+        ->assertSee('<li>第一项</li>', false)
+        ->assertSee('<a href="https://example.com">链接</a>', false)
+        ->assertDontSee('**加粗标题**')
+        ->assertDontSee('[链接](https://example.com)');
+});
+
+it('keeps the floating cart away from forum publishing actions', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+    ForumSection::query()->create([
+        'name' => 'Forum Layout',
+        'slug' => 'forum-layout',
+        'is_active' => true,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('forum.index'))
+        ->assertOk()
+        ->assertDontSee('id="site-cart-target"', false);
+});
+
 it('lets users create typed forum threads with rich template attachments', function (): void {
     Storage::fake('public_uploads');
 

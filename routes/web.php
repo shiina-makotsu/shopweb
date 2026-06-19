@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\BackupController;
 use App\Http\Controllers\Admin\CsvExportController;
 use App\Http\Controllers\Admin\OrderQuickShippingController;
 use App\Http\Controllers\Admin\PaymentProofController;
+use App\Http\Controllers\Admin\ProductQuickUpdateController;
 use App\Http\Controllers\Admin\ReportExportController;
 use App\Http\Controllers\AfterSalesController;
 use App\Http\Controllers\AiImageController;
@@ -169,6 +170,10 @@ Route::middleware(['auth', 'admin'])->prefix('admin/payment-proofs')->name('admi
 
 Route::middleware(['auth', 'admin'])->prefix('admin/orders')->name('admin.orders.')->group(function (): void {
     Route::post('/{order}/quick-shipping', [OrderQuickShippingController::class, 'update'])->name('quick-shipping');
+});
+
+Route::middleware(['auth', 'admin'])->prefix('admin/products')->name('admin.products.')->group(function (): void {
+    Route::post('/{product}/quick-update', [ProductQuickUpdateController::class, 'update'])->name('quick-update');
 });
 
 Route::middleware(['auth', 'admin'])->prefix('admin/report-exports')->name('admin.report-exports.')->group(function (): void {

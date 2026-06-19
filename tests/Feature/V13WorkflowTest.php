@@ -374,6 +374,66 @@ it('lets admins add shipping information from the expanded order row', function 
     ]);
 });
 
+it('lets admins quick edit products and sku values from the expanded product row', function (): void {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $category = Category::query()->create([
+        'name' => 'Quick Product Category',
+        'slug' => 'quick-product-category',
+        'is_active' => true,
+    ]);
+    $product = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => 'Quick Product',
+        'slug' => 'quick-product',
+        'status' => Product::STATUS_DRAFT,
+        'fulfillment_type' => Product::FULFILLMENT_LOGISTICS,
+        'is_featured' => false,
+    ]);
+    $variant = ProductVariant::query()->create([
+        'product_id' => $product->id,
+        'sku' => 'QUICK-SKU-1',
+        'spec_name' => 'Old Spec',
+        'price_cents' => 1000,
+        'stock' => 2,
+        'is_active' => true,
+    ]);
+
+    $this->actingAs($admin)
+        ->post(route('admin.products.quick-update', $product), [
+            'title' => 'Quick Product Updated',
+            'status' => Product::STATUS_PRESALE,
+            'is_featured' => '1',
+            'variants' => [
+                $variant->id => [
+                    'id' => $variant->id,
+                    'spec_name' => 'New Spec',
+                    'price_cents' => '25.50',
+                    'stock' => 12,
+                ],
+            ],
+        ])
+        ->assertRedirect()
+        ->assertSessionHas('status', '商品已更新。');
+
+    $product->refresh();
+    $variant->refresh();
+
+    expect($product->title)->toBe('Quick Product Updated')
+        ->and($product->status)->toBe(Product::STATUS_PRESALE)
+        ->and($product->is_featured)->toBeTrue()
+        ->and($variant->spec_name)->toBe('New Spec')
+        ->and($variant->price_cents)->toBe(2550)
+        ->and($variant->stock)->toBe(12);
+
+    $this->assertDatabaseHas('admin_activity_logs', [
+        'user_id' => $admin->id,
+        'action' => 'product_quick_updated',
+        'subject_type' => Product::class,
+        'subject_id' => $product->id,
+        'description' => '后台列表快速更新商品',
+    ]);
+});
+
 it('keeps awaiting receipt orders open until the customer confirms receipt', function (): void {
     $user = User::factory()->create(['role' => 'customer']);
     $otherUser = User::factory()->create(['role' => 'customer']);

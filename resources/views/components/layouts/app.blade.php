@@ -44,6 +44,7 @@
         && in_array(rtrim($menuUrl($item), '/'), $mobileStandaloneMenuUrls, true);
     $cartCount = $cartItemCount ?? 0;
     $cartSubtotal = $cartSubtotalCents ?? 0;
+    $hideFloatingCart = request()->routeIs('forum.*');
     $appearance = $siteSettings?->appearance() ?? [
         'theme_template' => 'default',
         'primary_color' => '#2D9CDB',
@@ -486,6 +487,7 @@
     >
         <svg class="h-5 w-5" viewBox="0 0 20 20" aria-hidden="true" fill="currentColor"><path d="M3 5.75A.75.75 0 0 1 3.75 5h12.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 5.75Zm0 4A.75.75 0 0 1 3.75 9h12.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 9.75Zm.75 3.25a.75.75 0 0 0 0 1.5h12.5a.75.75 0 0 0 0-1.5H3.75Z"/></svg>
     </button>
+    @unless($hideFloatingCart)
     <button
         id="site-cart-target"
         class="fixed bottom-20 right-5 z-40 inline-flex h-12 w-12 items-center justify-center rounded-full border border-emerald-700 bg-white text-emerald-800 shadow hover:bg-emerald-50"
@@ -509,6 +511,7 @@
             <a class="inline-flex w-full justify-center rounded-sm border border-emerald-700 bg-emerald-700 px-3 py-2 font-medium text-white hover:bg-emerald-800" href="{{ $path('cart.show') }}">结算购物车</a>
         </div>
     </div>
+    @endunless
     <a href="#top" onclick="window.scrollTo({ top: 0, behavior: 'smooth' }); return false;" class="fixed bottom-5 right-5 z-40 inline-flex h-10 w-10 items-center justify-center rounded-full border border-blue-700 bg-white text-blue-800 shadow hover:bg-blue-50" aria-label="回到顶部">↑</a>
     @auth
         @if(session('show_registration_onboarding'))

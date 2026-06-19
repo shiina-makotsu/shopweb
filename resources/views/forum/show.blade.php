@@ -41,7 +41,7 @@
                     / 已编辑 {{ $thread->edited_at->format('Y-m-d H:i') }}
                 @endif
             </p>
-            <div class="mt-4 whitespace-pre-line text-sm leading-7 text-slate-700">{{ $thread->body }}</div>
+            <div class="content-body mt-4 text-sm leading-7 text-slate-700">{{ \App\Support\Markdown::render($thread->body) }}</div>
             @if($thread->is_locked)
                 <div class="mt-4 rounded-sm border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">该帖子已锁定，不能继续回复。</div>
             @endif
@@ -127,7 +127,7 @@
                             @endif
                         @endauth
                     </div>
-                    <p class="mt-2 whitespace-pre-line text-slate-700">{{ $comment->body }}</p>
+                    <div class="content-body mt-2 text-slate-700">{{ \App\Support\Markdown::render($comment->body) }}</div>
 
                     @if($comment->attachment_paths)
                         <div class="mt-3 grid gap-2 sm:grid-cols-2">
@@ -188,7 +188,7 @@
                                 @endif
                                 / {{ $reply->created_at->format('Y-m-d H:i') }}
                             </p>
-                            <p class="mt-1 whitespace-pre-line">{{ $reply->body }}</p>
+                            <div class="content-body mt-1">{{ \App\Support\Markdown::render($reply->body) }}</div>
                         </div>
                     @endforeach
                 </article>
