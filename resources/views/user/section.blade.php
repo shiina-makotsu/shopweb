@@ -715,6 +715,88 @@
                     </div>
                 </section>
             </div>
+        @elseif($section === 'wallet')
+            @php
+                $walletTransactions = collect($walletTransactions ?? []);
+            @endphp
+            <div class="space-y-5 px-4 py-5">
+                @if(session('status'))
+                    <div class="rounded-sm border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                        {{ session('status') }}
+                    </div>
+                @endif
+
+                <section class="rounded-sm border border-slate-300">
+                    <div class="grid gap-4 p-4 md:grid-cols-[1fr_2fr] md:items-center">
+                        <div>
+                            <p class="text-sm text-slate-500">当前钱包余额</p>
+                            <p class="mt-2 text-3xl font-semibold text-red-700">@money((int) $user->wallet_balance_cents)</p>
+                            <p class="mt-2 text-xs text-slate-500">下单时会优先使用钱包余额抵扣，余额不足的部分继续走付款凭证流程。</p>
+                        </div>
+                        <div class="grid gap-3 md:grid-cols-2">
+                            <form class="rounded-sm border border-slate-200 bg-slate-50 p-4" method="POST" action="{{ route('user.wallet.recharge') }}">
+                                @csrf
+                                <h2 class="text-sm font-semibold">充值钱包</h2>
+                                <label class="mt-3 block">
+                                    <span class="text-xs font-medium text-slate-600">充值金额</span>
+                                    <input class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" name="wallet_recharge_amount" value="{{ old('wallet_recharge_amount') }}" inputmode="decimal" placeholder="例如 100.00" required>
+                                    @error('wallet_recharge_amount')
+                                        <span class="mt-1 block text-xs text-red-600">{{ $message }}</span>
+                                    @enderror
+                                </label>
+                                <button class="mt-3 rounded-sm border border-blue-700 bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800" type="submit">创建充值订单</button>
+                            </form>
+
+                            <form class="rounded-sm border border-slate-200 bg-slate-50 p-4" method="POST" action="{{ route('user.wallet.redeem') }}">
+                                @csrf
+                                <h2 class="text-sm font-semibold">兑换余额</h2>
+                                <label class="mt-3 block">
+                                    <span class="text-xs font-medium text-slate-600">钱包兑换码</span>
+                                    <input class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm uppercase" name="wallet_code" value="{{ old('wallet_code') }}" placeholder="输入兑换码" required>
+                                    @error('wallet_code')
+                                        <span class="mt-1 block text-xs text-red-600">{{ $message }}</span>
+                                    @enderror
+                                </label>
+                                <button class="mt-3 rounded-sm border border-emerald-700 bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800" type="submit">兑换到钱包</button>
+                            </form>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="rounded-sm border border-slate-300">
+                    <h2 class="border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold">钱包流水</h2>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-slate-200 text-left text-sm">
+                            <thead class="bg-slate-50 text-xs uppercase text-slate-500">
+                                <tr>
+                                    <th class="px-4 py-2">时间</th>
+                                    <th class="px-4 py-2">来源</th>
+                                    <th class="px-4 py-2 text-right">金额</th>
+                                    <th class="px-4 py-2 text-right">余额</th>
+                                    <th class="px-4 py-2">备注</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100">
+                                @forelse($walletTransactions as $transaction)
+                                    <tr>
+                                        <td class="px-4 py-3 text-slate-700">{{ $transaction->created_at?->format('Y-m-d H:i') }}</td>
+                                        <td class="px-4 py-3 text-slate-700">{{ $transaction->source }}</td>
+                                        <td class="px-4 py-3 text-right font-medium {{ (int) $transaction->amount_cents >= 0 ? 'text-emerald-700' : 'text-red-700' }}">
+                                            {{ (int) $transaction->amount_cents >= 0 ? '+' : '-' }}@money(abs((int) $transaction->amount_cents))
+                                        </td>
+                                        <td class="px-4 py-3 text-right">@money((int) $transaction->balance_after_cents)</td>
+                                        <td class="px-4 py-3 text-slate-600">{{ $transaction->note ?: '-' }}</td>
+                                    </tr>
+                                @empty
+                                    <tr>
+                                        <td class="px-4 py-8 text-center text-slate-600" colspan="5">暂无钱包流水。</td>
+                                    </tr>
+                                @endforelse
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            </div>
         @elseif($section === 'chat')
             @php
                 $chatThreads = collect($chatThreads ?? []);
@@ -849,6 +931,49 @@
                         </table>
                     </div>
                 </section>
+            </div>
+        @elseif($section === 'interface')
+            @php($themeMode = old('theme_mode', $user->interface_settings['theme_mode'] ?? 'auto'))
+            <div class="space-y-5 px-4 py-5">
+                @if(session('status'))
+                    <div class="rounded-sm border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                        {{ session('status') }}
+                    </div>
+                @endif
+                <form class="rounded-sm border border-slate-300" method="POST" action="{{ route('user.interface.update') }}">
+                    @csrf
+                    @method('PATCH')
+                    <h2 class="border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold">显示模式</h2>
+                    <div class="grid gap-3 p-4 md:grid-cols-3">
+                        <label class="flex cursor-pointer gap-3 rounded-sm border border-slate-300 bg-white px-3 py-3 text-sm hover:bg-slate-50">
+                            <input class="mt-1" type="radio" name="theme_mode" value="auto" @checked($themeMode === 'auto')>
+                            <span>
+                                <span class="block font-medium">跟随系统</span>
+                                <span class="mt-1 block text-xs leading-5 text-slate-600">根据浏览器或系统的深浅色偏好自动切换。</span>
+                            </span>
+                        </label>
+                        <label class="flex cursor-pointer gap-3 rounded-sm border border-slate-300 bg-white px-3 py-3 text-sm hover:bg-slate-50">
+                            <input class="mt-1" type="radio" name="theme_mode" value="light" @checked($themeMode === 'light')>
+                            <span>
+                                <span class="block font-medium">日间模式</span>
+                                <span class="mt-1 block text-xs leading-5 text-slate-600">保持浅色页面和浅色表单。</span>
+                            </span>
+                        </label>
+                        <label class="flex cursor-pointer gap-3 rounded-sm border border-slate-300 bg-white px-3 py-3 text-sm hover:bg-slate-50">
+                            <input class="mt-1" type="radio" name="theme_mode" value="dark" @checked($themeMode === 'dark')>
+                            <span>
+                                <span class="block font-medium">夜间模式</span>
+                                <span class="mt-1 block text-xs leading-5 text-slate-600">全站降低亮度，统一卡片、表格、输入框和弹窗颜色。</span>
+                            </span>
+                        </label>
+                    </div>
+                    @error('theme_mode')
+                        <p class="px-4 pb-4 text-sm text-red-600">{{ $message }}</p>
+                    @enderror
+                    <div class="border-t border-slate-200 px-4 py-3">
+                        <button class="rounded-sm border border-blue-700 bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800" type="submit">保存界面设置</button>
+                    </div>
+                </form>
             </div>
         @else
             <div class="px-4 py-10 text-sm leading-6 text-slate-600">

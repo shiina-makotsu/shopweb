@@ -18,6 +18,8 @@ use App\Models\ProductVariant;
 use App\Models\SiteSetting;
 use App\Models\User;
 use App\Models\UserCoupon;
+use App\Models\WalletRedeemCode;
+use App\Models\WalletTransaction;
 use App\Models\Warehouse;
 use App\Models\WarehouseShippingRate;
 use App\Models\WarehouseStock;
@@ -27,6 +29,8 @@ use App\Support\Money;
 use App\Support\PageMenuPublication;
 use App\Support\Url;
 use Carbon\CarbonImmutable;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 
@@ -140,6 +144,208 @@ it('allows a customer to add a sku to cart and create an order', function (): vo
     expect($variant->fresh()->stock)->toBe($variant->stock - 2);
 });
 
+it('lets customers redeem wallet codes and recharge wallet through payment confirmation', function (): void {
+    $user = User::factory()->create(['role' => 'customer', 'wallet_balance_cents' => 0]);
+
+    $code = WalletRedeemCode::query()->create([
+        'code' => 'WALLET100',
+        'name' => 'Wallet 100',
+        'amount_cents' => 10000,
+        'usage_limit' => 2,
+        'is_active' => true,
+    ]);
+
+    $this->actingAs($user)
+        ->post(route('user.wallet.redeem'), ['wallet_code' => 'wallet100'])
+        ->assertRedirect();
+
+    expect($user->fresh()->wallet_balance_cents)->toBe(10000)
+        ->and($code->fresh()->redeemed_count)->toBe(1);
+
+    $this->assertDatabaseHas('wallet_transactions', [
+        'user_id' => $user->id,
+        'wallet_redeem_code_id' => $code->id,
+        'type' => WalletTransaction::TYPE_CREDIT,
+        'amount_cents' => 10000,
+        'source' => WalletTransaction::SOURCE_REDEEM_CODE,
+    ]);
+
+    $this->actingAs($user)
+        ->post(route('user.wallet.recharge'), ['wallet_recharge_amount' => '25.50'])
+        ->assertRedirect();
+
+    $order = Order::query()->whereBelongsTo($user)->latest('id')->firstOrFail();
+
+    expect($order->isWalletRecharge())->toBeTrue()
+        ->and($order->wallet_recharge_cents)->toBe(2550)
+        ->and($order->total_cents)->toBe(2550);
+
+    app(OrderService::class)->confirmPayment($order);
+    app(OrderService::class)->confirmPayment($order->fresh());
+
+    expect($user->fresh()->wallet_balance_cents)->toBe(12550)
+        ->and($order->fresh()->payment_status)->toBe(Order::PAYMENT_CONFIRMED)
+        ->and($order->fresh()->status)->toBe(Order::STATUS_FULFILLED)
+        ->and(WalletTransaction::query()
+            ->where('order_id', $order->id)
+            ->where('source', WalletTransaction::SOURCE_WALLET_RECHARGE)
+            ->count())->toBe(1);
+});
+
+it('uses wallet balance only when the customer selects wallet checkout', function (): void {
+    $user = User::factory()->create(['role' => 'customer', 'wallet_balance_cents' => 3000]);
+    $category = Category::query()->create(['name' => 'Wallet', 'slug' => 'wallet', 'is_active' => true]);
+    $product = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => 'Wallet product',
+        'slug' => 'wallet-product',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_IN_PERSON,
+    ]);
+    $variant = ProductVariant::query()->create([
+        'product_id' => $product->id,
+        'sku' => 'WALLET-SKU',
+        'price_cents' => 10000,
+        'stock' => 5,
+        'is_active' => true,
+    ]);
+
+    $this->post(route('cart.items.store'), [
+        'variant_id' => $variant->id,
+        'quantity' => 1,
+    ])->assertRedirect(route('cart.show'));
+
+    $this->actingAs($user)->post(route('checkout.store'), [
+        'contact_name' => 'Wallet User',
+        'contact_phone' => '13800000000',
+        'contact_email' => 'wallet@example.com',
+    ])->assertRedirect();
+
+    $order = Order::query()->whereBelongsTo($user)->latest('id')->firstOrFail();
+
+    expect($order->payment_method)->toBe(Order::PAYMENT_METHOD_QR_CODE)
+        ->and($order->wallet_payment_cents)->toBe(0)
+        ->and($order->total_cents)->toBe(10000)
+        ->and($user->fresh()->wallet_balance_cents)->toBe(3000);
+
+    $this->post(route('cart.items.store'), [
+        'variant_id' => $variant->id,
+        'quantity' => 1,
+    ])->assertRedirect(route('cart.show'));
+
+    $this->actingAs($user)->post(route('checkout.store'), [
+        'contact_name' => 'Wallet User',
+        'contact_phone' => '13800000000',
+        'contact_email' => 'wallet@example.com',
+        'payment_method' => Order::PAYMENT_METHOD_WALLET,
+    ])->assertRedirect();
+
+    $order = Order::query()->whereBelongsTo($user)->latest('id')->firstOrFail();
+
+    expect($order->payment_method)->toBe(Order::PAYMENT_METHOD_WALLET)
+        ->and($order->wallet_payment_cents)->toBe(3000)
+        ->and($order->total_cents)->toBe(7000)
+        ->and($user->fresh()->wallet_balance_cents)->toBe(0);
+
+    $this->assertDatabaseHas('wallet_transactions', [
+        'user_id' => $user->id,
+        'order_id' => $order->id,
+        'type' => WalletTransaction::TYPE_DEBIT,
+        'amount_cents' => -3000,
+        'source' => WalletTransaction::SOURCE_ORDER_PAYMENT,
+    ]);
+});
+
+it('uses wallet balance when completing a flash sale order selection', function (): void {
+    $user = User::factory()->create(['role' => 'customer', 'wallet_balance_cents' => 1990]);
+    $category = Category::query()->create(['name' => 'Wallet Flash', 'slug' => 'wallet-flash', 'is_active' => true]);
+    $product = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => 'Wallet flash product',
+        'slug' => 'wallet-flash-product',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_ONLINE,
+    ]);
+    $variant = ProductVariant::query()->create([
+        'product_id' => $product->id,
+        'sku' => 'WALLET-FLASH',
+        'price_cents' => 5000,
+        'stock' => 5,
+        'is_active' => true,
+    ]);
+    $flashSale = FlashSale::query()->create([
+        'product_id' => $product->id,
+        'product_variant_ids' => [$variant->id],
+        'name' => 'Wallet flash',
+        'sale_price_cents' => 1990,
+        'quantity_limit' => 1,
+        'starts_at' => now()->subMinute(),
+        'ends_at' => now()->addHour(),
+        'is_active' => true,
+    ]);
+
+    $this->actingAs($user)
+        ->post(route('flash-sales.reserve', $flashSale), ['quantity' => 1])
+        ->assertRedirect();
+
+    $order = Order::query()->whereBelongsTo($user)->firstOrFail();
+
+    $this->actingAs($user)
+        ->post(route('flash-sales.store', $order), [
+            'product_variant_id' => $variant->id,
+            'contact_name' => 'Flash Wallet User',
+            'contact_phone' => '13800000000',
+            'contact_email' => 'flash-wallet@example.com',
+            'payment_method' => Order::PAYMENT_METHOD_WALLET,
+        ])
+        ->assertRedirect(route('orders.show', $order));
+
+    $order->refresh();
+
+    expect($order->wallet_payment_cents)->toBe(1990)
+        ->and($order->total_cents)->toBe(0)
+        ->and($order->payment_status)->toBe(Order::PAYMENT_CONFIRMED)
+        ->and($user->fresh()->wallet_balance_cents)->toBe(0);
+});
+
+it('lets customers switch pending orders to fallback or wallet payment methods', function (): void {
+    $user = User::factory()->create(['role' => 'customer', 'wallet_balance_cents' => 5000]);
+    $order = Order::query()->create([
+        'user_id' => $user->id,
+        'order_number' => 'PAY-SWITCH-1',
+        'status' => Order::STATUS_PENDING_PAYMENT,
+        'payment_status' => Order::PAYMENT_PENDING,
+        'payment_method' => Order::PAYMENT_METHOD_QR_CODE,
+        'subtotal_cents' => 5000,
+        'total_cents' => 5000,
+        'contact_name' => 'Switch User',
+        'contact_phone' => '13800000000',
+    ]);
+
+    $this->actingAs($user)
+        ->post(route('orders.payment-method', $order), [
+            'payment_method' => Order::PAYMENT_METHOD_FALLBACK_QR,
+        ])
+        ->assertRedirect();
+
+    expect($order->fresh()->payment_method)->toBe(Order::PAYMENT_METHOD_FALLBACK_QR);
+
+    $this->actingAs($user)
+        ->post(route('orders.payment-method', $order), [
+            'payment_method' => Order::PAYMENT_METHOD_WALLET,
+        ])
+        ->assertRedirect()
+        ->assertSessionHas('status', '钱包余额已完成支付，订单已确认付款。');
+
+    $order->refresh();
+
+    expect($order->payment_method)->toBe(Order::PAYMENT_METHOD_WALLET)
+        ->and($order->wallet_payment_cents)->toBe(5000)
+        ->and($order->total_cents)->toBe(0)
+        ->and($order->payment_status)->toBe(Order::PAYMENT_CONFIRMED)
+        ->and($user->fresh()->wallet_balance_cents)->toBe(0);
+});
+
 it('requires login before voting', function (): void {
     $this->seed();
 
@@ -185,6 +391,8 @@ it('renders the tag index and exposes it under the home navigation menu', functi
 });
 
 it('registers customers with a simple human verification challenge', function (): void {
+    Storage::fake('public_uploads');
+
     $this->withSession(['register_captcha_answer' => 7])
         ->post(route('register'), [
             'public_id' => 'new_user',
@@ -214,9 +422,11 @@ it('registers customers with a simple human verification challenge', function ()
             'email' => 'new-user@example.com',
             'password' => 'password',
             'password_confirmation' => 'password',
+            'avatar' => UploadedFile::fake()->image('register-avatar.png', 120, 120),
             'captcha_answer' => 7,
         ])
-        ->assertRedirect(route('home'));
+        ->assertRedirect(route('home'))
+        ->assertSessionHas('show_registration_onboarding', true);
 
     $this->assertDatabaseHas('users', [
         'public_id' => 'new_user',
@@ -224,6 +434,54 @@ it('registers customers with a simple human verification challenge', function ()
         'role' => 'customer',
         'account_type' => 'regular',
     ]);
+
+    $registered = User::query()->where('email', 'new-user@example.com')->firstOrFail();
+    expect($registered->avatar_path)->not->toBeNull();
+    Storage::disk('public_uploads')->assertExists($registered->avatar_path);
+
+    $this->actingAs($registered)
+        ->withSession(['show_registration_onboarding' => true])
+        ->get(route('home'))
+        ->assertOk()
+        ->assertSee('data-registration-onboarding', false)
+        ->assertSee(route('user.addresses.create', absolute: false), false)
+        ->assertSee(route('user.section', 'wallet', absolute: false), false);
+});
+
+it('lets users switch storefront theme mode', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+
+    $this->actingAs($user)
+        ->patch(route('user.interface.update'), ['theme_mode' => 'dark'])
+        ->assertRedirect();
+
+    expect($user->fresh()->interface_settings['theme_mode'] ?? null)->toBe('dark');
+
+    $this->actingAs($user)
+        ->get(route('home'))
+        ->assertOk()
+        ->assertSee('shop-mode-dark', false);
+});
+
+it('repairs mojibake display text without changing valid utf8 text', function (): void {
+    expect(\App\Support\Text::display('鐢ㄦ埛'))->toBe('用户')
+        ->and(\App\Support\Text::display('枫桦林'))->toBe('枫桦林')
+        ->and(\App\Support\Text::display('ShopWeb'))->toBe('ShopWeb');
+});
+
+it('renders the user center with clean utf8 labels', function (): void {
+    $user = User::factory()->create(['role' => 'customer', 'wallet_balance_cents' => 1234]);
+
+    $response = $this->actingAs($user)->get(route('user.center'));
+
+    $response
+        ->assertOk()
+        ->assertSee('用户中心')
+        ->assertSee('钱包余额')
+        ->assertSee('浏览记录')
+        ->assertDontSee('鐢', false)
+        ->assertDontSee('閽', false)
+        ->assertDontSee('娆', false);
 });
 
 it('only allows voting for concept products', function (): void {
@@ -1640,6 +1898,53 @@ it('lets users claim coupons and apply one coupon per cart sku', function (): vo
         'coupon_code' => 'WALLETB',
         'discount_cents' => 500,
     ]);
+});
+
+it('cleans stale product links from global coupons and tracks coupon holders', function (): void {
+    $this->seed();
+
+    $user = User::factory()->create(['role' => 'customer']);
+    $category = Category::query()->firstOrFail();
+    $product = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => 'Legacy Coupon Product',
+        'slug' => 'legacy-coupon-product',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_ONLINE,
+    ]);
+    $coupon = Coupon::query()->create([
+        'code' => 'GLOBALSTALE',
+        'name' => 'Global With Stale Product',
+        'type' => Coupon::TYPE_FIXED,
+        'value' => 1000,
+        'scope' => Coupon::SCOPE_GLOBAL,
+        'product_id' => $product->id,
+        'is_active' => true,
+    ]);
+    $coupon->products()->sync([$product->id]);
+
+    UserCoupon::query()->create([
+        'user_id' => $user->id,
+        'coupon_id' => $coupon->id,
+        'source' => UserCoupon::SOURCE_CLAIMED,
+        'claimed_at' => now(),
+    ]);
+
+    $migration = include database_path('migrations/2026_06_18_000003_cleanup_global_coupon_product_links.php');
+    $migration->up();
+
+    $coupon->refresh();
+
+    expect($coupon->product_id)->toBeNull()
+        ->and($coupon->products()->count())->toBe(0)
+        ->and($coupon->userCoupons()->count())->toBe(1);
+
+    $this->assertDatabaseMissing('coupon_product', [
+        'coupon_id' => $coupon->id,
+        'product_id' => $product->id,
+    ]);
+
+    expect(DB::table('user_coupons')->where('coupon_id', $coupon->id)->count())->toBe(1);
 });
 
 it('does not show coupon controls during flash sale checkout', function (): void {

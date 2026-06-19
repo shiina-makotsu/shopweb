@@ -119,6 +119,37 @@
                     </div>
                 </section>
 
+                <section class="rounded-sm border border-slate-300">
+                    <h2 class="border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold">支付方式</h2>
+                    <div class="grid gap-3 p-4 md:grid-cols-3">
+                        @php($selectedPaymentMethod = old('payment_method', \App\Models\Order::PAYMENT_METHOD_QR_CODE))
+                        <label class="flex cursor-pointer gap-3 rounded-sm border border-slate-300 bg-white px-3 py-3 text-sm hover:bg-slate-50">
+                            <input class="mt-1" type="radio" name="payment_method" value="{{ \App\Models\Order::PAYMENT_METHOD_QR_CODE }}" @checked($selectedPaymentMethod === \App\Models\Order::PAYMENT_METHOD_QR_CODE)>
+                            <span>
+                                <span class="block font-medium">二维码支付</span>
+                                <span class="mt-1 block text-xs leading-5 text-slate-600">提交订单后扫码付款，再上传付款凭证。</span>
+                            </span>
+                        </label>
+                        <label class="flex cursor-pointer gap-3 rounded-sm border border-slate-300 bg-white px-3 py-3 text-sm hover:bg-slate-50">
+                            <input class="mt-1" type="radio" name="payment_method" value="{{ \App\Models\Order::PAYMENT_METHOD_RED_PACKET }}" @checked($selectedPaymentMethod === \App\Models\Order::PAYMENT_METHOD_RED_PACKET)>
+                            <span>
+                                <span class="block font-medium">口令红包支付</span>
+                                <span class="mt-1 block text-xs leading-5 text-slate-600">提交口令红包内容，由后台人工确认收款。</span>
+                            </span>
+                        </label>
+                        <label class="flex cursor-pointer gap-3 rounded-sm border border-slate-300 bg-white px-3 py-3 text-sm hover:bg-slate-50">
+                            <input class="mt-1" type="radio" name="payment_method" value="{{ \App\Models\Order::PAYMENT_METHOD_WALLET }}" @checked($selectedPaymentMethod === \App\Models\Order::PAYMENT_METHOD_WALLET)>
+                            <span>
+                                <span class="block font-medium">钱包余额支付</span>
+                                <span class="mt-1 block text-xs leading-5 text-slate-600">当前余额：@money((int) auth()->user()->wallet_balance_cents)。余额不足时仍需补齐尾款。</span>
+                            </span>
+                        </label>
+                    </div>
+                    @error('payment_method')
+                        <p class="px-4 pb-4 text-sm text-red-600">{{ $message }}</p>
+                    @enderror
+                </section>
+
                 <button class="rounded-sm border border-emerald-700 bg-emerald-700 px-5 py-2 text-sm font-medium text-white hover:bg-emerald-800" type="submit">提交订单</button>
             </form>
 

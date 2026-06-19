@@ -33,6 +33,7 @@ class EditCoupon extends EditRecord
         $record = $this->record;
 
         if ($record->scope !== Coupon::SCOPE_PRODUCT) {
+            $record->products()->detach();
             $record->forceFill(['product_id' => null])->saveQuietly();
 
             return;

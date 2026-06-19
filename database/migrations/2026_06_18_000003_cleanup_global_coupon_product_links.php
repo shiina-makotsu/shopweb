@@ -1,34 +1,13 @@
 <?php
 
-namespace App\Filament\Resources\CouponResource\Pages;
-
-use App\Filament\Resources\CouponResource;
 use App\Models\Coupon;
+use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-use Filament\Actions\CreateAction;
-use Filament\Resources\Pages\ListRecords;
 
-class ListCoupons extends ListRecords
+return new class extends Migration
 {
-    protected static string $resource = CouponResource::class;
-
-    public function mount(): void
-    {
-        parent::mount();
-
-        $this->cleanupGlobalCouponProductLinks();
-    }
-
-    protected function getHeaderActions(): array
-    {
-        return [
-            CouponResource::issueCouponHeaderAction(),
-            CreateAction::make(),
-        ];
-    }
-
-    private function cleanupGlobalCouponProductLinks(): void
+    public function up(): void
     {
         if (! Schema::hasTable('coupons')) {
             return;
@@ -51,4 +30,9 @@ class ListCoupons extends ListRecords
                 ->delete();
         }
     }
-}
+
+    public function down(): void
+    {
+        // Data cleanup only; there is no reliable way to restore stale product links.
+    }
+};

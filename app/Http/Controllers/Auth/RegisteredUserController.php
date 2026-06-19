@@ -34,6 +34,7 @@ class RegisteredUserController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'confirmed', Password::defaults()],
+            'avatar' => ['nullable', 'image', 'max:5120'],
             'captcha_answer' => ['required', 'integer'],
         ]);
 
@@ -49,9 +50,13 @@ class RegisteredUserController extends Controller
             'email' => $data['email'],
             'password' => Hash::make($data['password']),
             'role' => 'customer',
+            'avatar_path' => $request->hasFile('avatar')
+                ? $request->file('avatar')->store('avatars', 'public_uploads')
+                : null,
         ]);
 
         $request->session()->forget('register_captcha_answer');
+        $request->session()->flash('show_registration_onboarding', true);
         event(new Registered($user));
         Auth::login($user);
 

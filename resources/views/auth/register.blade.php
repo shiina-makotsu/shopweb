@@ -3,7 +3,7 @@
         <div class="border-b border-slate-200 bg-slate-100 px-5 py-3">
             <h1 class="text-lg font-semibold">注册账号</h1>
         </div>
-        <form method="post" action="{{ route('register') }}" class="space-y-4 px-5 py-5">
+        <form method="post" action="{{ route('register') }}" enctype="multipart/form-data" class="space-y-4 px-5 py-5">
             @csrf
             <label class="block">
                 <span class="text-sm font-medium">用户 ID</span>
@@ -17,6 +17,11 @@
             <label class="block">
                 <span class="text-sm font-medium">注册邮箱</span>
                 <input class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" type="email" name="email" value="{{ old('email') }}" required>
+            </label>
+            <label class="block">
+                <span class="text-sm font-medium">头像（可选）</span>
+                <input class="mt-1 block w-full text-sm text-slate-700 file:mr-3 file:rounded-sm file:border-0 file:bg-blue-700 file:px-3 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-blue-800" type="file" name="avatar" accept="image/jpeg,image/png,image/gif,image/webp">
+                <span class="mt-1 block text-xs text-slate-500">可以跳过，注册后仍可在个人资料中更换头像。</span>
             </label>
             <label class="block">
                 <span class="text-sm font-medium">密码</span>

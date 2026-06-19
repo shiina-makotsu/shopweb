@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\FlashSale;
 use App\Models\Order;
 use App\Services\FlashSaleService;
+use App\Services\OrderService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -45,7 +46,7 @@ class FlashSaleCheckoutController extends Controller
         ]);
     }
 
-    public function store(Request $request, Order $order, FlashSaleService $service): RedirectResponse
+    public function store(Request $request, Order $order, FlashSaleService $service, OrderService $orders): RedirectResponse
     {
         abort_unless($order->user_id === $request->user()->id, 403);
         $order->load('items.flashSale.product');
@@ -61,10 +62,23 @@ class FlashSaleCheckoutController extends Controller
             'contact_email' => ['nullable', 'email', 'max:255'],
             'shipping_address' => [$requiresShipping ? 'required' : 'nullable', 'string', 'max:500'],
             'customer_note' => ['nullable', 'string', 'max:1000'],
+            'payment_method' => ['nullable', 'string', 'in:'.implode(',', [
+                Order::PAYMENT_METHOD_QR_CODE,
+                Order::PAYMENT_METHOD_RED_PACKET,
+                Order::PAYMENT_METHOD_WALLET,
+            ])],
         ]);
+
+        $data['payment_method'] ??= Order::PAYMENT_METHOD_QR_CODE;
 
         $order = $service->completeOrderSelection($order, $data);
 
-        return redirect()->route('orders.show', $order)->with('status', '秒杀订单已创建，请按页面说明付款并上传凭证。');
+        if ((int) $order->total_cents === 0 && $order->payment_status !== Order::PAYMENT_CONFIRMED) {
+            $orders->confirmPayment($order, $request->user());
+            $order = $order->fresh() ?? $order;
+        }
+
+        return redirect()->route('orders.show', $order)
+            ->with('status', '秒杀订单已创建，请按页面说明付款并上传凭证。');
     }
 }

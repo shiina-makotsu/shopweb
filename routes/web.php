@@ -109,7 +109,10 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/flash-sales/checkout/{order}', [FlashSaleCheckoutController::class, 'store'])->name('flash-sales.store');
     Route::get('/user', [UserCenterController::class, 'show'])->name('user.center');
     Route::patch('/user/profile', [UserCenterController::class, 'updateProfile'])->name('user.profile.update');
+    Route::patch('/user/interface', [UserCenterController::class, 'updateInterface'])->name('user.interface.update');
     Route::post('/user/coupons', [UserCenterController::class, 'storeCoupon'])->name('user.coupons.store');
+    Route::post('/user/wallet/redeem', [UserCenterController::class, 'redeemWalletCode'])->name('user.wallet.redeem');
+    Route::post('/user/wallet/recharge', [UserCenterController::class, 'rechargeWallet'])->name('user.wallet.recharge');
     Route::get('/user/addresses/create', [UserCenterController::class, 'createAddress'])->name('user.addresses.create');
     Route::get('/user/addresses/{address}/edit', [UserCenterController::class, 'editAddress'])->name('user.addresses.edit');
     Route::post('/user/addresses', [UserCenterController::class, 'storeAddress'])->name('user.addresses.store');
@@ -124,6 +127,7 @@ Route::middleware('auth')->group(function (): void {
     Route::get('/orders/{order}/after-sales', [AfterSalesController::class, 'create'])->name('orders.after-sales');
     Route::post('/orders/{order}/after-sales', [AfterSalesController::class, 'store'])->name('orders.after-sales.store');
     Route::post('/orders/{order}/contact-support', [AfterSalesController::class, 'contactSupport'])->name('orders.contact-support');
+    Route::post('/orders/{order}/payment-method', [OrderController::class, 'switchPaymentMethod'])->name('orders.payment-method');
     Route::post('/orders/{order}/payment-proof', [OrderController::class, 'uploadProof'])->name('orders.payment-proof');
     Route::post('/orders/{order}/confirm-receipt', [OrderController::class, 'confirmReceipt'])->name('orders.confirm-receipt');
     Route::post('/orders/{order}/digital-delivery/copied', [OrderController::class, 'markDigitalCopied'])->name('orders.digital-delivery.copied');

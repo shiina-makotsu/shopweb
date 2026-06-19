@@ -214,6 +214,8 @@ class ProductResource extends Resource
                 Repeater::make('media')->label('图片 / 视频')
                     ->addActionLabel('添加图片 / 视频')
                     ->relationship()
+                    ->mutateRelationshipDataBeforeCreateUsing(fn (array $data): ?array => filled($data['path'] ?? null) ? $data : null)
+                    ->mutateRelationshipDataBeforeSaveUsing(fn (array $data): ?array => filled($data['path'] ?? null) ? $data : null)
                     ->schema([
                         Select::make('type')->label('类型')->options([
                             ProductMedia::TYPE_CONCEPT => '概念图',
@@ -229,8 +231,7 @@ class ProductResource extends Resource
                             ->helperText('点击“添加图片 / 视频”新增一行；可直接粘贴外部 URL、/uploads/... 路径或 public/uploads 下的相对路径，也可在旁边从资源库选择或点击 + 上传。')
                             ->live(debounce: 500)
                             ->maxLength(2048)
-                            ->dehydrateStateUsing(fn (?string $state): ?string => blank($state) ? null : trim($state))
-                            ->required(),
+                            ->dehydrateStateUsing(fn (?string $state): ?string => blank($state) ? null : trim($state)),
                         static::mediaAssetPicker('path'),
                         Placeholder::make('media_preview')
                             ->label('预览')

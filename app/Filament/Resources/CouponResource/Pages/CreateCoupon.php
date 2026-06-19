@@ -21,6 +21,7 @@ class CreateCoupon extends CreateRecord
         $record = $this->record;
 
         if ($record->scope !== Coupon::SCOPE_PRODUCT) {
+            $record->products()->detach();
             $record->forceFill(['product_id' => null])->saveQuietly();
 
             return;

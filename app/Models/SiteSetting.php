@@ -52,6 +52,7 @@ class SiteSetting extends Model
         'payment_gateway_config',
         'payment_gateway_notes',
         'payment_fallback_config',
+        'wallet_recharge_success_message',
         'show_order_numbers_to_users',
         'show_tracking_numbers_to_users',
         'default_locale_mode',

@@ -35,7 +35,7 @@ class OrderService
             throw ValidationException::withMessages(['cart' => '购物车为空。']);
         }
 
-        return DB::transaction(function () use ($user, $data, $cartItems): Order {
+        $order = DB::transaction(function () use ($user, $data, $cartItems): Order {
             $subtotalCents = (int) $cartItems->sum('line_total_cents');
             $coupon = $this->coupons->resolve($data['coupon_code'] ?? null, $user, $subtotalCents, $cartItems);
             $couponAllocations = $coupon
@@ -55,9 +55,13 @@ class OrderService
                 'order_number' => $this->nextOrderNumber(),
                 'status' => Order::STATUS_PENDING_PAYMENT,
                 'payment_status' => Order::PAYMENT_PENDING,
+                'payment_method' => $data['payment_method'] ?? Order::PAYMENT_METHOD_QR_CODE,
                 'subtotal_cents' => $subtotalCents,
                 'discount_cents' => $discountCents,
                 'shipping_fee_cents' => $shippingFeeCents,
+                'wallet_payment_cents' => 0,
+                'wallet_recharge_cents' => 0,
+                'is_wallet_recharge' => false,
                 'shipment_plan' => $shippingQuote['shipments'],
                 'shipment_notice' => $shippingQuote['notice'],
                 'total_cents' => $totalCents,
@@ -141,48 +145,80 @@ class OrderService
                 ]);
             }
 
+            if (($data['payment_method'] ?? Order::PAYMENT_METHOD_QR_CODE) === Order::PAYMENT_METHOD_WALLET) {
+                $walletPayment = app(WalletService::class)->applyAvailableBalanceToOrder($user, $order, $totalCents, $user);
+
+                if ($walletPayment) {
+                    $walletPaymentCents = abs((int) $walletPayment->amount_cents);
+                    $order->forceFill([
+                        'wallet_payment_cents' => $walletPaymentCents,
+                        'total_cents' => max(0, $totalCents - $walletPaymentCents),
+                    ])->save();
+                }
+            }
+
             $this->cart->clear();
 
             return $order->load('items');
         });
+
+        if ((int) $order->total_cents === 0 && $order->payment_status !== Order::PAYMENT_CONFIRMED) {
+            $this->confirmPayment($order, $user);
+            $order = $order->fresh('items') ?? $order;
+        }
+
+        return $order;
     }
 
     public function markPaymentSubmitted(Order $order, ?string $path, ?string $textProof = null): void
     {
         $textProof = trim((string) $textProof);
-        $autoResult = $path ? $this->autoCheckPaymentProof($order, $path) : Order::AUTO_CHECK_PENDING;
 
-        $order->update([
-            'payment_proof_path' => $path,
-            'payment_text_proof' => $textProof !== '' ? $textProof : null,
-            'payment_status' => Order::PAYMENT_SUBMITTED,
-            'payment_submitted_at' => now(),
-            'payment_auto_checked_at' => now(),
-            'payment_auto_check_status' => $autoResult,
-        ]);
+        DB::transaction(function () use ($order, $path, $textProof): void {
+            $order = Order::query()->whereKey($order->id)->lockForUpdate()->firstOrFail();
 
-        PaymentVerificationLog::query()->create([
-            'order_id' => $order->id,
-            'user_id' => $order->user_id,
-            'payment_proof_path' => $path,
-            'expected_order_number' => $order->order_number,
-            'detected_order_number' => $autoResult === Order::AUTO_CHECK_PASSED ? $order->order_number : null,
-            'expected_amount_cents' => (int) $order->total_cents,
-            'auto_result' => $autoResult,
-            'metadata' => [
-                'payment_status' => Order::PAYMENT_SUBMITTED,
-                'auto_checked_at' => now()->toDateTimeString(),
-                'checker' => $path ? 'local_v1_placeholder' : 'manual_text_proof',
+            if ($order->payment_status === Order::PAYMENT_CONFIRMED) {
+                return;
+            }
+
+            if ($order->payment_status === Order::PAYMENT_SUBMITTED && ($order->payment_proof_path || $order->payment_text_proof)) {
+                return;
+            }
+
+            $autoResult = $path ? $this->autoCheckPaymentProof($order, $path) : Order::AUTO_CHECK_PENDING;
+
+            $order->update([
+                'payment_proof_path' => $path,
                 'payment_text_proof' => $textProof !== '' ? $textProof : null,
-            ],
-        ]);
+                'payment_status' => Order::PAYMENT_SUBMITTED,
+                'payment_submitted_at' => now(),
+                'payment_auto_checked_at' => now(),
+                'payment_auto_check_status' => $autoResult,
+            ]);
 
-        $this->activity->log('payment_proof_submitted', $order, $order->order_number, [
-            'path' => $path,
-            'payment_text_proof' => $textProof !== '' ? $textProof : null,
-            'payment_status' => Order::PAYMENT_SUBMITTED,
-            'payment_auto_check_status' => $order->payment_auto_check_status,
-        ], $order->user);
+            PaymentVerificationLog::query()->create([
+                'order_id' => $order->id,
+                'user_id' => $order->user_id,
+                'payment_proof_path' => $path,
+                'expected_order_number' => $order->order_number,
+                'detected_order_number' => $autoResult === Order::AUTO_CHECK_PASSED ? $order->order_number : null,
+                'expected_amount_cents' => (int) $order->total_cents,
+                'auto_result' => $autoResult,
+                'metadata' => [
+                    'payment_status' => Order::PAYMENT_SUBMITTED,
+                    'auto_checked_at' => now()->toDateTimeString(),
+                    'checker' => $path ? 'local_v1_placeholder' : 'manual_text_proof',
+                    'payment_text_proof' => $textProof !== '' ? $textProof : null,
+                ],
+            ]);
+
+            $this->activity->log('payment_proof_submitted', $order, $order->order_number, [
+                'path' => $path,
+                'payment_text_proof' => $textProof !== '' ? $textProof : null,
+                'payment_status' => Order::PAYMENT_SUBMITTED,
+                'payment_auto_check_status' => $order->payment_auto_check_status,
+            ], $order->user);
+        });
     }
 
     public function confirmPayment(Order $order, ?User $actor = null): void
@@ -190,6 +226,31 @@ class OrderService
         DB::transaction(function () use ($order, $actor): void {
             $order = Order::query()->whereKey($order->id)->lockForUpdate()->firstOrFail();
             $order->loadMissing('items.product');
+
+            if ($order->payment_status === Order::PAYMENT_CONFIRMED && $order->paid_at) {
+                return;
+            }
+
+            if ($order->isWalletRecharge()) {
+                app(WalletService::class)->creditForRechargeOrder($order, $actor);
+
+                $order->update([
+                    'status' => Order::STATUS_FULFILLED,
+                    'payment_status' => Order::PAYMENT_CONFIRMED,
+                    'paid_at' => $order->paid_at ?? now(),
+                    'fulfilled_at' => $order->fulfilled_at ?? now(),
+                ]);
+
+                $this->activity->log('order_payment_confirmed', $order, $order->order_number, [
+                    'status' => Order::STATUS_FULFILLED,
+                    'payment_status' => Order::PAYMENT_CONFIRMED,
+                    'wallet_recharge_cents' => (int) $order->wallet_recharge_cents,
+                ], $actor);
+
+                $this->markLatestPaymentVerification($order, PaymentVerificationLog::MANUAL_CONFIRMED, $actor);
+
+                return;
+            }
 
             if (! $order->stock_deducted_at) {
                 $this->deductStockForConfirmedOrder($order);
@@ -407,20 +468,24 @@ class OrderService
 
     public function rejectPayment(Order $order, ?string $note = null, ?User $actor = null): void
     {
-        $order->update([
-            'status' => Order::STATUS_PENDING_PAYMENT,
-            'payment_status' => Order::PAYMENT_PENDING,
-            'payment_auto_check_status' => Order::AUTO_CHECK_FAILED,
-            'admin_note' => $note ?: $order->admin_note,
-        ]);
+        DB::transaction(function () use ($order, $note, $actor): void {
+            $order = Order::query()->whereKey($order->id)->lockForUpdate()->firstOrFail();
 
-        $this->activity->log('order_payment_rejected', $order, $order->order_number, [
-            'payment_status' => Order::PAYMENT_PENDING,
-            'payment_auto_check_status' => Order::AUTO_CHECK_FAILED,
-            'note' => $note,
-        ], $actor);
+            $order->forceFill([
+                'status' => Order::STATUS_PENDING_PAYMENT,
+                'payment_status' => Order::PAYMENT_PENDING,
+                'payment_auto_check_status' => Order::AUTO_CHECK_FAILED,
+                'admin_note' => $note ?: $order->admin_note,
+            ])->save();
 
-        $this->markLatestPaymentVerification($order, PaymentVerificationLog::MANUAL_REJECTED, $actor, $note);
+            $this->activity->log('order_payment_rejected', $order, $order->order_number, [
+                'payment_status' => Order::PAYMENT_PENDING,
+                'payment_auto_check_status' => Order::AUTO_CHECK_FAILED,
+                'note' => $note,
+            ], $actor);
+
+            $this->markLatestPaymentVerification($order, PaymentVerificationLog::MANUAL_REJECTED, $actor, $note);
+        });
     }
 
     public function fulfill(Order $order, ?User $actor = null, ?string $reason = null): void

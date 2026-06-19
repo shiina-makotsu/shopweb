@@ -42,6 +42,7 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
         'can_view_order_numbers',
         'can_view_tracking_numbers',
         'ai_quota_k',
+        'wallet_balance_cents',
         'ai_endpoint',
         'ai_api_key',
         'ai_image_endpoint',
@@ -67,6 +68,7 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
             'can_view_tracking_numbers' => 'boolean',
             'birthday' => 'date',
             'has_diagnosis_certificate' => 'boolean',
+            'wallet_balance_cents' => 'integer',
         ];
     }
 
@@ -163,6 +165,11 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
     public function coupons(): HasMany
     {
         return $this->hasMany(UserCoupon::class);
+    }
+
+    public function walletTransactions(): HasMany
+    {
+        return $this->hasMany(WalletTransaction::class);
     }
 
     public function productComments(): HasMany

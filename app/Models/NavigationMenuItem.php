@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Text;
 use App\Support\Url;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -97,7 +98,7 @@ class NavigationMenuItem extends Model
     {
         $depth = $this->treeDepth();
 
-        return ($depth > 0 ? str_repeat('— ', $depth).' ' : '').$this->label;
+        return ($depth > 0 ? str_repeat('--', $depth).' ' : '').Text::display($this->label);
     }
 
     public function typeLabel(): string

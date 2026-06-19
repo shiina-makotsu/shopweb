@@ -5,12 +5,15 @@ namespace App\Http\Controllers;
 use App\Models\Order;
 use App\Models\SiteSetting;
 use App\Services\OrderService;
+use App\Services\WalletService;
 use App\Support\OrderPrivacy;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
-use Symfony\Component\HttpFoundation\StreamedResponse;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class OrderController extends Controller
 {
@@ -54,7 +57,23 @@ class OrderController extends Controller
             'payment_text_proof' => ['nullable', 'string', 'max:1000'],
         ]);
 
-        abort_if(! $request->hasFile('payment_proof') && blank($data['payment_text_proof'] ?? null), 422);
+        if (! $request->hasFile('payment_proof') && blank($data['payment_text_proof'] ?? null)) {
+            throw ValidationException::withMessages([
+                'payment_proof' => '请上传付款截图，或填写口令红包/文字付款凭证。',
+            ]);
+        }
+
+        $order = $order->fresh();
+
+        if ($order->payment_status === Order::PAYMENT_CONFIRMED) {
+            return back()->with('status', '订单已确认付款，无需重复提交。');
+        }
+
+        if ($order->payment_status === Order::PAYMENT_SUBMITTED && ($order->payment_proof_path || $order->payment_text_proof)) {
+            return back()
+                ->with('payment_success', true)
+                ->with('status', '付款信息已提交，请勿重复操作。');
+        }
 
         if ($request->hasFile('payment_proof') && $order->payment_proof_path) {
             Storage::disk('payment_proofs')->delete($order->payment_proof_path);
@@ -67,6 +86,64 @@ class OrderController extends Controller
         $orders->markPaymentSubmitted($order, $path, $data['payment_text_proof'] ?? null);
 
         return back()->with('payment_success', true);
+    }
+
+    public function switchPaymentMethod(Request $request, Order $order, OrderService $orders, WalletService $wallet): RedirectResponse
+    {
+        $this->authorizeVisibleOrder($request, $order);
+
+        abort_unless($order->status === Order::STATUS_PENDING_PAYMENT && $order->payment_status !== Order::PAYMENT_CONFIRMED, 404);
+
+        $data = $request->validate([
+            'payment_method' => ['required', 'string', 'in:'.implode(',', [
+                Order::PAYMENT_METHOD_QR_CODE,
+                Order::PAYMENT_METHOD_FALLBACK_QR,
+                Order::PAYMENT_METHOD_RED_PACKET,
+                Order::PAYMENT_METHOD_WALLET,
+            ])],
+        ]);
+
+        return DB::transaction(function () use ($request, $order, $orders, $wallet, $data): RedirectResponse {
+            /** @var Order $order */
+            $order = Order::query()->whereKey($order->id)->lockForUpdate()->firstOrFail();
+
+            if ($order->payment_status === Order::PAYMENT_CONFIRMED) {
+                return back()->with('status', '订单已确认付款，无需重复切换支付方式。');
+            }
+
+            if ($order->payment_status === Order::PAYMENT_SUBMITTED) {
+                return back()->with('status', '付款信息已提交，不能再切换支付方式。');
+            }
+
+            if ($data['payment_method'] === Order::PAYMENT_METHOD_WALLET && (int) $order->total_cents > 0) {
+                $walletPayment = $wallet->applyAvailableBalanceToOrder($request->user(), $order, (int) $order->total_cents, $request->user());
+
+                if (! $walletPayment) {
+                    throw ValidationException::withMessages(['payment_method' => '钱包余额不足，无法使用钱包支付。']);
+                }
+
+                $walletPaymentCents = abs((int) $walletPayment->amount_cents);
+                $order->forceFill([
+                    'payment_method' => Order::PAYMENT_METHOD_WALLET,
+                    'wallet_payment_cents' => (int) $order->wallet_payment_cents + $walletPaymentCents,
+                    'total_cents' => max(0, (int) $order->total_cents - $walletPaymentCents),
+                ])->save();
+
+                if ((int) $order->fresh()->total_cents === 0) {
+                    $orders->confirmPayment($order->fresh(), $request->user());
+
+                    return back()->with('status', '钱包余额已完成支付，订单已确认付款。');
+                }
+
+                return back()->with('status', '已使用钱包余额抵扣，剩余金额请继续选择其他方式支付。');
+            }
+
+            $order->forceFill([
+                'payment_method' => $data['payment_method'],
+            ])->save();
+
+            return back()->with('status', '支付方式已切换为 '.$order->fresh()->paymentMethodLabel().'。');
+        });
     }
 
     public function cancel(Request $request, Order $order, OrderService $orders): RedirectResponse

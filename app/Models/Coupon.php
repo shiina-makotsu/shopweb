@@ -58,6 +58,11 @@ class Coupon extends Model
         return $this->belongsToMany(Product::class)->withTimestamps();
     }
 
+    public function userCoupons(): HasMany
+    {
+        return $this->hasMany(UserCoupon::class);
+    }
+
     public function scopeActive(Builder $query): Builder
     {
         return $query->where('is_active', true);

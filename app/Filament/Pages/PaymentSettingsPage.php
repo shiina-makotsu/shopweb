@@ -45,6 +45,7 @@ class PaymentSettingsPage extends Page implements HasSchemas
             'payment_gateway_config',
             'payment_gateway_notes',
             'payment_fallback_config',
+            'wallet_recharge_success_message',
         ]));
     }
 
@@ -116,6 +117,15 @@ class PaymentSettingsPage extends Page implements HasSchemas
                             ->columnSpanFull(),
                         Toggle::make('payment_fallback_config.support_enabled')->label('显示联系客服兜底')->default(true),
                     ])->columns(2)->columnSpanFull(),
+                Section::make('钱包充值')
+                    ->schema([
+                        Textarea::make('wallet_recharge_success_message')
+                            ->label('充值成功弹窗文案')
+                            ->rows(4)
+                            ->maxLength(2000)
+                            ->helperText('后台确认充值订单收款后，用户打开该充值订单时会看到这段提示。')
+                            ->columnSpanFull(),
+                    ])->columnSpanFull(),
             ]);
     }
 

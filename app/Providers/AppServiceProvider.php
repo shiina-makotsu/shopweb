@@ -2,8 +2,8 @@
 
 namespace App\Providers;
 
-use App\Models\Category;
 use App\Models\Announcement;
+use App\Models\Category;
 use App\Models\NavigationMenuItem;
 use App\Models\Page;
 use App\Models\PrivateMessage;
@@ -106,7 +106,7 @@ class AppServiceProvider extends ServiceProvider
             $action
                 ->modalSubmitActionLabel('保存')
                 ->createAnotherAction(function (\Filament\Actions\Action $createAnotherAction) use ($action): \Filament\Actions\Action {
-                    return $createAnotherAction->label('保存并创建新' . ($action->getModelLabel() ?: '记录'));
+                    return $createAnotherAction->label('保存并创建新'.($action->getModelLabel() ?: '记录'));
                 });
         });
     }
@@ -141,7 +141,7 @@ class AppServiceProvider extends ServiceProvider
     {
         try {
             return file_exists(storage_path('app/install.lock')) && \Schema::hasTable('site_settings');
-        } catch (\Throwable) {
+        } catch (Throwable) {
             return false;
         }
     }

@@ -25,6 +25,10 @@ class Order extends Model
     public const PAYMENT_SUBMITTED = 'submitted';
     public const PAYMENT_CONFIRMED = 'confirmed';
     public const PAYMENT_REJECTED = 'rejected';
+    public const PAYMENT_METHOD_QR_CODE = 'qr_code';
+    public const PAYMENT_METHOD_FALLBACK_QR = 'fallback_qr';
+    public const PAYMENT_METHOD_RED_PACKET = 'red_packet';
+    public const PAYMENT_METHOD_WALLET = 'wallet';
     public const AUTO_CHECK_PENDING = 'pending';
     public const AUTO_CHECK_PASSED = 'passed';
     public const AUTO_CHECK_FAILED = 'failed';
@@ -34,9 +38,13 @@ class Order extends Model
         'order_number',
         'status',
         'payment_status',
+        'payment_method',
         'subtotal_cents',
         'discount_cents',
         'shipping_fee_cents',
+        'wallet_payment_cents',
+        'wallet_recharge_cents',
+        'is_wallet_recharge',
         'shipment_plan',
         'shipment_notice',
         'total_cents',
@@ -81,6 +89,7 @@ class Order extends Model
     {
         return [
             'requires_shipping' => 'boolean',
+            'is_wallet_recharge' => 'boolean',
             'shipment_plan' => 'array',
             'digital_delivery_attachment_paths' => 'array',
             'digital_delivery_sent_at' => 'datetime',
@@ -160,10 +169,25 @@ class Order extends Model
         };
     }
 
+    public function paymentMethodLabel(): string
+    {
+        return match ($this->payment_method) {
+            self::PAYMENT_METHOD_FALLBACK_QR => '备用二维码支付',
+            self::PAYMENT_METHOD_RED_PACKET => '口令红包支付',
+            self::PAYMENT_METHOD_WALLET => '钱包余额支付',
+            default => '二维码支付',
+        };
+    }
+
     public function hasDigitalDelivery(): bool
     {
         return filled($this->digital_delivery_content)
             || filled($this->digital_delivery_code)
             || ! empty($this->digital_delivery_attachment_paths);
+    }
+
+    public function isWalletRecharge(): bool
+    {
+        return (bool) $this->is_wallet_recharge || (int) $this->wallet_recharge_cents > 0;
     }
 }

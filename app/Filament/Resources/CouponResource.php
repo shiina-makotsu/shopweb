@@ -30,6 +30,7 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class CouponResource extends Resource
 {
@@ -68,7 +69,13 @@ class CouponResource extends Resource
                 ->required()
                 ->options(Coupon::scopeOptions())
                 ->default(Coupon::SCOPE_GLOBAL)
-                ->live(),
+                ->live()
+                ->afterStateUpdated(function (?string $state, callable $set): void {
+                    if ($state !== Coupon::SCOPE_PRODUCT) {
+                        $set('products', []);
+                        $set('product_id', null);
+                    }
+                }),
             Select::make('products')
                 ->label('可用商品')
                 ->relationship('products', 'title')
@@ -121,6 +128,7 @@ class CouponResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with(['products'])->withCount('userCoupons'))
             ->columns([
                 TextColumn::make('code')->label('代码')->searchable(),
                 TextColumn::make('name')->label('名称'),
@@ -128,11 +136,24 @@ class CouponResource extends Resource
                 TextColumn::make('scope')
                     ->label('范围')
                     ->formatStateUsing(fn (?string $state): string => Coupon::scopeOptions()[$state ?? Coupon::SCOPE_GLOBAL] ?? (string) $state),
-                TextColumn::make('products.title')->label('可用商品')->listWithLineBreaks()->limitList(3)->toggleable(),
+                TextColumn::make('applicable_products')
+                    ->label('可用商品')
+                    ->state(fn (Coupon $record): array => $record->scope === Coupon::SCOPE_PRODUCT
+                        ? $record->products->pluck('title')->all()
+                        : [])
+                    ->listWithLineBreaks()
+                    ->limitList(3)
+                    ->placeholder('-')
+                    ->toggleable(),
                 TextColumn::make('value')
                     ->label('值')
                     ->formatStateUsing(fn ($state, Coupon $record): string => $record->type === Coupon::TYPE_FIXED ? Money::format((int) $state) : ((int) $state).'%'),
                 IconColumn::make('is_active')->label('启用')->boolean(),
+                TextColumn::make('user_coupons_count')
+                    ->label('持有用户')
+                    ->badge()
+                    ->formatStateUsing(fn ($state): string => ((int) $state).' 人')
+                    ->sortable(),
                 TextColumn::make('redemptions_count')->counts('redemptions')->label('使用记录'),
             ])
             ->recordActions([

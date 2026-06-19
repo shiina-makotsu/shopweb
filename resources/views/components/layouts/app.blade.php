@@ -3,7 +3,8 @@
 @php
     $siteSettings = $siteSettings ?? $settings ?? null;
     $errors = $errors ?? new \Illuminate\Support\ViewErrorBag;
-    $storeName = $siteSettings?->site_name ?? config('app.name');
+    $displayText = fn (?string $value, ?string $fallback = null): string => \App\Support\Text::display($value, $fallback);
+    $storeName = $displayText($siteSettings?->site_name, config('app.name', 'ShopWeb'));
     $categories = $storeCategories ?? collect();
     $infoMenuItems = $storeHomeInfoMenuItems ?? collect();
     $menuItems = $storeTopNavItems ?? $storeMenuItems ?? collect();
@@ -23,10 +24,10 @@
             ['label' => '客服工单', 'url' => $path('support.demands'), 'opens_new_tab' => false, 'children' => collect()],
             ['label' => '订单查询', 'url' => $path(auth()->check() ? 'orders.index' : 'login'), 'opens_new_tab' => false, 'children' => collect()],
         ]);
-    $menuLabel = fn ($item): string => is_array($item) ? $item['label'] : $item->label;
+    $menuLabel = fn ($item): string => $displayText(is_array($item) ? $item['label'] : $item->label);
     $menuUrl = fn ($item): string => is_array($item) ? $item['url'] : $item->resolvedUrl();
     $menuTarget = fn ($item): ?string => (is_array($item) ? ($item['opens_new_tab'] ?? false) : $item->opens_new_tab) ? '_blank' : null;
-    $menuTooltip = fn ($item): ?string => filled(is_array($item) ? ($item['tooltip_text'] ?? null) : $item->tooltip_text) ? (string) (is_array($item) ? $item['tooltip_text'] : $item->tooltip_text) : null;
+    $menuTooltip = fn ($item): ?string => filled(is_array($item) ? ($item['tooltip_text'] ?? null) : $item->tooltip_text) ? $displayText((string) (is_array($item) ? $item['tooltip_text'] : $item->tooltip_text)) : null;
     $menuChildren = fn ($item) => is_array($item) ? collect($item['children'] ?? []) : ($item->children ?? collect());
     $menuHasDestination = fn ($item): bool => is_array($item) ? filled($item['url'] ?? null) : $item->hasDestination();
     $menuVisible = fn ($item): bool => $menuHasDestination($item) || $menuChildren($item)->isNotEmpty();
@@ -57,6 +58,11 @@
         default => null,
     };
     $backgroundCss = $backgroundUrl ? 'url('.str_replace([')', "\r", "\n"], ['\\)', '', ''], $backgroundUrl).')' : 'none';
+    $userInterfaceSettings = auth()->user()?->interface_settings ?: [];
+    $userThemeMode = $userInterfaceSettings['theme_mode'] ?? 'auto';
+    $bodyThemeClasses = $userThemeMode === 'dark'
+        ? 'shop-mode-dark'
+        : ($userThemeMode === 'light' ? 'shop-mode-light' : 'shop-mode-auto');
 @endphp
 
 <!doctype html>
@@ -86,7 +92,7 @@
         }
     </style>
 </head>
-<body id="top" class="min-h-screen overflow-x-hidden bg-fixed bg-center bg-cover text-slate-900 theme-{{ $appearance['theme_template'] }}" style="background-color: var(--shop-background); background-image: var(--shop-page-background-image), var(--shop-page-gradient)">
+<body id="top" class="min-h-screen overflow-x-hidden bg-fixed bg-center bg-cover text-slate-900 theme-{{ $appearance['theme_template'] }} {{ $bodyThemeClasses }}" style="background-color: var(--shop-background); background-image: var(--shop-page-background-image), var(--shop-page-gradient)">
     <header class="border-b border-slate-300 bg-white">
         <div class="border-b border-slate-200 bg-slate-100 text-xs text-slate-700">
             <div class="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 px-4 py-2">
@@ -143,18 +149,21 @@
         </div>
 
         <nav class="border-t border-slate-200 bg-blue-800 text-sm font-medium text-white">
-            <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-2 md:hidden">
-                <span class="font-semibold">导航</span>
+            <div class="mx-auto flex max-w-7xl items-center justify-between gap-2 px-4 py-2 md:hidden">
                 <button
                     class="inline-flex items-center gap-2 rounded-sm border border-blue-200 px-3 py-2 text-sm font-medium text-white hover:bg-blue-900"
                     type="button"
                     data-mobile-menu-open
                     aria-controls="site-mobile-menu"
                     aria-expanded="false"
+                    aria-label="导航"
                 >
                     <svg class="h-4 w-4" viewBox="0 0 20 20" aria-hidden="true" fill="currentColor"><path d="M3 5.75A.75.75 0 0 1 3.75 5h12.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 5.75Zm0 4A.75.75 0 0 1 3.75 9h12.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 9.75Zm.75 3.25a.75.75 0 0 0 0 1.5h12.5a.75.75 0 0 0 0-1.5H3.75Z"/></svg>
-                    打开
+                    导航
                 </button>
+                @unless(request()->routeIs('home'))
+                    <a class="inline-flex items-center rounded-sm border border-blue-200 px-3 py-2 text-sm font-medium text-white hover:bg-blue-900" href="{{ $path('home') }}">首页</a>
+                @endunless
             </div>
             <div class="mx-auto hidden max-w-7xl flex-wrap px-4 md:flex">
                 @foreach($topNavItems as $menuItem)
@@ -468,7 +477,7 @@
         </div>
     </footer>
     <button
-        class="fixed bottom-5 left-5 z-40 inline-flex h-11 w-11 items-center justify-center rounded-full border border-blue-700 bg-white text-blue-800 shadow hover:bg-blue-50 md:hidden"
+        class="fixed left-4 top-4 z-40 inline-flex h-11 w-11 items-center justify-center rounded-full border border-blue-700 bg-white text-blue-800 shadow hover:bg-blue-50 md:hidden"
         type="button"
         data-mobile-menu-open
         aria-controls="site-mobile-menu"
@@ -501,5 +510,25 @@
         </div>
     </div>
     <a href="#top" onclick="window.scrollTo({ top: 0, behavior: 'smooth' }); return false;" class="fixed bottom-5 right-5 z-40 inline-flex h-10 w-10 items-center justify-center rounded-full border border-blue-700 bg-white text-blue-800 shadow hover:bg-blue-50" aria-label="回到顶部">↑</a>
+    @auth
+        @if(session('show_registration_onboarding'))
+            <div class="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 px-4" data-registration-onboarding>
+                <div class="w-full max-w-lg rounded-sm border border-blue-200 bg-white p-5 shadow-xl">
+                    <h2 class="text-lg font-semibold text-blue-900">欢迎加入 {{ $storeName }}</h2>
+                    <p class="mt-2 text-sm leading-6 text-slate-700">可以先添加常用地址，后续下单会自动带入；钱包可用于兑换码充值、钱包充值和下单余额支付。也可以先跳过，之后在用户中心继续设置。</p>
+                    <div class="mt-5 grid gap-3 sm:grid-cols-3">
+                        <a class="rounded-sm border border-blue-700 bg-blue-700 px-3 py-2 text-center text-sm font-medium text-white hover:bg-blue-800" href="{{ $path('user.addresses.create') }}">添加地址</a>
+                        <a class="rounded-sm border border-emerald-700 bg-white px-3 py-2 text-center text-sm font-medium text-emerald-800 hover:bg-emerald-50" href="{{ $path('user.section', 'wallet') }}">了解钱包</a>
+                        <button class="rounded-sm border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50" type="button" data-registration-onboarding-close>跳过</button>
+                    </div>
+                </div>
+            </div>
+        @endif
+    @endauth
+    <script>
+        document.querySelector('[data-registration-onboarding-close]')?.addEventListener('click', () => {
+            document.querySelector('[data-registration-onboarding]')?.remove();
+        });
+    </script>
 </body>
 </html>

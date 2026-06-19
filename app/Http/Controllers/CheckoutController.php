@@ -7,6 +7,7 @@ use App\Services\CouponService;
 use App\Services\OrderService;
 use App\Services\ShippingQuoteService;
 use App\Support\ChinaRegions;
+use App\Models\Order;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -60,12 +61,19 @@ class CheckoutController extends Controller
             'shipping_street' => ['nullable', 'string', 'max:100'],
             'shipping_detail' => [$requiresShipping ? 'required' : 'nullable', 'string', 'max:255'],
             'customer_note' => ['nullable', 'string', 'max:1000'],
+            'payment_method' => ['nullable', 'string', 'in:'.implode(',', [
+                Order::PAYMENT_METHOD_QR_CODE,
+                Order::PAYMENT_METHOD_FALLBACK_QR,
+                Order::PAYMENT_METHOD_RED_PACKET,
+                Order::PAYMENT_METHOD_WALLET,
+            ])],
             'coupon_code' => ['nullable', 'string', 'max:100'],
             'coupon_items' => ['nullable', 'array'],
             'coupon_items.*' => ['nullable', 'integer', 'exists:user_coupons,id'],
         ])->validate();
 
         $data['requires_shipping'] = $requiresShipping;
+        $data['payment_method'] ??= Order::PAYMENT_METHOD_QR_CODE;
 
         $order = $orders->createFromCart($request->user(), $data);
 

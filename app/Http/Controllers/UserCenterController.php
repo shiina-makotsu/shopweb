@@ -9,6 +9,7 @@ use App\Models\UserAddress;
 use App\Models\UserProfileChangeLog;
 use App\Services\AiUsageService;
 use App\Services\CouponService;
+use App\Services\WalletService;
 use App\Support\ChinaRegions;
 use Illuminate\Support\Collection;
 use Illuminate\Http\RedirectResponse;
@@ -53,7 +54,7 @@ class UserCenterController extends Controller
         $user = $request->user();
         $user->ensurePublicId();
 
-        $allowed = ['profile', 'wishlists', 'favorites', 'addresses', 'coupons', 'chat', 'ai', 'privacy', 'interface', 'membership'];
+        $allowed = ['profile', 'wishlists', 'favorites', 'addresses', 'coupons', 'wallet', 'chat', 'ai', 'privacy', 'interface', 'membership'];
         abort_unless(in_array($section, $allowed, true), 404);
 
         $aiUsage = app(AiUsageService::class);
@@ -77,6 +78,9 @@ class UserCenterController extends Controller
             'coupons' => $section === 'coupons'
                 ? $user->coupons()->with(['coupon.products', 'coupon.product'])->latest()->get()
                 : null,
+            'walletTransactions' => $section === 'wallet'
+                ? $user->walletTransactions()->latest()->limit(50)->get()
+                : collect(),
             'privateUnreadCount' => $this->privateUnreadCount($user),
             'chatThreads' => $section === 'chat'
                 ? $this->chatThreads($user)
@@ -123,6 +127,7 @@ class UserCenterController extends Controller
             'addressProvinceOptions' => ChinaRegions::provinceOptions(),
             'addressRegionTree' => ChinaRegions::regionTreeForForms(),
             'coupons' => null,
+            'walletTransactions' => collect(),
             'privateUnreadCount' => $this->privateUnreadCount($user),
             'chatThreads' => collect(),
             'aiQuota' => null,
@@ -135,6 +140,22 @@ class UserCenterController extends Controller
             ->where('recipient_id', $user->id)
             ->whereNull('read_at')
             ->count();
+    }
+
+    public function updateInterface(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'theme_mode' => ['required', 'string', 'in:auto,light,dark'],
+        ]);
+
+        $settings = $request->user()->interface_settings ?: [];
+        $settings['theme_mode'] = $data['theme_mode'];
+
+        $request->user()->forceFill([
+            'interface_settings' => $settings,
+        ])->save();
+
+        return back()->with('status', '界面设置已更新。');
     }
 
     /**
@@ -180,6 +201,30 @@ class UserCenterController extends Controller
         $coupons->claimByCode($data['coupon_code'], $request->user());
 
         return back()->with('status', '优惠码已添加。');
+    }
+
+    public function redeemWalletCode(Request $request, WalletService $wallet): RedirectResponse
+    {
+        $data = $request->validate([
+            'wallet_code' => ['required', 'string', 'max:100'],
+        ]);
+
+        $wallet->redeemCode($request->user(), $data['wallet_code']);
+
+        return back()->with('status', '钱包金额已到账。');
+    }
+
+    public function rechargeWallet(Request $request, WalletService $wallet): RedirectResponse
+    {
+        $data = $request->validate([
+            'wallet_recharge_amount' => ['required', 'numeric', 'min:0.01', 'max:999999'],
+        ]);
+
+        $order = $wallet->createRechargeOrder($request->user(), $data['wallet_recharge_amount']);
+
+        return redirect()
+            ->route('orders.show', $order)
+            ->with('status', '钱包充值订单已创建，请按页面说明付款并上传凭证。');
     }
 
     public function updateProfile(Request $request): RedirectResponse

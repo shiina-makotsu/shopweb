@@ -119,6 +119,45 @@ it('auto checks payment proof for user display while keeping backend payment sub
     ]);
 });
 
+it('ignores duplicate payment proof submissions after the first accepted proof', function (): void {
+    Storage::fake('payment_proofs');
+
+    SiteSetting::query()->create([
+        'site_name' => 'ShopWeb',
+        'payment_auto_check_enabled' => true,
+    ]);
+    $user = User::factory()->create(['role' => 'customer']);
+    $order = Order::query()->create([
+        'user_id' => $user->id,
+        'order_number' => 'PAY-IDEMPOTENT-1',
+        'status' => Order::STATUS_PENDING_PAYMENT,
+        'payment_status' => Order::PAYMENT_PENDING,
+        'subtotal_cents' => 100,
+        'total_cents' => 100,
+        'contact_name' => 'A',
+        'contact_phone' => '1',
+    ]);
+
+    $this->actingAs($user)
+        ->post(route('orders.payment-proof', $order), [
+            'payment_proof' => UploadedFile::fake()->image('proof-a.png'),
+        ])
+        ->assertRedirect()
+        ->assertSessionHas('payment_success', true);
+
+    $firstPath = $order->fresh()->payment_proof_path;
+
+    $this->actingAs($user)
+        ->post(route('orders.payment-proof', $order), [
+            'payment_proof' => UploadedFile::fake()->image('proof-b.png'),
+        ])
+        ->assertRedirect()
+        ->assertSessionHas('payment_success', true);
+
+    expect($order->fresh()->payment_proof_path)->toBe($firstPath)
+        ->and(PaymentVerificationLog::query()->where('order_id', $order->id)->count())->toBe(1);
+});
+
 it('shows payment proof images to admins and a payment success state to customers', function (): void {
     Storage::fake('payment_proofs');
 
@@ -184,6 +223,7 @@ it('shows payment proof images to admins and a payment success state to customer
         ->get(route('orders.show', $order))
         ->assertOk()
         ->assertSee('付款成功')
+        ->assertSee('data-payment-redirect-url="/forum"', false)
         ->assertDontSee('待后台人工复核')
         ->assertDontSee('后台会继续人工复核');
 
@@ -265,6 +305,30 @@ it('preloads payment codes and accepts red packet text as a manual payment fallb
         'payment_proof_path' => null,
         'auto_result' => Order::AUTO_CHECK_PENDING,
     ]);
+});
+
+it('returns a validation error when payment proof submission is empty', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+    $order = Order::query()->create([
+        'user_id' => $user->id,
+        'order_number' => 'PAY-EMPTY-1',
+        'status' => Order::STATUS_PENDING_PAYMENT,
+        'payment_status' => Order::PAYMENT_PENDING,
+        'subtotal_cents' => 9900,
+        'total_cents' => 9900,
+        'contact_name' => 'Empty Proof User',
+        'contact_phone' => '10086',
+    ]);
+
+    $this->actingAs($user)
+        ->from(route('orders.show', $order))
+        ->post(route('orders.payment-proof', $order), [])
+        ->assertRedirect(route('orders.show', $order))
+        ->assertSessionHasErrors('payment_proof');
+
+    expect($order->fresh()->payment_status)->toBe(Order::PAYMENT_PENDING)
+        ->and($order->fresh()->payment_proof_path)->toBeNull()
+        ->and($order->fresh()->payment_text_proof)->toBeNull();
 });
 
 it('lets admins add shipping information from the expanded order row', function (): void {

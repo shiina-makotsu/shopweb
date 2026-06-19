@@ -22,7 +22,7 @@
 
             <header class="sticky top-0 z-30 border-b border-zinc-200 bg-white/95 px-5 py-3 backdrop-blur">
                 <div class="flex items-center justify-between gap-4">
-                    <a class="min-w-0 truncate text-xl font-semibold tracking-normal text-zinc-950" href="{{ \App\Support\Url::route('home') }}">{{ $settings?->site_name ?? $siteSettings?->site_name ?? config('app.name', 'ShopWeb') }}</a>
+                    <a class="min-w-0 truncate text-xl font-semibold tracking-normal text-zinc-950" href="{{ \App\Support\Url::route('home') }}">{{ \App\Support\Text::display($settings?->site_name ?? $siteSettings?->site_name, config('app.name', 'ShopWeb')) }}</a>
                     <div class="flex items-center gap-2">
                         <button class="rounded-full border border-zinc-200 bg-zinc-100 px-5 py-2 text-sm font-semibold text-zinc-950 shadow-inner" type="button" data-mode-button="gallery">画廊</button>
                         <button class="inline-flex rounded-full px-5 py-2 text-sm text-zinc-500" type="button" data-mode-button="chat">Chat</button>
