@@ -10,6 +10,7 @@ use App\Models\FriendLink;
 use App\Models\MediaAsset;
 use App\Models\NavigationMenuItem;
 use App\Models\Order;
+use App\Models\OrderItem;
 use App\Models\Page;
 use App\Models\Product;
 use App\Models\ProductMedia;
@@ -2438,6 +2439,74 @@ it('requires explicit receipt confirmation for online delivery orders', function
     expect($order->status)->toBe(Order::STATUS_FULFILLED)
         ->and($order->digital_delivery_completed_at)->not->toBeNull()
         ->and($order->fulfilled_at)->not->toBeNull();
+});
+
+it('shows order details without payment blocks after payment is confirmed', function (): void {
+    SiteSetting::query()->firstOrCreate([])->update([
+        'payment_qr_path' => 'payments/main.png',
+        'show_tracking_numbers_to_users' => true,
+        'payment_fallback_config' => [
+            'fallback_qr_path' => 'payments/fallback.png',
+            'friend_qr_path' => 'payments/friend.png',
+        ],
+    ]);
+
+    $user = User::factory()->create(['role' => 'customer']);
+    $category = Category::query()->create(['name' => 'Order Detail Category', 'slug' => 'order-detail-category', 'is_active' => true]);
+    $product = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => 'Order Detail Product',
+        'slug' => 'order-detail-product',
+        'status' => Product::STATUS_PUBLISHED,
+    ]);
+    $variant = ProductVariant::query()->create([
+        'product_id' => $product->id,
+        'sku' => 'DETAIL-SKU',
+        'spec_name' => 'Detail Pack',
+        'price_cents' => 1000,
+        'stock' => 5,
+        'is_active' => true,
+    ]);
+    $order = Order::query()->create([
+        'user_id' => $user->id,
+        'order_number' => 'DETAIL-1',
+        'status' => Order::STATUS_AWAITING_RECEIPT,
+        'payment_status' => Order::PAYMENT_CONFIRMED,
+        'subtotal_cents' => 1000,
+        'total_cents' => 1000,
+        'contact_name' => 'Detail',
+        'contact_phone' => '1',
+        'requires_shipping' => true,
+        'tracking_number' => 'TRACK-DETAIL-1',
+    ]);
+    OrderItem::query()->create([
+        'order_id' => $order->id,
+        'product_id' => $product->id,
+        'product_variant_id' => $variant->id,
+        'product_title' => $product->title,
+        'product_status' => $product->status,
+        'variant_sku' => $variant->sku,
+        'variant_specs' => ['规格' => '标准'],
+        'unit_price_cents' => 1000,
+        'quantity' => 1,
+        'line_total_cents' => 1000,
+        'status' => Order::STATUS_AWAITING_RECEIPT,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('orders.show', $order))
+        ->assertOk()
+        ->assertSee('Order Detail Product')
+        ->assertSee('TRACK-DETAIL-1')
+        ->assertSee('订单时间')
+        ->assertSee('创建时间')
+        ->assertSee('完成时间')
+        ->assertSee('确认收货')
+        ->assertDontSee('付款说明')
+        ->assertDontSee('付款凭证')
+        ->assertDontSee('/uploads/payments/main.png', false)
+        ->assertDontSee('/uploads/payments/fallback.png', false)
+        ->assertDontSee('/uploads/payments/friend.png', false);
 });
 
 it('shows the next flash sale time when a flash sale has not started yet', function (): void {

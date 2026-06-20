@@ -46,6 +46,7 @@ class DatabaseSeeder extends Seeder
             'page_music_mode' => 'manual',
             'guide_pet_enabled' => false,
             'guide_pet_context_mode' => 'storefront',
+            'payment_pending_timeout_minutes' => 10,
             'payment_gateway_provider' => 'manual',
             'payment_enabled_methods' => ['alipay_qr'],
             'home_title' => '轻量自研商城',

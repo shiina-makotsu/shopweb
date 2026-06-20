@@ -580,6 +580,52 @@ class OrderService
         });
     }
 
+    public function expireUnsubmittedPaymentOrders(int $timeoutMinutes = 10): int
+    {
+        $timeoutMinutes = max(1, $timeoutMinutes);
+        $expiredBefore = now()->subMinutes($timeoutMinutes);
+        $expired = 0;
+
+        Order::query()
+            ->where('status', Order::STATUS_PENDING_PAYMENT)
+            ->where('payment_status', Order::PAYMENT_PENDING)
+            ->whereNull('payment_proof_path')
+            ->whereNull('payment_text_proof')
+            ->where('created_at', '<=', $expiredBefore)
+            ->orderBy('id')
+            ->chunkById(100, function ($orders) use (&$expired, $timeoutMinutes): void {
+                foreach ($orders as $order) {
+                    DB::transaction(function () use ($order, $timeoutMinutes, &$expired): void {
+                        $locked = Order::query()->whereKey($order->id)->lockForUpdate()->first();
+
+                        if (! $locked
+                            || $locked->status !== Order::STATUS_PENDING_PAYMENT
+                            || $locked->payment_status !== Order::PAYMENT_PENDING
+                            || filled($locked->payment_proof_path)
+                            || filled($locked->payment_text_proof)
+                        ) {
+                            return;
+                        }
+
+                        $this->cancel($locked, null, "Payment proof not submitted within {$timeoutMinutes} minutes; order auto closed.");
+
+                        $locked->forceFill([
+                            'user_deleted_at' => $locked->user_deleted_at ?? now(),
+                        ])->save();
+
+                        $this->activity->log('order_payment_timeout_closed', $locked, $locked->order_number, [
+                            'timeout_minutes' => $timeoutMinutes,
+                            'status' => Order::STATUS_CANCELLED,
+                        ]);
+
+                        $expired++;
+                    });
+                }
+            });
+
+        return $expired;
+    }
+
     private function shippingAddressText(array $data): ?string
     {
         $street = $data['shipping_street'] ?? null;

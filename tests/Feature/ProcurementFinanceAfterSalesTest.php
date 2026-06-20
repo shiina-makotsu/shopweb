@@ -96,6 +96,9 @@ it('syncs procurement into an incoming product, auto costs, and allocated presal
         ->and($incoming->variants()->count())->toBe(1)
         ->and($procurement->fresh()->customs_tax_cents)->toBe(1200)
         ->and(CostEntry::query()->where('procurement_id', $procurement->id)->count())->toBe(3)
+        ->and(CostEntry::query()->where('procurement_id', $procurement->id)->where('application_type', CostEntry::APPLICATION_PROCUREMENT)->count())->toBe(3)
+        ->and(CostEntry::query()->where('procurement_id', $procurement->id)->where('is_effective', true)->count())->toBe(3)
+        ->and(CostEntry::query()->where('procurement_id', $procurement->id)->where('effective_quantity', 10)->count())->toBe(3)
         ->and($item->fresh()->incoming_product_id)->toBe($incoming->id)
         ->and($item->fresh()->status)->toBe(Order::STATUS_INCOMING)
         ->and($order->fresh()->status)->toBe(Order::STATUS_INCOMING);
@@ -426,6 +429,70 @@ it('calculates gross profit and warehouse profit breakdowns', function (): void 
         'profit_cents' => -300,
         'profit_rate' => null,
     ]);
+});
+
+it('calculates profit from effective costs only', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+    $category = Category::query()->create(['name' => 'Effective Cost Category', 'slug' => 'effective-cost-category', 'is_active' => true]);
+    $product = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => 'Effective Cost Product',
+        'slug' => 'effective-cost-product',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_LOGISTICS,
+    ]);
+    $variant = ProductVariant::query()->create([
+        'product_id' => $product->id,
+        'sku' => 'EFFECTIVE-COST-1',
+        'price_cents' => 10000,
+        'stock' => 5,
+        'is_active' => true,
+    ]);
+    $order = Order::query()->create([
+        'user_id' => $user->id,
+        'order_number' => 'EFFECTIVE-COST-1',
+        'status' => Order::STATUS_FULFILLED,
+        'payment_status' => Order::PAYMENT_CONFIRMED,
+        'subtotal_cents' => 10000,
+        'total_cents' => 10000,
+        'contact_name' => 'Buyer',
+        'contact_phone' => '1',
+    ]);
+    OrderItem::query()->create([
+        'order_id' => $order->id,
+        'product_id' => $product->id,
+        'product_variant_id' => $variant->id,
+        'product_title' => $product->title,
+        'product_status' => Product::STATUS_PUBLISHED,
+        'variant_sku' => $variant->sku,
+        'unit_price_cents' => 10000,
+        'quantity' => 1,
+        'line_total_cents' => 10000,
+    ]);
+    CostEntry::query()->create([
+        'category' => CostEntry::CATEGORY_OTHER,
+        'application_type' => CostEntry::APPLICATION_RECURRING,
+        'name' => '仓储持续成本',
+        'amount_cents' => 700,
+        'is_effective' => true,
+        'effective_times' => 1,
+        'effective_at' => now(),
+    ]);
+    CostEntry::query()->create([
+        'category' => CostEntry::CATEGORY_PURCHASE,
+        'application_type' => CostEntry::APPLICATION_PROCUREMENT,
+        'name' => '未采购的采购成本',
+        'amount_cents' => 3000,
+        'is_effective' => false,
+        'effective_times' => 0,
+    ]);
+
+    $summary = app(ProfitMetrics::class)->summary();
+
+    expect($summary['sales_cents'])->toBe(10000)
+        ->and($summary['purchase_cost_cents'])->toBe(0)
+        ->and($summary['cost_cents'])->toBe(700)
+        ->and($summary['profit_cents'])->toBe(9300);
 });
 
 it('calculates fulfillment profit with named multi variable formulas', function (): void {

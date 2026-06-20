@@ -16,12 +16,14 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withCommands([
         App\Console\Commands\DatabaseHealthCommand::class,
+        App\Console\Commands\ExpirePendingPaymentOrdersCommand::class,
         App\Console\Commands\PruneAiTrashCommand::class,
         App\Console\Commands\RefreshCurrencySnapshotCommand::class,
         App\Console\Commands\ShopInstallCommand::class,
         App\Console\Commands\SyncFlashSaleCampaignsCommand::class,
     ])
     ->withSchedule(function (Schedule $schedule): void {
+        $schedule->command('shop:orders-expire-pending-payments')->everyMinute()->withoutOverlapping();
         $schedule->command('shop:currency-refresh')->dailyAt('02:40')->withoutOverlapping();
         $schedule->command('shop:flash-sale-sync')->dailyAt('02:55')->withoutOverlapping();
         $schedule->command('shop:ai-trash-prune')->dailyAt('03:20')->withoutOverlapping();

@@ -251,11 +251,9 @@ class ProfitMetrics
             'profit' => '默认利润',
         ];
 
-        CostEntry::query()
+        $this->costEntryQuery($dateFrom, $dateTo)
             ->select('name')
             ->whereNotNull('name')
-            ->when($dateFrom, fn ($query) => $query->where('created_at', '>=', $dateFrom->copy()->startOfDay()))
-            ->when($dateTo, fn ($query) => $query->where('created_at', '<=', $dateTo->copy()->endOfDay()))
             ->distinct()
             ->orderBy('name')
             ->limit(80)
@@ -526,7 +524,18 @@ class ProfitMetrics
 
     private function costEntryQuery(?CarbonInterface $dateFrom = null, ?CarbonInterface $dateTo = null)
     {
-        return $this->applyDateRange(CostEntry::query(), $dateFrom, $dateTo);
+        return CostEntry::query()
+            ->where('is_effective', true)
+            ->when($dateFrom, fn ($query) => $query->where(function ($query) use ($dateFrom): void {
+                $query
+                    ->where('effective_at', '>=', $dateFrom->copy()->startOfDay())
+                    ->orWhere(fn ($query) => $query->whereNull('effective_at')->where('created_at', '>=', $dateFrom->copy()->startOfDay()));
+            }))
+            ->when($dateTo, fn ($query) => $query->where(function ($query) use ($dateTo): void {
+                $query
+                    ->where('effective_at', '<=', $dateTo->copy()->endOfDay())
+                    ->orWhere(fn ($query) => $query->whereNull('effective_at')->where('created_at', '<=', $dateTo->copy()->endOfDay()));
+            }));
     }
 
     private function applyDateRange($query, ?CarbonInterface $dateFrom = null, ?CarbonInterface $dateTo = null)

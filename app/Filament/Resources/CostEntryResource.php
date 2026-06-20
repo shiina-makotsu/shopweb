@@ -75,7 +75,14 @@ class CostEntryResource extends Resource
                         ->label('成本分类')
                         ->options(CostEntry::categoryOptions())
                         ->default(CostEntry::CATEGORY_OTHER)
+                        ->live()
                         ->required(),
+                    Select::make('application_type')
+                        ->label('生效类型')
+                        ->options(CostEntry::applicationTypeOptions())
+                        ->default(CostEntry::APPLICATION_RECURRING)
+                        ->required()
+                        ->helperText('持续成本会直接进入利润计算；采购触发成本仅在关联采购并标记生效后计算。'),
                     TextInput::make('name')
                         ->label('名称')
                         ->required()
@@ -107,6 +114,21 @@ class CostEntryResource extends Resource
                         ->options(fn (): array => Procurement::query()->latest()->limit(100)->pluck('name', 'id')->all())
                         ->searchable()
                         ->preload(),
+                    Toggle::make('is_effective')
+                        ->label('已生效')
+                        ->default(true)
+                        ->helperText('未生效成本不会进入利润统计；采购保存自动生成的成本会自动标记为已生效。'),
+                    TextInput::make('effective_times')
+                        ->label('生效次数')
+                        ->numeric()
+                        ->minValue(0)
+                        ->default(1),
+                    TextInput::make('effective_quantity')
+                        ->label('生效数量')
+                        ->numeric()
+                        ->minValue(0)
+                        ->default(0)
+                        ->helperText('采购触发成本会记录采购数量；持续成本可留空或填 0。'),
                     TextInput::make('country')
                         ->label('国家/地区')
                         ->maxLength(20),
@@ -152,6 +174,21 @@ class CostEntryResource extends Resource
                 TextColumn::make('procurement.name')
                     ->label('采购')
                     ->limit(32)
+                    ->toggleable(),
+                TextColumn::make('application_type')
+                    ->label('生效类型')
+                    ->formatStateUsing(fn (?string $state): string => CostEntry::applicationTypeOptions()[$state] ?? ($state ?: '-'))
+                    ->badge()
+                    ->toggleable(),
+                TextColumn::make('is_effective')
+                    ->label('是否生效')
+                    ->formatStateUsing(fn (bool $state): string => $state ? '已生效' : '未生效')
+                    ->badge(),
+                TextColumn::make('effective_times')
+                    ->label('生效次数')
+                    ->toggleable(),
+                TextColumn::make('effective_quantity')
+                    ->label('生效数量')
                     ->toggleable(),
                 TextColumn::make('country')
                     ->label('国家/地区')

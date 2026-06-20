@@ -39,6 +39,7 @@ class PaymentSettingsPage extends Page implements HasSchemas
             'payment_account_name',
             'payment_account_note',
             'payment_auto_check_enabled',
+            'payment_pending_timeout_minutes',
             'payment_instructions',
             'payment_gateway_provider',
             'payment_enabled_methods',
@@ -71,6 +72,14 @@ class PaymentSettingsPage extends Page implements HasSchemas
                     TextInput::make('payment_account_name')->label('收款名称')->maxLength(255),
                     TextInput::make('payment_account_note')->label('付款备注提示')->maxLength(255),
                     Toggle::make('payment_auto_check_enabled')->label('上传截图后自动初审')->default(true),
+                    TextInput::make('payment_pending_timeout_minutes')
+                        ->label('待付款订单超时关闭')
+                        ->numeric()
+                        ->minValue(1)
+                        ->maxValue(1440)
+                        ->default(10)
+                        ->suffix('分钟')
+                        ->helperText('用户创建订单后若未提交付款凭证，会在该时间后自动关闭并从用户订单列表隐藏；对接支付 API 自动确认收款的订单不受影响。'),
                     MarkdownEditor::make('payment_instructions')
                         ->label('付款说明')
                         ->fileAttachmentsDisk('public_uploads')

@@ -286,6 +286,7 @@ it('preloads payment codes and accepts red packet text as a manual payment fallb
         ->assertSee('/uploads/payments/main.png', false)
         ->assertSee('/uploads/payments/fallback.png', false)
         ->assertSee('/uploads/payments/friend.png', false)
+        ->assertSee('data-payment-countdown', false)
         ->assertSee('支付受限时的备选方案')
         ->assertSee('支付失败时请提交口令红包。')
         ->assertSee('可联系客服充值钱包。');
@@ -330,6 +331,62 @@ it('returns a validation error when payment proof submission is empty', function
     expect($order->fresh()->payment_status)->toBe(Order::PAYMENT_PENDING)
         ->and($order->fresh()->payment_proof_path)->toBeNull()
         ->and($order->fresh()->payment_text_proof)->toBeNull();
+});
+
+it('auto closes pending payment orders without proof after the configured timeout', function (): void {
+    SiteSetting::query()->create([
+        'site_name' => 'ShopWeb',
+        'payment_pending_timeout_minutes' => 10,
+    ]);
+    $user = User::factory()->create(['role' => 'customer']);
+    $expired = Order::query()->create([
+        'user_id' => $user->id,
+        'order_number' => 'TIMEOUT-1',
+        'status' => Order::STATUS_PENDING_PAYMENT,
+        'payment_status' => Order::PAYMENT_PENDING,
+        'subtotal_cents' => 1000,
+        'total_cents' => 1000,
+        'contact_name' => 'A',
+        'contact_phone' => '1',
+    ]);
+    $expired->forceFill(['created_at' => now()->subMinutes(11), 'updated_at' => now()->subMinutes(11)])->save();
+    $submitted = Order::query()->create([
+        'user_id' => $user->id,
+        'order_number' => 'TIMEOUT-SUBMITTED',
+        'status' => Order::STATUS_PENDING_PAYMENT,
+        'payment_status' => Order::PAYMENT_SUBMITTED,
+        'payment_text_proof' => 'red packet',
+        'subtotal_cents' => 1000,
+        'total_cents' => 1000,
+        'contact_name' => 'A',
+        'contact_phone' => '1',
+    ]);
+    $submitted->forceFill(['created_at' => now()->subMinutes(11), 'updated_at' => now()->subMinutes(11)])->save();
+    $confirmed = Order::query()->create([
+        'user_id' => $user->id,
+        'order_number' => 'TIMEOUT-CONFIRMED',
+        'status' => Order::STATUS_PENDING_SHIPMENT,
+        'payment_status' => Order::PAYMENT_CONFIRMED,
+        'subtotal_cents' => 1000,
+        'total_cents' => 1000,
+        'contact_name' => 'A',
+        'contact_phone' => '1',
+    ]);
+    $confirmed->forceFill(['created_at' => now()->subMinutes(11), 'updated_at' => now()->subMinutes(11)])->save();
+
+    $this->artisan('shop:orders-expire-pending-payments')->assertSuccessful();
+
+    expect($expired->fresh()->status)->toBe(Order::STATUS_CANCELLED)
+        ->and($expired->fresh()->user_deleted_at)->not->toBeNull()
+        ->and($submitted->fresh()->status)->toBe(Order::STATUS_PENDING_PAYMENT)
+        ->and($confirmed->fresh()->payment_status)->toBe(Order::PAYMENT_CONFIRMED);
+
+    $this->actingAs($user)
+        ->get(route('orders.index'))
+        ->assertOk()
+        ->assertDontSee('TIMEOUT-1');
+
+    expect(Order::query()->where('user_id', $user->id)->whereNull('user_deleted_at')->count())->toBe(2);
 });
 
 it('lets admins add shipping information from the expanded order row', function (): void {

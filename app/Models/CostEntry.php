@@ -11,18 +11,26 @@ class CostEntry extends Model
     public const CATEGORY_SHIPPING = 'shipping';
     public const CATEGORY_CUSTOMS = 'customs';
     public const CATEGORY_OTHER = 'other';
+    public const APPLICATION_ONE_TIME = 'one_time';
+    public const APPLICATION_RECURRING = 'recurring';
+    public const APPLICATION_PROCUREMENT = 'procurement';
 
     protected $fillable = [
         'procurement_id',
         'order_id',
         'created_by_id',
         'category',
+        'application_type',
         'name',
         'amount_cents',
         'currency_code',
         'currency_unit',
         'original_amount',
         'exchange_rate',
+        'is_effective',
+        'effective_times',
+        'effective_quantity',
+        'effective_at',
         'country',
         'tax_rate',
         'is_auto',
@@ -35,6 +43,8 @@ class CostEntry extends Model
             'tax_rate' => 'decimal:4',
             'original_amount' => 'decimal:4',
             'exchange_rate' => 'decimal:6',
+            'is_effective' => 'boolean',
+            'effective_at' => 'datetime',
             'is_auto' => 'boolean',
         ];
     }
@@ -65,5 +75,22 @@ class CostEntry extends Model
             self::CATEGORY_CUSTOMS => '海关税务成本',
             self::CATEGORY_OTHER => '其他成本',
         ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function applicationTypeOptions(): array
+    {
+        return [
+            self::APPLICATION_RECURRING => '持续成本',
+            self::APPLICATION_PROCUREMENT => '采购触发成本',
+            self::APPLICATION_ONE_TIME => '一次性成本',
+        ];
+    }
+
+    public function effectiveAmountCents(): int
+    {
+        return $this->is_effective ? (int) $this->amount_cents : 0;
     }
 }
