@@ -1330,6 +1330,171 @@
     z-index: 60;
 }
 
+.dark {
+    --shop-admin-blue: #17324b;
+    --shop-admin-blue-strong: #60a5fa;
+    --shop-admin-pink: #3a1f2b;
+    --shop-admin-pink-strong: #f472b6;
+    --shop-admin-white: #111827;
+    --wp-admin-blue: #60a5fa;
+    --wp-admin-blue-dark: #93c5fd;
+    --wp-admin-sidebar: linear-gradient(180deg, #0f172a 0%, #111827 54%, #1e1b2e 100%);
+    --wp-admin-sidebar-hover: rgb(30 41 59 / 84%);
+    --wp-admin-current: #f472b6;
+    --wp-admin-border: #334155;
+    --wp-admin-canvas: #0b1120;
+    --wp-admin-text: #e5e7eb;
+    --wp-admin-muted: #94a3b8;
+    color-scheme: dark;
+}
+
+.dark .fi-body,
+.dark .fi-layout {
+    background: linear-gradient(135deg, #07111f 0%, #0b1120 48%, #1f1424 100%);
+    color: var(--wp-admin-text);
+}
+
+.dark .fi-main,
+.dark .fi-page,
+.dark .fi-page-content,
+.dark .fi-section,
+.dark .fi-section-content,
+.dark .fi-ta,
+.dark .fi-ta-content,
+.dark .fi-fo,
+.dark .fi-modal-window,
+.dark .fi-dropdown-panel,
+.dark .fi-global-search-result,
+.dark .shop-settings-panel,
+.dark .shop-settings-group,
+.dark .shop-settings-table,
+.dark .shop-settings-card,
+.dark .shop-settings-row {
+    background-color: #111827;
+    border-color: var(--wp-admin-border);
+    color: var(--wp-admin-text);
+}
+
+.dark .fi-sidebar,
+.dark .fi-main-sidebar,
+.dark .fi-sidebar-header,
+.dark .fi-sidebar-header-ctn {
+    background: var(--wp-admin-sidebar);
+    border-color: var(--wp-admin-border);
+    color: var(--wp-admin-text);
+    box-shadow: none;
+}
+
+.dark .fi-topbar {
+    background: linear-gradient(90deg, #111827 0%, #172033 52%, #25182a 100%);
+    border-color: var(--wp-admin-border);
+    color: var(--wp-admin-text);
+}
+
+.dark .fi-sidebar-group-items {
+    border-left-color: color-mix(in srgb, var(--wp-admin-current), #111827 35%);
+}
+
+.dark .fi-sidebar-item-btn,
+.dark .fi-sidebar-group-btn,
+.dark .fi-sidebar-group-dropdown-trigger-btn,
+.dark .shop-sidebar-collapsed-group-trigger,
+.dark .fi-sidebar-group-items .fi-sidebar-item-btn {
+    background: transparent;
+    color: var(--wp-admin-text);
+}
+
+.dark .fi-sidebar-item-btn:hover,
+.dark .fi-sidebar-group-btn:hover,
+.dark .fi-sidebar-group-dropdown-trigger-btn:hover,
+.dark .shop-sidebar-collapsed-group-trigger:hover,
+.dark .shop-sidebar-collapsed-group-trigger:focus-visible,
+.dark .shop-sidebar-collapsed-group-trigger.is-open,
+.dark .fi-sidebar-item-active > .fi-sidebar-item-btn,
+.dark .fi-sidebar-item.fi-active > .fi-sidebar-item-btn,
+.dark .fi-sidebar-group-items .fi-sidebar-item-btn:hover,
+.dark .fi-sidebar-group-items .fi-sidebar-item-active > .fi-sidebar-item-btn,
+.dark .fi-sidebar-group-items .fi-sidebar-item.fi-active > .fi-sidebar-item-btn {
+    background: var(--wp-admin-sidebar-hover);
+    color: var(--wp-admin-text);
+}
+
+.dark .fi-sidebar-item-icon,
+.dark .fi-sidebar-group-btn .fi-icon,
+.dark .fi-sidebar-group-dropdown-trigger-btn .fi-icon,
+.dark .fi-sidebar-group-collapse-btn,
+.dark .fi-sidebar-open-collapse-sidebar-btn,
+.dark .fi-sidebar-close-collapse-sidebar-btn,
+.dark .shop-sidebar-collapsed-group-trigger .fi-icon {
+    color: #cbd5e1;
+}
+
+.dark .fi-sidebar-item-btn:hover .fi-sidebar-item-icon,
+.dark .fi-sidebar-group-btn:hover .fi-icon,
+.dark .fi-sidebar-group-dropdown-trigger-btn:hover .fi-icon,
+.dark .fi-sidebar-item-active .fi-sidebar-item-icon,
+.dark .fi-sidebar-item.fi-active .fi-sidebar-item-icon {
+    color: var(--wp-admin-blue);
+}
+
+.dark :is(.fi-section-header, .fi-ta-header, .fi-ta-footer, .fi-ta-row, .fi-ta-cell, .fi-fo-field-wrp, .fi-tabs, .fi-tabs-item, .fi-modal-header, .fi-modal-footer, .fi-dropdown-list, .fi-dropdown-list-item, .shop-settings-header, .shop-settings-actions, .shop-cache-actions) {
+    background-color: #111827;
+    border-color: var(--wp-admin-border);
+    color: var(--wp-admin-text);
+}
+
+.dark :is(.fi-section-header-heading, .fi-section-header-description, .fi-ta-header-cell-label, .fi-ta-text, .fi-fo-field-wrp-label, .fi-fo-placeholder, .fi-modal-heading, .fi-breadcrumbs-item-label, .fi-header-heading, .fi-header-subheading, .shop-settings-title, .shop-settings-label, .shop-settings-description) {
+    color: var(--wp-admin-text);
+}
+
+.dark :is(.fi-section-header-description, .fi-fo-field-wrp-helper-text, .fi-ta-empty-state-description, .fi-breadcrumbs-item-separator, .fi-header-subheading, .shop-settings-description, .shop-settings-state) {
+    color: var(--wp-admin-muted);
+}
+
+.dark :is(input, select, textarea, .fi-input, .fi-select-input, .fi-textarea, .fi-fo-markdown-editor, .fi-fo-markdown-editor .CodeMirror) {
+    background-color: #0f172a !important;
+    border-color: var(--wp-admin-border) !important;
+    color: var(--wp-admin-text) !important;
+}
+
+.dark :is(input, select, textarea, .fi-input, .fi-select-input, .fi-textarea)::placeholder {
+    color: #64748b !important;
+}
+
+.dark :is(.fi-btn, .shop-settings-secondary-btn, .shop-admin-front-link) {
+    border-color: var(--wp-admin-border);
+}
+
+.dark .shop-settings-secondary-btn,
+.dark .shop-admin-front-link {
+    background: #1f2937;
+    color: var(--wp-admin-text);
+}
+
+.dark .shop-settings-secondary-btn:hover,
+.dark .shop-admin-front-link:hover,
+.dark .shop-admin-front-link:focus-visible {
+    background: #273449;
+    border-color: #475569;
+}
+
+.dark .shop-settings-state {
+    background: #172033;
+    border-color: #334155;
+    color: #bfdbfe;
+}
+
+.dark .shop-settings-state.is-warning {
+    background: #3b2f12;
+    border-color: #92400e;
+    color: #fbbf24;
+}
+
+.dark .shop-settings-errors,
+.dark .shop-settings-field-error {
+    color: #fca5a5;
+}
+
 .fi-topbar .shop-admin-user-menu-panel,
 .shop-admin-user-menu-panel {
     min-width: 14rem;

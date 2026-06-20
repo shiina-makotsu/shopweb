@@ -524,6 +524,61 @@ it('splits admin support chat pagination into unread and latest tabs', function 
         ->assertSee('已读客户');
 });
 
+it('ignores ended support sessions when showing frontend unread badges', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+
+    foreach ([SupportChatSession::STATUS_ENDED, SupportChatSession::STATUS_CLOSED] as $status) {
+        $session = SupportChatSession::query()->create([
+            'user_id' => $user->id,
+            'status' => $status,
+            'last_message_at' => now(),
+            'ended_at' => now(),
+        ]);
+        $session->messages()->create([
+            'sender_type' => SupportChatMessage::SENDER_ADMIN,
+            'body' => 'Closed unread message',
+        ]);
+    }
+
+    $this->actingAs($user);
+    $provider = new \App\Providers\AppServiceProvider(app());
+    $counter = new \ReflectionMethod($provider, 'supportUnreadMessageCount');
+    $counter->setAccessible(true);
+
+    expect($counter->invoke($provider))->toBe(0);
+
+    $activeSession = SupportChatSession::query()->create([
+        'user_id' => $user->id,
+        'status' => SupportChatSession::STATUS_ACTIVE,
+        'last_message_at' => now(),
+    ]);
+    $activeSession->messages()->create([
+        'sender_type' => SupportChatMessage::SENDER_SYSTEM,
+        'body' => 'Active unread message',
+    ]);
+
+    expect($counter->invoke($provider))->toBe(1);
+});
+
+it('marks support system messages read when the customer opens a session', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+    $session = SupportChatSession::query()->create([
+        'user_id' => $user->id,
+        'status' => SupportChatSession::STATUS_ACTIVE,
+        'last_message_at' => now(),
+    ]);
+    $message = $session->messages()->create([
+        'sender_type' => SupportChatMessage::SENDER_SYSTEM,
+        'body' => 'System notice',
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('support.sessions.show', $session))
+        ->assertOk();
+
+    expect($message->fresh()->read_at)->not->toBeNull();
+});
+
 it('starts product support chats and toggles product preferences from product pages', function (): void {
     $product = Product::query()->create([
         'title' => '客服咨询商品',

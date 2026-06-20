@@ -10,6 +10,7 @@ use App\Models\Page;
 use App\Models\PrivateMessage;
 use App\Models\SiteSetting;
 use App\Models\SupportChatMessage;
+use App\Models\SupportChatSession;
 use App\Services\AdminLoginLogger;
 use App\Services\CartService;
 use App\Services\DatabaseMigrationHealth;
@@ -116,7 +117,9 @@ class AppServiceProvider extends ServiceProvider
             return SupportChatMessage::query()
                 ->whereIn('sender_type', [SupportChatMessage::SENDER_ADMIN, SupportChatMessage::SENDER_SYSTEM])
                 ->whereNull('read_at')
-                ->whereHas('session', fn ($query) => $query->where('user_id', auth()->id()))
+                ->whereHas('session', fn ($query) => $query
+                    ->where('user_id', auth()->id())
+                    ->whereIn('status', [SupportChatSession::STATUS_OPEN, SupportChatSession::STATUS_ACTIVE]))
                 ->count();
         } catch (Throwable) {
             return 0;

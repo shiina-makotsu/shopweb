@@ -455,7 +455,7 @@ TEXT);
         }
 
         $session->messages()
-            ->where('sender_type', SupportChatMessage::SENDER_ADMIN)
+            ->whereIn('sender_type', [SupportChatMessage::SENDER_ADMIN, SupportChatMessage::SENDER_SYSTEM])
             ->whereNull('read_at')
             ->update(['read_at' => now()]);
     }
