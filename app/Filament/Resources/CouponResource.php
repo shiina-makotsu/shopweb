@@ -31,6 +31,7 @@ use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\HtmlString;
 
 class CouponResource extends Resource
 {
@@ -128,7 +129,7 @@ class CouponResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
-            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with(['products'])->withCount('userCoupons'))
+            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with(['products', 'userCoupons.user'])->withCount('userCoupons'))
             ->columns([
                 TextColumn::make('code')->label('代码')->searchable(),
                 TextColumn::make('name')->label('名称'),
@@ -154,9 +155,24 @@ class CouponResource extends Resource
                     ->badge()
                     ->formatStateUsing(fn ($state): string => ((int) $state).' 人')
                     ->sortable(),
+                TextColumn::make('coupon_holders')
+                    ->label('持有人明细')
+                    ->state(fn (Coupon $record): array => static::couponHolderLabels($record, 5))
+                    ->listWithLineBreaks()
+                    ->limitList(5)
+                    ->placeholder('-')
+                    ->toggleable(),
                 TextColumn::make('redemptions_count')->counts('redemptions')->label('使用记录'),
             ])
             ->recordActions([
+                Action::make('viewHolders')
+                    ->label('查看持有人')
+                    ->icon(Heroicon::OutlinedUsers)
+                    ->modalHeading(fn (Coupon $record): string => '优惠码持有人：'.$record->code)
+                    ->modalSubmitAction(false)
+                    ->modalCancelActionLabel('关闭')
+                    ->modalWidth('5xl')
+                    ->modalContent(fn (Coupon $record): HtmlString => static::couponHoldersHtml($record)),
                 Action::make('issueToUser')
                     ->label('发放给用户')
                     ->icon(Heroicon::OutlinedUserPlus)
@@ -220,6 +236,90 @@ class CouponResource extends Resource
                     $data['note'] ?? null,
                 );
             });
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private static function couponHolderLabels(Coupon $coupon, int $limit = 5): array
+    {
+        $coupon->loadMissing('userCoupons.user');
+
+        return $coupon->userCoupons
+            ->take($limit)
+            ->map(function (UserCoupon $userCoupon): string {
+                $user = $userCoupon->user;
+
+                if (! $user) {
+                    return '已删除用户 #'.$userCoupon->user_id;
+                }
+
+                return $user->displayName().' / '.$user->public_id.' / '.$user->email;
+            })
+            ->values()
+            ->all();
+    }
+
+    private static function couponHoldersHtml(Coupon $coupon): HtmlString
+    {
+        $holders = $coupon->userCoupons()
+            ->with(['user', 'issuer'])
+            ->latest('claimed_at')
+            ->latest('id')
+            ->get();
+
+        if ($holders->isEmpty()) {
+            return new HtmlString('<p style="margin:0;color:#64748b;">暂无用户持有该优惠码。</p>');
+        }
+
+        $rows = $holders->map(function (UserCoupon $userCoupon): string {
+            $user = $userCoupon->user;
+            $issuer = $userCoupon->issuer;
+            $userLabel = $user
+                ? e($user->displayName()).'<br><span style="color:#64748b;">'.e($user->public_id).' / '.e($user->email).'</span>'
+                : '<span style="color:#dc2626;">已删除用户 #'.e((string) $userCoupon->user_id).'</span>';
+            $source = e(static::couponSourceLabel($userCoupon->source));
+            $issuerLabel = $issuer ? e($issuer->displayName()) : '-';
+            $claimedAt = $userCoupon->claimed_at?->format('Y-m-d H:i') ?? '-';
+            $note = filled($userCoupon->note) ? e($userCoupon->note) : '-';
+
+            return <<<HTML
+                <tr>
+                    <td style="padding:10px 12px;border-top:1px solid #e2e8f0;vertical-align:top;">{$userLabel}</td>
+                    <td style="padding:10px 12px;border-top:1px solid #e2e8f0;vertical-align:top;">{$source}</td>
+                    <td style="padding:10px 12px;border-top:1px solid #e2e8f0;vertical-align:top;">{$issuerLabel}</td>
+                    <td style="padding:10px 12px;border-top:1px solid #e2e8f0;vertical-align:top;white-space:nowrap;">{$claimedAt}</td>
+                    <td style="padding:10px 12px;border-top:1px solid #e2e8f0;vertical-align:top;">{$note}</td>
+                </tr>
+            HTML;
+        })->implode('');
+
+        return new HtmlString(<<<HTML
+            <div style="overflow-x:auto;">
+                <table style="width:100%;border-collapse:collapse;font-size:13px;line-height:1.5;">
+                    <thead>
+                        <tr style="background:#f8fafc;color:#334155;">
+                            <th style="padding:10px 12px;text-align:left;">用户</th>
+                            <th style="padding:10px 12px;text-align:left;">来源</th>
+                            <th style="padding:10px 12px;text-align:left;">发放人</th>
+                            <th style="padding:10px 12px;text-align:left;">获得时间</th>
+                            <th style="padding:10px 12px;text-align:left;">备注</th>
+                        </tr>
+                    </thead>
+                    <tbody>{$rows}</tbody>
+                </table>
+            </div>
+        HTML);
+    }
+
+    private static function couponSourceLabel(?string $source): string
+    {
+        return match ($source) {
+            UserCoupon::SOURCE_CLAIMED => '用户领取',
+            UserCoupon::SOURCE_ADMIN => '后台发放',
+            UserCoupon::SOURCE_AFTER_SALES => '售后补偿',
+            default => $source ?: '-',
+        };
     }
 
     /**

@@ -1947,6 +1947,42 @@ it('cleans stale product links from global coupons and tracks coupon holders', f
     expect(DB::table('user_coupons')->where('coupon_id', $coupon->id)->count())->toBe(1);
 });
 
+it('shows concrete coupon holder details in the backoffice coupon list', function (): void {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $user = User::factory()->create([
+        'role' => 'customer',
+        'name' => 'Coupon Holder',
+        'public_id' => 'holder_001',
+        'email' => 'holder@example.com',
+    ]);
+    $coupon = Coupon::query()->create([
+        'code' => 'HOLDERLIST',
+        'name' => 'Holder List Coupon',
+        'type' => Coupon::TYPE_FIXED,
+        'value' => 1000,
+        'scope' => Coupon::SCOPE_GLOBAL,
+        'is_active' => true,
+    ]);
+
+    UserCoupon::query()->create([
+        'user_id' => $user->id,
+        'coupon_id' => $coupon->id,
+        'issued_by_user_id' => $admin->id,
+        'source' => UserCoupon::SOURCE_ADMIN,
+        'claimed_at' => now(),
+        'note' => 'manual holder check',
+    ]);
+
+    $this->actingAs($admin)
+        ->get('/admin/coupons')
+        ->assertOk()
+        ->assertSee('HOLDERLIST')
+        ->assertSee('Coupon Holder')
+        ->assertSee('holder_001')
+        ->assertSee('holder@example.com')
+        ->assertSee('查看持有人');
+});
+
 it('does not show coupon controls during flash sale checkout', function (): void {
     $this->seed();
 

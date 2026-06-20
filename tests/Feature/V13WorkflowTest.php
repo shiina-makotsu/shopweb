@@ -17,6 +17,7 @@ use App\Support\Url;
 use App\Filament\Resources\OrderResource\Pages\EditOrder;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 
@@ -372,6 +373,41 @@ it('lets admins add shipping information from the expanded order row', function 
         'subject_id' => $order->id,
         'description' => '列表展开层补充物流',
     ]);
+});
+
+it('repairs missing quick shipping columns before saving logistics from the expanded order row', function (): void {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $user = User::factory()->create(['role' => 'customer']);
+    $order = Order::query()->create([
+        'user_id' => $user->id,
+        'order_number' => 'ROW-SHIP-REPAIR',
+        'status' => Order::STATUS_PENDING_SHIPMENT,
+        'payment_status' => Order::PAYMENT_CONFIRMED,
+        'subtotal_cents' => 100,
+        'total_cents' => 100,
+        'contact_name' => 'A',
+        'contact_phone' => '1',
+    ]);
+
+    Schema::table('orders', function (Illuminate\Database\Schema\Blueprint $table): void {
+        $table->dropColumn(['tracking_number', 'tracking_url', 'shipped_at', 'delivered_at']);
+    });
+
+    $this->actingAs($admin)
+        ->post(route('admin.orders.quick-shipping', $order), [
+            'tracking_number' => 'ROW-REPAIRED-1',
+            'tracking_url' => 'https://track.example.test/ROW-REPAIRED-1',
+            'admin_note' => 'repair missing logistics schema',
+        ])
+        ->assertRedirect();
+
+    expect(Schema::hasTable('shipping_carriers'))->toBeTrue()
+        ->and(Schema::hasColumn('orders', 'tracking_number'))->toBeTrue()
+        ->and(Schema::hasColumn('orders', 'tracking_url'))->toBeTrue()
+        ->and(Schema::hasColumn('orders', 'shipped_at'))->toBeTrue()
+        ->and(Schema::hasColumn('orders', 'delivered_at'))->toBeTrue()
+        ->and($order->fresh()->tracking_number)->toBe('ROW-REPAIRED-1')
+        ->and($order->fresh()->tracking_url)->toBe('https://track.example.test/ROW-REPAIRED-1');
 });
 
 it('lets admins quick edit products and sku values from the expanded product row', function (): void {
