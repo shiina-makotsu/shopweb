@@ -1495,6 +1495,101 @@
     color: #fca5a5;
 }
 
+.dark :is(.bg-white, .bg-gray-50, .bg-gray-100, .bg-slate-50, .bg-slate-100) {
+    background-color: #111827 !important;
+}
+
+.dark :is(.bg-gray-200, .bg-slate-200) {
+    background-color: #334155 !important;
+}
+
+.dark :is(.bg-blue-50, .bg-sky-50, .bg-indigo-50, .bg-emerald-50, .bg-green-50, .bg-pink-50, .bg-rose-50, .bg-amber-50, .bg-yellow-50, .bg-red-50) {
+    background-color: #172033 !important;
+}
+
+.dark :is(.text-gray-950, .text-gray-900, .text-gray-800, .text-slate-950, .text-slate-900, .text-slate-800) {
+    color: #f8fafc !important;
+}
+
+.dark :is(.text-gray-700, .text-gray-600, .text-gray-500, .text-slate-700, .text-slate-600, .text-slate-500, .text-slate-400) {
+    color: #cbd5e1 !important;
+}
+
+.dark :is(.text-blue-900, .text-blue-800, .text-blue-700, .text-sky-900, .text-sky-800, .text-indigo-900, .text-indigo-800) {
+    color: #bfdbfe !important;
+}
+
+.dark :is(.text-emerald-900, .text-emerald-800, .text-emerald-700, .text-green-900, .text-green-800, .text-green-700) {
+    color: #bbf7d0 !important;
+}
+
+.dark :is(.text-pink-900, .text-pink-800, .text-pink-700, .text-rose-900, .text-rose-800, .text-rose-700) {
+    color: #fbcfe8 !important;
+}
+
+.dark :is(.text-amber-900, .text-amber-800, .text-amber-700, .text-yellow-900, .text-yellow-800, .text-yellow-700) {
+    color: #fde68a !important;
+}
+
+.dark :is(.text-red-900, .text-red-800, .text-red-700) {
+    color: #fecaca !important;
+}
+
+.dark :is(.border-gray-100, .border-gray-200, .border-gray-300, .border-slate-100, .border-slate-200, .border-slate-300, .border-blue-100, .border-blue-200, .border-emerald-100, .border-emerald-200, .border-pink-100, .border-pink-200, .border-amber-100, .border-amber-200, .border-red-100, .border-red-200) {
+    border-color: #334155 !important;
+}
+
+.dark :is(.divide-gray-100, .divide-gray-200, .divide-slate-100, .divide-slate-200) > :not([hidden]) ~ :not([hidden]) {
+    border-color: #334155 !important;
+}
+
+.dark :is(.shadow, .shadow-sm, .shadow-md, .shadow-lg, .shadow-xl) {
+    --tw-shadow-color: rgb(0 0 0 / 0.45);
+    --tw-shadow: 0 12px 30px rgb(0 0 0 / 0.28);
+    box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow) !important;
+}
+
+.dark :is(table, thead, tbody, tr, th, td) {
+    border-color: #334155 !important;
+}
+
+.dark :is(thead, .fi-ta-header-cell) {
+    background-color: #172033 !important;
+}
+
+.dark :is(.hover\:bg-gray-50:hover, .hover\:bg-slate-50:hover, .hover\:bg-blue-50:hover, .hover\:bg-pink-50:hover, .hover\:bg-emerald-50:hover, .hover\:bg-red-50:hover) {
+    background-color: #1e293b !important;
+}
+
+.dark :is(.ring-gray-500\/10, .ring-green-600\/20, .ring-amber-600\/20) {
+    --tw-ring-color: rgb(71 85 105 / 0.65) !important;
+}
+
+.dark :is(.fi-fo-markdown-editor .editor-toolbar, .fi-fo-markdown-editor .editor-preview, .fi-fo-markdown-editor .editor-preview-side, .editor-toolbar, .editor-preview, .editor-preview-side) {
+    background: #111827 !important;
+    border-color: #334155 !important;
+    color: #e5e7eb !important;
+}
+
+.dark :is(.fi-fo-markdown-editor .CodeMirror-gutters, .CodeMirror-gutters) {
+    background: #0f172a !important;
+    border-color: #334155 !important;
+}
+
+.dark :is(.fi-fo-markdown-editor .CodeMirror-cursor, .CodeMirror-cursor) {
+    border-left-color: #e5e7eb !important;
+}
+
+.dark :is(.fi-fo-markdown-editor .editor-toolbar button, .editor-toolbar button) {
+    color: #cbd5e1 !important;
+}
+
+.dark :is(.fi-fo-markdown-editor .editor-toolbar button:hover, .fi-fo-markdown-editor .editor-toolbar button.active, .editor-toolbar button:hover, .editor-toolbar button.active) {
+    background: #1e293b !important;
+    border-color: #475569 !important;
+    color: #f8fafc !important;
+}
+
 .fi-topbar .shop-admin-user-menu-panel,
 .shop-admin-user-menu-panel {
     min-width: 14rem;
