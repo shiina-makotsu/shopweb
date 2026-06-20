@@ -401,23 +401,28 @@ class OrderService
         ], $actor);
     }
 
-    public function markDigitalDeliveryAccessed(Order $order, User $user): void
+    public function markDigitalDeliveryViewed(Order $order, User $user): void
     {
         if ($order->user_id !== $user->id || ! $order->hasDigitalDelivery()) {
             return;
         }
 
+        if ($order->digital_delivery_viewed_at) {
+            return;
+        }
+
         $order->update([
-            'status' => Order::STATUS_FULFILLED,
-            'digital_delivery_viewed_at' => $order->digital_delivery_viewed_at ?? now(),
-            'digital_delivery_completed_at' => $order->digital_delivery_completed_at ?? now(),
-            'delivered_at' => $order->delivered_at ?? now(),
-            'fulfilled_at' => $order->fulfilled_at ?? now(),
+            'digital_delivery_viewed_at' => now(),
         ]);
 
-        $this->activity->log('order_digital_delivery_completed', $order, $order->order_number, [
-            'status' => Order::STATUS_FULFILLED,
+        $this->activity->log('order_digital_delivery_viewed', $order, $order->order_number, [
+            'status' => $order->status,
         ], $user);
+    }
+
+    public function markDigitalDeliveryAccessed(Order $order, User $user): void
+    {
+        $this->markDigitalDeliveryViewed($order, $user);
     }
 
     public function returnToWarehouse(Order $order, ?User $actor = null, ?string $note = null): void
@@ -456,6 +461,7 @@ class OrderService
         $order->update([
             'status' => Order::STATUS_FULFILLED,
             'delivered_at' => now(),
+            'digital_delivery_completed_at' => $order->hasDigitalDelivery() ? ($order->digital_delivery_completed_at ?? now()) : $order->digital_delivery_completed_at,
             'fulfilled_at' => now(),
         ]);
 

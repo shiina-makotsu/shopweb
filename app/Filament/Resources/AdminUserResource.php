@@ -16,6 +16,7 @@ use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
@@ -103,6 +104,10 @@ class AdminUserResource extends Resource
                 ->required()
                 ->options(array_intersect_key(AdminAccess::roles(), array_flip(AdminAccess::panelRoles())))
                 ->default(AdminAccess::ROLE_ADMIN),
+            Toggle::make('support_email_notifications_enabled')
+                ->label('接收客服待处理邮件提醒')
+                ->default(false)
+                ->helperText('默认关闭。开启后，有新的待处理客服消息时会发送提醒到该后台用户邮箱。'),
             TextInput::make('password')
                 ->label('密码')
                 ->password()
@@ -138,6 +143,11 @@ class AdminUserResource extends Resource
                     ->label('后台角色')
                     ->formatStateUsing(fn (string $state): string => AdminAccess::roles()[$state] ?? $state)
                     ->badge(),
+                TextColumn::make('support_email_notifications_enabled')
+                    ->label('客服邮件提醒')
+                    ->formatStateUsing(fn (bool $state): string => $state ? '开启' : '关闭')
+                    ->badge()
+                    ->color(fn (bool $state): string => $state ? 'success' : 'gray'),
                 TextColumn::make('updated_at')->label('更新')->dateTime('Y-m-d H:i')->sortable(),
             ])
             ->defaultSort('updated_at', 'desc')

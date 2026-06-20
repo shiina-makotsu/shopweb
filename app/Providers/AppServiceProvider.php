@@ -5,9 +5,11 @@ namespace App\Providers;
 use App\Models\Announcement;
 use App\Models\Category;
 use App\Models\NavigationMenuItem;
+use App\Models\Order;
 use App\Models\Page;
 use App\Models\PrivateMessage;
 use App\Models\SiteSetting;
+use App\Models\SupportChatMessage;
 use App\Services\AdminLoginLogger;
 use App\Services\CartService;
 use App\Services\DatabaseMigrationHealth;
@@ -77,6 +79,10 @@ class AppServiceProvider extends ServiceProvider
                     ? Announcement::query()->published()->whereDoesntHave('reads', fn ($query) => $query->where('user_id', auth()->id()))->count()
                     : 0,
                 'privateUnreadMessageCount' => $this->privateUnreadMessageCount(),
+                'supportUnreadMessageCount' => $this->supportUnreadMessageCount(),
+                'pendingPaymentOrderCount' => $this->pendingPaymentOrderCount(),
+                'awaitingReceiptOrderCount' => $this->awaitingReceiptOrderCount(),
+                'userOrderNoticeCount' => $this->pendingPaymentOrderCount() + $this->awaitingReceiptOrderCount(),
                 'popupAnnouncement' => auth()->check()
                     ? Announcement::query()->published()->where('popup_when_unread', true)->whereDoesntHave('reads', fn ($query) => $query->where('user_id', auth()->id()))->orderByDesc('is_pinned')->latest('published_at')->first()
                     : null,
@@ -94,6 +100,53 @@ class AppServiceProvider extends ServiceProvider
             return PrivateMessage::query()
                 ->where('recipient_id', auth()->id())
                 ->whereNull('read_at')
+                ->count();
+        } catch (Throwable) {
+            return 0;
+        }
+    }
+
+    private function supportUnreadMessageCount(): int
+    {
+        try {
+            if (! auth()->check() || ! \Schema::hasTable('support_chat_messages') || ! \Schema::hasTable('support_chat_sessions')) {
+                return 0;
+            }
+
+            return SupportChatMessage::query()
+                ->whereIn('sender_type', [SupportChatMessage::SENDER_ADMIN, SupportChatMessage::SENDER_SYSTEM])
+                ->whereNull('read_at')
+                ->whereHas('session', fn ($query) => $query->where('user_id', auth()->id()))
+                ->count();
+        } catch (Throwable) {
+            return 0;
+        }
+    }
+
+    private function pendingPaymentOrderCount(): int
+    {
+        return $this->userOrderCount([Order::STATUS_PENDING_PAYMENT]);
+    }
+
+    private function awaitingReceiptOrderCount(): int
+    {
+        return $this->userOrderCount([Order::STATUS_AWAITING_RECEIPT]);
+    }
+
+    /**
+     * @param  array<int, string>  $statuses
+     */
+    private function userOrderCount(array $statuses): int
+    {
+        try {
+            if (! auth()->check() || ! \Schema::hasTable('orders')) {
+                return 0;
+            }
+
+            return Order::query()
+                ->where('user_id', auth()->id())
+                ->whereIn('status', $statuses)
+                ->whereNull('user_deleted_at')
                 ->count();
         } catch (Throwable) {
             return 0;

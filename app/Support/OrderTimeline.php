@@ -145,6 +145,7 @@ class OrderTimeline
             'order_incoming' => '标记进货中',
             'order_shipped' => '后台发货',
             'order_digital_delivery_sent' => '线上交付',
+            'order_digital_delivery_viewed' => '查看交付内容',
             'order_digital_delivery_completed' => '线上交付完成',
             'order_returned_to_warehouse' => '退回入库',
             'order_awaiting_receipt' => '标记待收货',

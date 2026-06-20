@@ -6,7 +6,9 @@ use App\Filament\Concerns\ChecksAdminAccess;
 use App\Filament\Resources\SupportChatSessionResource\Pages\EditSupportChatSession;
 use App\Filament\Resources\SupportChatSessionResource\Pages\ListSupportChatSessions;
 use App\Models\Coupon;
+use App\Models\SupportChatMessage;
 use App\Models\SupportChatSession;
+use App\Models\User;
 use App\Services\BackofficeApprovalService;
 use App\Services\SupportChatService;
 use App\Support\AdminAccess;
@@ -72,9 +74,9 @@ class SupportChatSessionResource extends Resource
 
     public static function getNavigationBadge(): ?string
     {
-        $count = static::pendingReceptionQuery()->count();
+        $count = static::unreadCustomerMessageQuery()->count();
 
-        return $count > 0 ? (string) $count : null;
+        return $count > 0 ? ($count > 99 ? '99+' : (string) $count) : null;
     }
 
     public static function getNavigationBadgeColor(): string|array|null
@@ -113,6 +115,46 @@ class SupportChatSessionResource extends Resource
                 TextColumn::make('served_count')->label('完成接待')->sortable(),
             ])
             ->defaultSort('last_message_at', 'desc')
+            ->toolbarActions([
+                Action::make('startCustomerChat')
+                    ->label('主动发起客服消息')
+                    ->icon(Heroicon::OutlinedPaperAirplane)
+                    ->color('info')
+                    ->visible(fn (): bool => AdminAccess::can('support'))
+                    ->form([
+                        Select::make('user_id')
+                            ->label('前台用户')
+                            ->options(fn (): array => User::query()
+                                ->where('role', AdminAccess::ROLE_CUSTOMER)
+                                ->orderBy('name')
+                                ->limit(100)
+                                ->get()
+                                ->mapWithKeys(fn (User $user): array => [$user->id => $user->displayName().' / '.$user->public_id.' / '.$user->email])
+                                ->all())
+                            ->searchable()
+                            ->getSearchResultsUsing(fn (string $search): array => User::query()
+                                ->where('role', AdminAccess::ROLE_CUSTOMER)
+                                ->where(function (Builder $query) use ($search): void {
+                                    RegexSearch::where($query, ['name', 'public_id', 'email'], $search);
+                                })
+                                ->limit(50)
+                                ->get()
+                                ->mapWithKeys(fn (User $user): array => [$user->id => $user->displayName().' / '.$user->public_id.' / '.$user->email])
+                                ->all())
+                            ->required(),
+                        Textarea::make('message')
+                            ->label('消息内容')
+                            ->rows(5)
+                            ->required(),
+                    ])
+                    ->action(function (array $data): void {
+                        $customer = User::query()
+                            ->where('role', AdminAccess::ROLE_CUSTOMER)
+                            ->findOrFail($data['user_id']);
+
+                        app(SupportChatService::class)->startForUser($customer, auth()->user(), $data['message']);
+                    }),
+            ])
             ->recordActions([
                 EditAction::make(),
                 ...static::approvalActions(),
@@ -264,5 +306,14 @@ class SupportChatSessionResource extends Resource
             ->where('status', SupportChatSession::STATUS_OPEN)
             ->whereNull('assigned_admin_id')
             ->whereHas('messages', fn (Builder $query): Builder => $query->whereIn('sender_type', ['customer', 'guest']));
+    }
+
+    protected static function unreadCustomerMessageQuery(): Builder
+    {
+        return SupportChatSession::query()
+            ->whereNotNull('user_id')
+            ->whereHas('messages', fn (Builder $query): Builder => $query
+                ->whereIn('sender_type', [SupportChatMessage::SENDER_CUSTOMER, SupportChatMessage::SENDER_GUEST])
+                ->whereNull('read_at'));
     }
 }

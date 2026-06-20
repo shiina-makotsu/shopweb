@@ -194,7 +194,7 @@
                 </div>
 
                 @if($order->hasDigitalDelivery())
-                    <div class="rounded-sm border border-emerald-300 bg-emerald-50">
+                    <div id="digital-delivery" class="rounded-sm border border-emerald-300 bg-emerald-50">
                         <h2 class="border-b border-emerald-200 bg-emerald-100 px-4 py-2 text-sm font-semibold text-emerald-950">线上交付内容</h2>
                         <div class="space-y-4 px-4 py-4 text-sm text-emerald-950">
                             @if($order->digital_delivery_content)
@@ -214,7 +214,7 @@
                                             type="submit"
                                             data-copy-delivery-code="{{ $order->digital_delivery_code }}"
                                         >
-                                            复制并完成订单
+                                            复制交付码
                                         </button>
                                     </div>
                                 </form>
@@ -231,7 +231,16 @@
                                     </div>
                                 </div>
                             @endif
-                            <p class="text-xs text-emerald-800">打开、复制或下载线上交付内容后，订单会自动标记为已完成。</p>
+                            @if($order->status === \App\Models\Order::STATUS_AWAITING_RECEIPT)
+                                <form method="post" action="{{ route('orders.confirm-receipt', $order) }}" class="rounded-sm border border-emerald-200 bg-white px-3 py-3">
+                                    @csrf
+                                    <p class="text-sm leading-6 text-emerald-900">确认已经领取并检查线上交付内容后，可以完成该订单。</p>
+                                    <button class="mt-3 rounded-sm border border-emerald-700 bg-emerald-700 px-3 py-2 text-xs font-medium text-white hover:bg-emerald-800" type="submit">
+                                        确认收货并完成订单
+                                    </button>
+                                </form>
+                            @endif
+                            <p class="text-xs text-emerald-800">打开、复制或下载只会记录查看时间，请确认内容无误后点击确认收货完成订单。</p>
                         </div>
                     </div>
                 @endif

@@ -18,6 +18,7 @@ class AdminActivityLog extends Model
         'order_incoming' => '订单标记为进货中',
         'order_shipped' => '订单发货',
         'order_digital_delivery_sent' => '发送线上交付内容',
+        'order_digital_delivery_viewed' => '用户查看线上交付内容',
         'order_digital_delivery_completed' => '用户查看线上交付内容',
         'order_returned_to_warehouse' => '退回仓库',
         'order_awaiting_receipt' => '订单标记为待收货',
@@ -74,6 +75,7 @@ class AdminActivityLog extends Model
         'shipping_detail' => '详细地址',
         'digital_delivery_content' => '线上交付内容',
         'digital_delivery_code' => '线上交付码',
+        'digital_delivery_attachment_paths' => '线上交付附件',
     ];
 
     protected $fillable = [

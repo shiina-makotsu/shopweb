@@ -31,6 +31,13 @@
     $menuChildren = fn ($item) => is_array($item) ? collect($item['children'] ?? []) : ($item->children ?? collect());
     $menuHasDestination = fn ($item): bool => is_array($item) ? filled($item['url'] ?? null) : $item->hasDestination();
     $menuVisible = fn ($item): bool => $menuHasDestination($item) || $menuChildren($item)->isNotEmpty();
+    $badgeLabel = fn (int $count): string => $count > 99 ? '99+' : (string) $count;
+    $userOrderNoticeCount = (int) ($userOrderNoticeCount ?? 0);
+    $pendingPaymentOrderCount = (int) ($pendingPaymentOrderCount ?? 0);
+    $awaitingReceiptOrderCount = (int) ($awaitingReceiptOrderCount ?? 0);
+    $supportUnreadMessageCount = (int) ($supportUnreadMessageCount ?? 0);
+    $privateUnreadMessageCount = (int) ($privateUnreadMessageCount ?? 0);
+    $userCenterNoticeCount = $userOrderNoticeCount + $supportUnreadMessageCount + $privateUnreadMessageCount;
     $mobileStandaloneMenuUrls = collect([
         $path('home'),
         $path('products.index'),
@@ -42,6 +49,20 @@
     ])->map(fn (string $url): string => rtrim($url, '/'))->all();
     $mobileSkipMenuItem = fn ($item): bool => $menuHasDestination($item)
         && in_array(rtrim($menuUrl($item), '/'), $mobileStandaloneMenuUrls, true);
+    $menuBadgeCount = function ($item) use ($menuHasDestination, $menuUrl, $path, $userOrderNoticeCount, $supportUnreadMessageCount, $userCenterNoticeCount): int {
+        if (! auth()->check() || ! $menuHasDestination($item)) {
+            return 0;
+        }
+
+        $url = rtrim($menuUrl($item), '/');
+
+        return match ($url) {
+            rtrim($path('orders.index'), '/') => $userOrderNoticeCount,
+            rtrim($path('support.index'), '/') => $supportUnreadMessageCount,
+            rtrim($path('user.center'), '/') => $userCenterNoticeCount,
+            default => 0,
+        };
+    };
     $cartCount = $cartItemCount ?? 0;
     $cartSubtotal = $cartSubtotalCents ?? 0;
     $hideFloatingCart = request()->routeIs('forum.*');
@@ -99,7 +120,12 @@
             <div class="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 px-4 py-2">
                 <p>{{ $siteSettings?->welcome_message ?: '欢迎来到 '.$storeName }}</p>
                 <nav class="flex flex-wrap items-center gap-x-4 gap-y-2">
-                    <a class="hover:text-blue-700" href="{{ $path('support.index') }}">客服</a>
+                    <a class="relative inline-flex items-center hover:text-blue-700" href="{{ $path('support.index') }}">
+                        客服
+                        @if($supportUnreadMessageCount > 0)
+                            <span class="ml-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-semibold leading-none text-white">{{ $badgeLabel($supportUnreadMessageCount) }}</span>
+                        @endif
+                    </a>
                     <a class="hover:text-blue-700" href="{{ $path('support.demands') }}">工单</a>
                     @auth
                         <a class="relative inline-flex items-center hover:text-blue-700" href="{{ $path('announcements.index') }}" title="公告">
@@ -112,7 +138,12 @@
                         <a class="hover:text-blue-700" href="{{ $path('announcements.index') }}">公告</a>
                     @endauth
                     @auth
-                        <a class="hover:text-blue-700" href="{{ $path('user.center') }}">用户中心</a>
+                        <a class="relative inline-flex items-center hover:text-blue-700" href="{{ $path('user.center') }}">
+                            用户中心
+                            @if($userCenterNoticeCount > 0)
+                                <span class="ml-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-semibold leading-none text-white">{{ $badgeLabel($userCenterNoticeCount) }}</span>
+                            @endif
+                        </a>
                         <form method="post" action="{{ $path('logout') }}">
                             @csrf
                             <button class="hover:text-blue-700" type="submit">退出</button>
@@ -169,6 +200,7 @@
             <div class="mx-auto hidden max-w-7xl flex-wrap px-4 md:flex">
                 @foreach($topNavItems as $menuItem)
                     @php($children = $menuChildren($menuItem))
+                    @php($badgeCount = $menuBadgeCount($menuItem))
                     @continue(! $menuVisible($menuItem))
                     <div class="group relative">
                         @if($menuHasDestination($menuItem))
@@ -178,11 +210,21 @@
                                 @if($menuTooltip($menuItem)) title="{{ $menuTooltip($menuItem) }}" @endif
                                 @if($menuTarget($menuItem)) target="{{ $menuTarget($menuItem) }}" rel="noopener noreferrer" @endif
                             >
-                                {{ $menuLabel($menuItem) }}
+                                <span class="inline-flex items-center gap-1">
+                                    {{ $menuLabel($menuItem) }}
+                                    @if($badgeCount > 0)
+                                        <span class="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-semibold leading-none text-white">{{ $badgeLabel($badgeCount) }}</span>
+                                    @endif
+                                </span>
                             </a>
                         @else
                             <button class="block px-4 py-3 text-left hover:bg-blue-900" type="button" aria-haspopup="true">
-                                {{ $menuLabel($menuItem) }}
+                                <span class="inline-flex items-center gap-1">
+                                    {{ $menuLabel($menuItem) }}
+                                    @if($badgeCount > 0)
+                                        <span class="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-semibold leading-none text-white">{{ $badgeLabel($badgeCount) }}</span>
+                                    @endif
+                                </span>
                             </button>
                         @endif
                         @if($children->isNotEmpty())
@@ -191,6 +233,7 @@
                                     <span class="block border-b border-slate-100 px-4 py-2 text-xs text-slate-500">请选择下方子菜单</span>
                                 @endif
                                 @foreach($children as $child)
+                                    @php($childBadgeCount = $menuBadgeCount($child))
                                     @continue(! $menuVisible($child))
                                     @if($menuHasDestination($child))
                                         <a
@@ -199,7 +242,12 @@
                                             @if($menuTooltip($child)) title="{{ $menuTooltip($child) }}" @endif
                                             @if($menuTarget($child)) target="{{ $menuTarget($child) }}" rel="noopener noreferrer" @endif
                                         >
-                                            {{ $menuLabel($child) }}
+                                            <span class="inline-flex w-full items-center justify-between gap-3">
+                                                <span class="truncate">{{ $menuLabel($child) }}</span>
+                                                @if($childBadgeCount > 0)
+                                                    <span class="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-semibold leading-none text-white">{{ $badgeLabel($childBadgeCount) }}</span>
+                                                @endif
+                                            </span>
                                         </a>
                                     @else
                                         <span class="block max-w-[18rem] truncate px-4 py-2 text-sm text-slate-500">{{ $menuLabel($child) }}</span>
@@ -233,15 +281,27 @@
                         </div>
                     </details>
                     <details class="rounded-sm border border-slate-200 bg-white">
-                        <summary class="cursor-pointer px-3 py-2 font-medium">用户中心</summary>
+                        <summary class="cursor-pointer px-3 py-2 font-medium">
+                            <span class="inline-flex items-center gap-2">
+                                用户中心
+                                @if($userCenterNoticeCount > 0)
+                                    <span class="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-semibold leading-none text-white">{{ $badgeLabel($userCenterNoticeCount) }}</span>
+                                @endif
+                            </span>
+                        </summary>
                         <div class="border-t border-slate-100 py-1">
                             @auth
                                 <a class="block px-5 py-2 hover:bg-blue-50 hover:text-blue-800" href="{{ $path('user.center') }}">个人信息</a>
-                                <a class="block px-5 py-2 hover:bg-blue-50 hover:text-blue-800" href="{{ $path('orders.index') }}">我的订单</a>
+                                <a class="relative block px-5 py-2 pr-12 hover:bg-blue-50 hover:text-blue-800" href="{{ $path('orders.index') }}">
+                                    我的订单
+                                    @if($userOrderNoticeCount > 0)
+                                        <span class="absolute right-5 top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-semibold leading-none text-white">{{ $badgeLabel($userOrderNoticeCount) }}</span>
+                                    @endif
+                                </a>
                                 <a class="relative block px-5 py-2 pr-12 hover:bg-blue-50 hover:text-blue-800" href="{{ $path('user.section', 'chat') }}">
                                     聊天
-                                    @if(($privateUnreadMessageCount ?? 0) > 0)
-                                        <span class="absolute right-5 top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-semibold leading-none text-white">{{ (int) $privateUnreadMessageCount > 99 ? '99+' : (int) $privateUnreadMessageCount }}</span>
+                                    @if($privateUnreadMessageCount > 0)
+                                        <span class="absolute right-5 top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-semibold leading-none text-white">{{ $badgeLabel($privateUnreadMessageCount) }}</span>
                                     @endif
                                 </a>
                                 <a class="block px-5 py-2 hover:bg-blue-50 hover:text-blue-800" href="{{ $path('user.section', 'wishlists') }}">愿望单</a>
@@ -284,9 +344,21 @@
                         </div>
                     </details>
                     <details class="rounded-sm border border-slate-200 bg-white">
-                        <summary class="cursor-pointer px-3 py-2 font-medium">客服会话</summary>
+                        <summary class="cursor-pointer px-3 py-2 font-medium">
+                            <span class="inline-flex items-center gap-2">
+                                客服会话
+                                @if($supportUnreadMessageCount > 0)
+                                    <span class="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-semibold leading-none text-white">{{ $badgeLabel($supportUnreadMessageCount) }}</span>
+                                @endif
+                            </span>
+                        </summary>
                         <div class="border-t border-slate-100 py-1">
-                            <a class="block px-5 py-2 hover:bg-blue-50 hover:text-blue-800" href="{{ $path('support.index') }}">即时会话</a>
+                            <a class="relative block px-5 py-2 pr-12 hover:bg-blue-50 hover:text-blue-800" href="{{ $path('support.index') }}">
+                                即时会话
+                                @if($supportUnreadMessageCount > 0)
+                                    <span class="absolute right-5 top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-semibold leading-none text-white">{{ $badgeLabel($supportUnreadMessageCount) }}</span>
+                                @endif
+                            </a>
                             <a class="block px-5 py-2 hover:bg-blue-50 hover:text-blue-800" href="{{ $path('support.demands') }}">提交工单</a>
                         </div>
                     </details>
@@ -294,7 +366,12 @@
                         <summary class="cursor-pointer px-3 py-2 font-medium">客服工单</summary>
                         <div class="border-t border-slate-100 py-1">
                             <a class="block px-5 py-2 hover:bg-blue-50 hover:text-blue-800" href="{{ $path('support.demands') }}">工单列表</a>
-                            <a class="block px-5 py-2 hover:bg-blue-50 hover:text-blue-800" href="{{ $path('support.index') }}">转到会话</a>
+                            <a class="relative block px-5 py-2 pr-12 hover:bg-blue-50 hover:text-blue-800" href="{{ $path('support.index') }}">
+                                转到会话
+                                @if($supportUnreadMessageCount > 0)
+                                    <span class="absolute right-5 top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-semibold leading-none text-white">{{ $badgeLabel($supportUnreadMessageCount) }}</span>
+                                @endif
+                            </a>
                         </div>
                     </details>
                     <details class="rounded-sm border border-slate-200 bg-white">
@@ -394,18 +471,33 @@
                     </section>
 
                     <section class="rounded-sm border border-slate-300 bg-white">
-                        <h2 class="border-b border-slate-200 bg-slate-100 px-3 py-2 text-sm font-semibold">用户中心</h2>
+                        <h2 class="flex items-center justify-between gap-2 border-b border-slate-200 bg-slate-100 px-3 py-2 text-sm font-semibold">
+                            <span>用户中心</span>
+                            @if($userCenterNoticeCount > 0)
+                                <span class="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-semibold leading-none text-white">{{ $badgeLabel($userCenterNoticeCount) }}</span>
+                            @endif
+                        </h2>
                         <nav class="divide-y divide-slate-100 text-sm">
                             @auth
                                 <a class="block px-3 py-2 hover:bg-blue-50 hover:text-blue-800" href="{{ $path('user.center') }}">个人信息</a>
-                                <a class="block px-3 py-2 hover:bg-blue-50 hover:text-blue-800" href="{{ $path('orders.index') }}">我的订单</a>
-                                <a class="relative block px-3 py-2 pr-12 hover:bg-blue-50 hover:text-blue-800" href="{{ $path('user.section', 'chat') }}">
-                                    聊天
-                                    @if(($privateUnreadMessageCount ?? 0) > 0)
-                                        <span class="absolute right-3 top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-semibold leading-none text-white">{{ (int) $privateUnreadMessageCount > 99 ? '99+' : (int) $privateUnreadMessageCount }}</span>
+                                <a class="relative block px-3 py-2 pr-12 hover:bg-blue-50 hover:text-blue-800" href="{{ $path('orders.index') }}">
+                                    我的订单
+                                    @if($userOrderNoticeCount > 0)
+                                        <span class="absolute right-3 top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-semibold leading-none text-white">{{ $badgeLabel($userOrderNoticeCount) }}</span>
                                     @endif
                                 </a>
-                                <a class="block px-3 py-2 hover:bg-blue-50 hover:text-blue-800" href="{{ $path('support.index') }}">客服会话</a>
+                                <a class="relative block px-3 py-2 pr-12 hover:bg-blue-50 hover:text-blue-800" href="{{ $path('user.section', 'chat') }}">
+                                    聊天
+                                    @if($privateUnreadMessageCount > 0)
+                                        <span class="absolute right-3 top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-semibold leading-none text-white">{{ $badgeLabel($privateUnreadMessageCount) }}</span>
+                                    @endif
+                                </a>
+                                <a class="relative block px-3 py-2 pr-12 hover:bg-blue-50 hover:text-blue-800" href="{{ $path('support.index') }}">
+                                    客服会话
+                                    @if($supportUnreadMessageCount > 0)
+                                        <span class="absolute right-3 top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-semibold leading-none text-white">{{ $badgeLabel($supportUnreadMessageCount) }}</span>
+                                    @endif
+                                </a>
                                 <a class="block px-3 py-2 hover:bg-blue-50 hover:text-blue-800" href="{{ $path('support.demands') }}">客服工单</a>
                             @else
                                 <a class="block px-3 py-2 hover:bg-blue-50 hover:text-blue-800" href="{{ $path('login') }}">登录</a>

@@ -30,11 +30,25 @@
                                 <td class="px-4 py-3 font-medium">{{ $privacy->displayOrderNumber($order, auth()->user(), $settings) }}</td>
                                 <td class="px-4 py-3 text-slate-600">{{ $order->created_at->format('Y-m-d H:i') }}</td>
                                 <td class="px-4 py-3 text-right font-medium">@money($order->total_cents)</td>
-                                <td class="px-4 py-3">{{ $statusPresenter->label($order->status) }}</td>
+                                <td class="px-4 py-3">
+                                    <p>{{ $statusPresenter->label($order->status) }}</p>
+                                    @if($order->hasDigitalDelivery() && $order->status === \App\Models\Order::STATUS_AWAITING_RECEIPT)
+                                        <p class="mt-1 text-xs text-emerald-700">线上交付已发放，请进入订单详情领取。</p>
+                                    @endif
+                                </td>
                                 <td class="px-4 py-3">{{ $order->userPaymentLabel() }}</td>
                                 <td class="px-4 py-3 text-right">
                                     <div class="flex flex-wrap justify-end gap-2">
                                         <a href="{{ route('orders.show', $order) }}" class="rounded-sm border border-blue-700 bg-blue-700 px-3 py-2 text-xs font-medium text-white hover:bg-blue-800">查看</a>
+                                        @if($order->hasDigitalDelivery() && $order->status === \App\Models\Order::STATUS_AWAITING_RECEIPT)
+                                            <a href="{{ route('orders.show', $order) }}#digital-delivery" class="rounded-sm border border-emerald-700 bg-emerald-700 px-3 py-2 text-xs font-medium text-white hover:bg-emerald-800">领取线上交付</a>
+                                        @endif
+                                        @if($order->status === \App\Models\Order::STATUS_AWAITING_RECEIPT)
+                                            <form method="post" action="{{ route('orders.confirm-receipt', $order) }}">
+                                                @csrf
+                                                <button class="rounded-sm border border-emerald-700 px-3 py-2 text-xs font-medium text-emerald-800 hover:bg-emerald-50" type="submit">确认收货</button>
+                                            </form>
+                                        @endif
                                         <a href="{{ route('orders.after-sales', $order) }}" class="rounded-sm border border-slate-300 px-3 py-2 text-xs font-medium hover:bg-slate-50">售后</a>
                                         <form method="post" action="{{ route('orders.contact-support', $order) }}">
                                             @csrf

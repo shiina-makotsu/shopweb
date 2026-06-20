@@ -56,6 +56,32 @@ class SupportChatService
         ]);
     }
 
+    public function startForUser(User $customer, User $admin, string $message): SupportChatSession
+    {
+        $session = SupportChatSession::query()
+            ->where('user_id', $customer->id)
+            ->whereIn('status', [SupportChatSession::STATUS_OPEN, SupportChatSession::STATUS_ACTIVE, SupportChatSession::STATUS_ENDED])
+            ->whereNull('deleted_by_customer_at')
+            ->latest('last_message_at')
+            ->first();
+
+        if (! $session) {
+            $session = SupportChatSession::query()->create([
+                'user_id' => $customer->id,
+                'assigned_admin_id' => $admin->id,
+                'status' => SupportChatSession::STATUS_ACTIVE,
+                'last_message_at' => now(),
+            ]);
+        }
+
+        $this->assign($session, $admin);
+        $session->refresh();
+
+        $this->reply($session, $admin, $message);
+
+        return $session->fresh();
+    }
+
     public function applyQuickReplyRules(SupportChatSession $session, string $message): ?SupportQuickReply
     {
         $message = trim($message);

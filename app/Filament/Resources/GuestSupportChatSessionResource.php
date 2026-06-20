@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\GuestSupportChatSessionResource\Pages\EditGuestSupportChatSession;
 use App\Filament\Resources\GuestSupportChatSessionResource\Pages\ListGuestSupportChatSessions;
+use App\Models\SupportChatMessage;
 use App\Models\SupportChatSession;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Builder;
@@ -30,12 +31,12 @@ class GuestSupportChatSessionResource extends SupportChatSessionResource
         $count = SupportChatSession::query()
             ->whereNull('user_id')
             ->whereNotNull('guest_id')
-            ->where('status', SupportChatSession::STATUS_OPEN)
-            ->whereNull('assigned_admin_id')
-            ->whereHas('messages')
+            ->whereHas('messages', fn (Builder $query): Builder => $query
+                ->whereIn('sender_type', [SupportChatMessage::SENDER_CUSTOMER, SupportChatMessage::SENDER_GUEST])
+                ->whereNull('read_at'))
             ->count();
 
-        return $count > 0 ? (string) $count : null;
+        return $count > 0 ? ($count > 99 ? '99+' : (string) $count) : null;
     }
 
     public static function getNavigationBadgeColor(): string|array|null

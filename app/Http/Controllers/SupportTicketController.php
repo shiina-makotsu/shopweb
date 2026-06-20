@@ -9,6 +9,7 @@ use App\Models\SupportChatMessage;
 use App\Models\SupportChatSession;
 use App\Models\SupportTicket;
 use App\Services\SupportChatService;
+use App\Services\SupportNotificationService;
 use App\Support\Money;
 use App\Support\OrderStatusPresenter;
 use Illuminate\Database\Eloquent\Builder;
@@ -43,7 +44,8 @@ class SupportTicketController extends Controller
         $session = $this->createSession($request, $order);
 
         if ($product) {
-            $this->sendProductContextMessage($request, $session, $product);
+            $message = $this->sendProductContextMessage($request, $session, $product);
+            app(SupportNotificationService::class)->notifyPendingMessage($session->fresh(), $message);
         }
 
         return redirect()
@@ -77,7 +79,7 @@ class SupportTicketController extends Controller
         return back()->with('status', '客服工单已提交，后台客服会在处理后显示回复。');
     }
 
-    public function sendMessage(Request $request, SupportChatService $chat): RedirectResponse
+    public function sendMessage(Request $request, SupportChatService $chat, SupportNotificationService $notifications): RedirectResponse
     {
         $data = $request->validate([
             'message' => ['nullable', 'string', 'max:3000'],
@@ -116,7 +118,7 @@ class SupportTicketController extends Controller
 
         $attachment = $this->storeAttachment($request, $session);
 
-        $session->messages()->create([
+        $message = $session->messages()->create([
             'sender_user_id' => $request->user()?->id,
             'sender_type' => $request->user() ? SupportChatMessage::SENDER_CUSTOMER : SupportChatMessage::SENDER_GUEST,
             'body' => $body,
@@ -132,6 +134,8 @@ class SupportTicketController extends Controller
             'last_message_at' => now(),
             'deleted_by_customer_at' => null,
         ]);
+
+        $notifications->notifyPendingMessage($session->fresh(), $message);
 
         return redirect()
             ->route('support.sessions.show', $session)
@@ -332,11 +336,11 @@ class SupportTicketController extends Controller
         ]);
     }
 
-    private function sendProductContextMessage(Request $request, SupportChatSession $session, Product $product): void
+    private function sendProductContextMessage(Request $request, SupportChatSession $session, Product $product): SupportChatMessage
     {
         $product->loadMissing('variants');
 
-        $session->messages()->create([
+        $message = $session->messages()->create([
             'sender_user_id' => $request->user()?->id,
             'sender_type' => $request->user() ? SupportChatMessage::SENDER_CUSTOMER : SupportChatMessage::SENDER_GUEST,
             'body' => $this->productMessage($product),
@@ -346,6 +350,8 @@ class SupportTicketController extends Controller
             'status' => SupportChatSession::STATUS_OPEN,
             'last_message_at' => now(),
         ]);
+
+        return $message;
     }
 
     private function visibleSessions(Request $request): Builder

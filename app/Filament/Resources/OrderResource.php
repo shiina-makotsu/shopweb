@@ -50,6 +50,21 @@ class OrderResource extends Resource
         return false;
     }
 
+    public static function getNavigationBadge(): ?string
+    {
+        $count = Order::query()
+            ->where('payment_status', Order::PAYMENT_SUBMITTED)
+            ->where('status', '!=', Order::STATUS_CANCELLED)
+            ->count();
+
+        return $count > 0 ? ($count > 99 ? '99+' : (string) $count) : null;
+    }
+
+    public static function getNavigationBadgeColor(): string|array|null
+    {
+        return 'danger';
+    }
+
     public static function form(Schema $schema): Schema
     {
         return $schema->components([
@@ -95,6 +110,36 @@ class OrderResource extends Resource
                     ->content(fn (?Order $record): HtmlString => static::orderItemsHtml($record))
                     ->columnSpanFull(),
             ])->columnSpanFull(),
+            Section::make('线上交付内容')->schema([
+                Textarea::make('digital_delivery_content')
+                    ->label('线上交付内容')
+                    ->rows(5)
+                    ->helperText('保存后会重新记录线上交付发送时间；用户仍需主动点击确认收货，订单才会完成。')
+                    ->columnSpanFull(),
+                TextInput::make('digital_delivery_code')
+                    ->label('兑换码/序列号')
+                    ->maxLength(255),
+                Placeholder::make('digital_delivery_state')
+                    ->label('交付状态')
+                    ->content(fn (?Order $record): string => $record
+                        ? collect([
+                            $record->digital_delivery_sent_at ? '已发送：'.$record->digital_delivery_sent_at->format('Y-m-d H:i') : null,
+                            $record->digital_delivery_viewed_at ? '用户已查看：'.$record->digital_delivery_viewed_at->format('Y-m-d H:i') : null,
+                            $record->digital_delivery_completed_at ? '用户已确认：'.$record->digital_delivery_completed_at->format('Y-m-d H:i') : null,
+                        ])->filter()->implode(' / ') ?: '尚未发送'
+                        : '保存订单后显示'),
+                FileUpload::make('digital_delivery_attachment_paths')
+                    ->label('线上交付附件')
+                    ->disk('digital_deliveries')
+                    ->directory(fn (?Order $record): string => $record?->order_number ?: 'orders')
+                    ->multiple()
+                    ->maxSize(20480)
+                    ->preserveFilenames()
+                    ->downloadable()
+                    ->openable()
+                    ->helperText('可继续添加或替换线上交付附件。')
+                    ->columnSpanFull(),
+            ])->columns(2)->columnSpanFull(),
             Section::make('客户信息')->schema([
                 TextInput::make('contact_name')->label('联系人')->required()->maxLength(255),
                 TextInput::make('contact_phone')->label('电话')->required()->maxLength(255),
@@ -109,12 +154,6 @@ class OrderResource extends Resource
                 Select::make('shipping_carrier_id')->label('物流承运商')->relationship('shippingCarrier', 'name')->searchable()->preload(),
                 TextInput::make('tracking_number')->label('物流单号')->maxLength(255),
                 TextInput::make('tracking_url')->label('物流查询链接')->maxLength(500)->columnSpanFull(),
-                Textarea::make('digital_delivery_content')->label('线上交付内容')->rows(4)->columnSpanFull(),
-                TextInput::make('digital_delivery_code')->label('兑换码/序列号')->maxLength(255),
-                Placeholder::make('digital_delivery_files')
-                    ->label('线上交付附件')
-                    ->content(fn (?Order $record): string => implode("\n", $record?->digital_delivery_attachment_paths ?: []) ?: '暂无附件')
-                    ->columnSpanFull(),
                 Textarea::make('customer_note')->label('客户备注')->disabled()->rows(3)->columnSpanFull(),
                 Textarea::make('admin_note')->label('后台备注')->rows(4)->columnSpanFull(),
             ])->columns(2)->columnSpanFull(),
@@ -450,7 +489,7 @@ class OrderResource extends Resource
                             ->multiple()
                             ->maxSize(20480)
                             ->preserveFilenames()
-                            ->helperText('可上传图片或文件。用户下载附件后订单会自动完成。'),
+                            ->helperText('可上传图片或文件。用户下载附件只会记录查看时间，仍需主动确认收货。'),
                     ])
                     ->visible(fn (Order $record): bool => in_array($record->status, [Order::STATUS_PAID, Order::STATUS_PENDING_SHIPMENT, Order::STATUS_INCOMING], true))
                     ->action(fn (Order $record, array $data) => app(OrderService::class)->ship($record, $data, auth()->user())),

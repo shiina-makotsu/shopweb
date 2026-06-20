@@ -37,8 +37,8 @@ class OrderController extends Controller
         $this->authorizeVisibleOrder($request, $order);
         $settings = SiteSetting::query()->first();
 
-        if ($order->hasDigitalDelivery() && blank($order->digital_delivery_code) && empty($order->digital_delivery_attachment_paths)) {
-            app(OrderService::class)->markDigitalDeliveryAccessed($order, $request->user());
+        if ($order->hasDigitalDelivery()) {
+            app(OrderService::class)->markDigitalDeliveryViewed($order, $request->user());
         }
 
         return view('orders.show', [
@@ -178,9 +178,9 @@ class OrderController extends Controller
     public function markDigitalCopied(Request $request, Order $order, OrderService $orders): RedirectResponse
     {
         $this->authorizeVisibleOrder($request, $order);
-        $orders->markDigitalDeliveryAccessed($order, $request->user());
+        $orders->markDigitalDeliveryViewed($order, $request->user());
 
-        return back()->with('status', '交付内容已确认，订单已完成。');
+        return back()->with('status', '交付内容已复制，请确认检查无误后点击确认收货。');
     }
 
     public function downloadDigitalAttachment(Request $request, Order $order, int $index, OrderService $orders): StreamedResponse
@@ -192,7 +192,7 @@ class OrderController extends Controller
 
         abort_unless(is_string($path) && Storage::disk('digital_deliveries')->exists($path), 404);
 
-        $orders->markDigitalDeliveryAccessed($order, $request->user());
+        $orders->markDigitalDeliveryViewed($order, $request->user());
 
         return Storage::disk('digital_deliveries')->download($path, basename($path));
     }

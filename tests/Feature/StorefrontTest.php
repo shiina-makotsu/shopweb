@@ -2384,7 +2384,7 @@ it('renders friend links from the homepage and friend link listing', function ()
         ->assertSee('一个友情链接。');
 });
 
-it('lets customers complete online delivery orders by copying codes or downloading attachments', function (): void {
+it('requires explicit receipt confirmation for online delivery orders', function (): void {
     Storage::fake('digital_deliveries');
 
     $user = User::factory()->create(['role' => 'customer']);
@@ -2409,25 +2409,35 @@ it('lets customers complete online delivery orders by copying codes or downloadi
         ->get(route('orders.show', $order))
         ->assertOk()
         ->assertSee('线上交付内容')
-        ->assertSee('CODE-123');
+        ->assertSee('CODE-123')
+        ->assertSee('确认收货并完成订单');
 
     $this->actingAs($user)
         ->post(route('orders.digital-delivery.copied', $order))
         ->assertRedirect();
 
-    expect($order->fresh()->status)->toBe(Order::STATUS_FULFILLED);
+    $order->refresh();
 
-    $order->update([
-        'status' => Order::STATUS_AWAITING_RECEIPT,
-        'digital_delivery_completed_at' => null,
-        'fulfilled_at' => null,
-    ]);
+    expect($order->status)->toBe(Order::STATUS_AWAITING_RECEIPT)
+        ->and($order->digital_delivery_viewed_at)->not->toBeNull()
+        ->and($order->digital_delivery_completed_at)->toBeNull()
+        ->and($order->fulfilled_at)->toBeNull();
 
     $this->actingAs($user)
         ->get(route('orders.digital-delivery.download', [$order, 0]))
         ->assertOk();
 
-    expect($order->fresh()->status)->toBe(Order::STATUS_FULFILLED);
+    expect($order->fresh()->status)->toBe(Order::STATUS_AWAITING_RECEIPT);
+
+    $this->actingAs($user)
+        ->post(route('orders.confirm-receipt', $order))
+        ->assertRedirect();
+
+    $order->refresh();
+
+    expect($order->status)->toBe(Order::STATUS_FULFILLED)
+        ->and($order->digital_delivery_completed_at)->not->toBeNull()
+        ->and($order->fulfilled_at)->not->toBeNull();
 });
 
 it('shows the next flash sale time when a flash sale has not started yet', function (): void {
