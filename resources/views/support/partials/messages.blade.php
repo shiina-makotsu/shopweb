@@ -33,9 +33,22 @@
         $senderName = $isAdmin
             ? ($message->sender?->displayName() ?? '客服')
             : ($session->user?->displayName() ?? $session->guest_id ?? '客户');
+        $avatarUser = $isAdmin ? $message->sender : $session->user;
+        $avatarUrl = $avatarUser?->getFilamentAvatarUrl();
+        $avatarInitial = Str::upper(Str::substr($senderName, 0, 1));
     @endphp
 
-    <article class="flex {{ $isMine ? 'justify-end' : 'justify-start' }}" data-chat-message="{{ $message->id }}" data-chat-search-text="{{ e(Str::lower((string) $message->body.' '.$senderName)) }}">
+    <article class="flex items-start gap-2 {{ $isMine ? 'justify-end' : 'justify-start' }}" data-chat-message="{{ $message->id }}" data-chat-search-text="{{ e(Str::lower((string) $message->body.' '.$senderName)) }}">
+        @unless($isMine)
+            <div class="mt-1 h-9 w-9 shrink-0 overflow-hidden rounded-full border {{ $dark ? 'border-gray-700 bg-gray-800 text-gray-300' : 'border-slate-200 bg-slate-100 text-slate-500' }} text-xs font-semibold">
+                @if($avatarUrl)
+                    <img class="h-full w-full object-cover" src="{{ $avatarUrl }}" alt="{{ $senderName }}">
+                @else
+                    <span class="flex h-full w-full items-center justify-center">{{ $avatarInitial }}</span>
+                @endif
+            </div>
+        @endunless
+
         <div class="max-w-[84%] rounded-sm border px-3 py-2 text-sm shadow-sm {{ $isMine ? 'border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950' : ($dark ? 'border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900' : 'border-slate-200 bg-white') }}">
             <p class="text-xs {{ $dark ? 'text-gray-500' : 'text-slate-500' }}">
                 {{ $isMine ? '我' : $senderName }}

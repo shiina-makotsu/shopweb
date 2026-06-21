@@ -65,7 +65,7 @@
     };
     $cartCount = $cartItemCount ?? 0;
     $cartSubtotal = $cartSubtotalCents ?? 0;
-    $hideFloatingCart = request()->routeIs('forum.*');
+    $hideFloatingCart = request()->routeIs('forum.*', 'ai-image.index');
     $appearance = $siteSettings?->appearance() ?? [
         'theme_template' => 'default',
         'primary_color' => '#2D9CDB',

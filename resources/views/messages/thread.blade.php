@@ -12,35 +12,55 @@
                 </label>
             </div>
         </div>
+
         <div class="flex-1 space-y-3 overflow-y-auto bg-slate-50 px-4 py-4" data-private-messages>
             @forelse($messages as $message)
+                @php
+                    $isMine = $message->sender_id === auth()->id();
+                    $otherAvatarUrl = $otherUser->getFilamentAvatarUrl();
+                    $otherInitial = \Illuminate\Support\Str::upper(\Illuminate\Support\Str::substr($otherUser->displayName(), 0, 1));
+                @endphp
+
                 <div
-                    class="max-w-2xl rounded-sm border px-3 py-2 text-sm shadow-sm {{ $message->sender_id === auth()->id() ? 'ml-auto border-blue-200 bg-blue-50' : 'border-slate-200 bg-white' }}"
+                    class="flex items-start gap-2 {{ $isMine ? 'justify-end' : 'justify-start' }}"
                     data-private-message
                     data-private-search-text="{{ e(\Illuminate\Support\Str::lower((string) $message->body.' '.$message->attachment_original_name)) }}"
                 >
-                    <p class="text-xs text-slate-500">{{ $message->sender_id === auth()->id() ? '我' : $otherUser->displayName() }} / {{ $message->created_at->format('Y-m-d H:i') }}</p>
-                    @if($message->body !== null && $message->body !== '')
-                        <p class="mt-1 whitespace-pre-line text-slate-800">{{ $message->body }}</p>
-                    @endif
-                    @if($message->hasAttachment())
-                        <div class="mt-2">
-                            @if($message->isImage())
-                                <a href="{{ \App\Support\Url::route('messages.attachment', $message) }}" target="_blank" rel="noopener">
-                                    <img class="max-h-64 rounded-sm border border-slate-200 object-contain" src="{{ \App\Support\Url::route('messages.attachment', $message) }}" alt="{{ $message->attachment_original_name }}">
-                                </a>
+                    @unless($isMine)
+                        <div class="mt-1 h-9 w-9 shrink-0 overflow-hidden rounded-full border border-slate-200 bg-slate-100 text-xs font-semibold text-slate-500">
+                            @if($otherAvatarUrl)
+                                <img class="h-full w-full object-cover" src="{{ $otherAvatarUrl }}" alt="{{ $otherUser->displayName() }}">
                             @else
-                                <a class="inline-flex rounded-sm border border-slate-300 bg-white px-3 py-2 text-xs font-medium hover:bg-slate-50" href="{{ \App\Support\Url::route('messages.attachment', $message) }}">
-                                    下载附件：{{ $message->attachment_original_name }}
-                                </a>
+                                <span class="flex h-full w-full items-center justify-center">{{ $otherInitial }}</span>
                             @endif
                         </div>
-                    @endif
+                    @endunless
+
+                    <div class="max-w-2xl rounded-sm border px-3 py-2 text-sm shadow-sm {{ $isMine ? 'border-blue-200 bg-blue-50' : 'border-slate-200 bg-white' }}">
+                        <p class="text-xs text-slate-500">{{ $isMine ? '我' : $otherUser->displayName() }} / {{ $message->created_at->format('Y-m-d H:i') }}</p>
+                        @if($message->body !== null && $message->body !== '')
+                            <p class="mt-1 whitespace-pre-line text-slate-800">{{ $message->body }}</p>
+                        @endif
+                        @if($message->hasAttachment())
+                            <div class="mt-2">
+                                @if($message->isImage())
+                                    <a href="{{ \App\Support\Url::route('messages.attachment', $message) }}" target="_blank" rel="noopener">
+                                        <img class="max-h-64 rounded-sm border border-slate-200 object-contain" src="{{ \App\Support\Url::route('messages.attachment', $message) }}" alt="{{ $message->attachment_original_name }}">
+                                    </a>
+                                @else
+                                    <a class="inline-flex rounded-sm border border-slate-300 bg-white px-3 py-2 text-xs font-medium hover:bg-slate-50" href="{{ \App\Support\Url::route('messages.attachment', $message) }}">
+                                        下载附件：{{ $message->attachment_original_name }}
+                                    </a>
+                                @endif
+                            </div>
+                        @endif
+                    </div>
                 </div>
             @empty
                 <p class="rounded-sm border border-dashed border-slate-300 bg-white px-4 py-10 text-center text-sm text-slate-600">还没有消息。</p>
             @endforelse
         </div>
+
         <form method="post" action="{{ route('messages.store', $otherUser) }}" enctype="multipart/form-data" class="border-t border-slate-200 bg-white px-4 py-4">
             @csrf
             <div class="flex items-end gap-2">

@@ -69,24 +69,36 @@
                 </div>
             </div>
 
-            <div class="hidden px-5 pb-44 pt-5" data-chat-view>
-                <div class="mx-auto grid min-h-[calc(100vh-260px)] max-w-6xl gap-4 lg:grid-cols-[16rem_1fr]">
-                    <aside class="rounded-3xl border border-zinc-200 bg-white p-3 shadow-sm lg:sticky lg:top-20 lg:self-start">
+            <div class="hidden px-3 pb-36 pt-4 sm:px-5 sm:pb-44 sm:pt-5" data-chat-view>
+                <div class="fixed inset-0 z-40 hidden bg-zinc-950/35 backdrop-blur-[1px] lg:hidden" data-chat-sidebar-backdrop></div>
+                <div class="mx-auto grid min-h-[calc(100vh-220px)] max-w-6xl gap-4 lg:min-h-[calc(100vh-260px)] lg:grid-cols-[16rem_1fr]">
+                    <aside class="fixed inset-y-0 left-0 z-50 w-72 max-w-[86vw] -translate-x-full overflow-y-auto border-r border-zinc-200 bg-white p-3 shadow-2xl transition-transform duration-200 lg:static lg:z-auto lg:w-auto lg:max-w-none lg:translate-x-0 lg:overflow-visible lg:rounded-3xl lg:border lg:shadow-sm lg:sticky lg:top-20 lg:self-start" data-chat-sidebar>
                         <div class="flex items-center justify-between gap-2 px-2 py-1">
                             <h2 class="text-sm font-semibold text-zinc-950">会话</h2>
-                            <button class="inline-flex h-9 w-9 items-center justify-center rounded-full bg-zinc-950 text-white hover:bg-zinc-800" type="button" data-chat-new title="新增会话" aria-label="新增会话">
-                                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="2"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
-                            </button>
+                            <div class="flex items-center gap-1">
+                                <button class="inline-flex h-9 w-9 items-center justify-center rounded-full bg-zinc-950 text-white hover:bg-zinc-800" type="button" data-chat-new title="新增会话" aria-label="新增会话">
+                                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="2"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+                                </button>
+                                <button class="inline-flex h-9 w-9 items-center justify-center rounded-full text-zinc-500 hover:bg-zinc-100 lg:hidden" type="button" data-chat-sidebar-close title="收起会话" aria-label="收起会话">
+                                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                                </button>
+                            </div>
                         </div>
                         <button class="mt-2 w-full rounded-2xl border border-zinc-200 px-3 py-2 text-xs font-medium text-zinc-600 hover:bg-zinc-50" type="button" data-chat-trash-toggle>回收站</button>
                         <div class="mt-3 space-y-2" data-chat-sessions></div>
                     </aside>
 
-                    <section class="flex min-h-[calc(100vh-260px)] flex-col rounded-3xl border border-zinc-200 bg-white shadow-sm">
-                        <div class="flex items-center justify-between gap-3 border-b border-zinc-100 px-5 py-4">
-                            <div class="min-w-0">
-                                <h2 class="truncate text-base font-semibold text-zinc-950" data-chat-title>新会话</h2>
-                                <p class="mt-1 text-xs text-zinc-500" data-chat-meta>0 条消息</p>
+                    <section class="flex min-h-[calc(100vh-220px)] flex-col rounded-3xl border border-zinc-200 bg-white shadow-sm lg:min-h-[calc(100vh-260px)]">
+                        <div class="flex items-center justify-between gap-3 border-b border-zinc-100 px-4 py-3 sm:px-5 sm:py-4">
+                            <div class="flex min-w-0 items-center gap-2">
+                                <button class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-zinc-200 text-zinc-600 hover:bg-zinc-50 lg:hidden" type="button" data-chat-sidebar-toggle title="会话列表" aria-label="会话列表">
+                                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="2"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h10"/></svg>
+                                </button>
+                                <div class="min-w-0">
+                                    <h2 class="truncate text-base font-semibold text-zinc-950" data-chat-title>新会话</h2>
+                                    <p class="mt-1 text-xs text-zinc-500" data-chat-meta>0 条消息</p>
+                                    <p class="mt-1 hidden text-xs text-blue-600" data-chat-status></p>
+                                </div>
                             </div>
                             <button class="inline-flex items-center gap-2 rounded-full border border-zinc-200 px-3 py-2 text-xs font-medium text-zinc-600 hover:bg-zinc-50" type="button" data-chat-delete>
                                 <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v5"/><path d="M14 11v5"/></svg>
@@ -103,14 +115,15 @@
                 </div>
             </div>
 
-            <div class="pointer-events-none fixed inset-x-0 bottom-4 z-40 px-4">
-                <div class="pointer-events-auto mx-auto max-w-6xl rounded-[28px] border border-zinc-200 bg-white/95 p-3 shadow-2xl shadow-zinc-950/10 backdrop-blur">
+            <div class="pointer-events-none fixed inset-x-0 bottom-2 z-40 px-2 sm:bottom-4 sm:px-4">
+                <div class="pointer-events-auto mx-auto max-w-6xl rounded-3xl border border-zinc-200 bg-white/95 p-2 shadow-2xl shadow-zinc-950/10 backdrop-blur sm:p-3" data-composer-panel>
                     <div class="mb-2 hidden max-h-16 items-center gap-2 overflow-x-auto pb-1 flex" data-reference-preview></div>
                     <div class="mb-2 hidden max-h-16 items-center gap-2 overflow-x-auto pb-1" data-chat-files-preview></div>
+                    <div class="mb-2 hidden space-y-1.5" data-chat-queue></div>
 
                     <div class="relative">
                         <textarea
-                            class="max-h-32 min-h-[42px] w-full resize-none rounded-2xl border border-zinc-200 bg-white px-4 py-2.5 pr-10 text-sm leading-5 text-zinc-900 outline-none placeholder:text-zinc-400 focus:border-zinc-300"
+                            class="max-h-32 min-h-[38px] w-full resize-none rounded-2xl border border-zinc-200 bg-white px-3 py-2 pr-10 text-sm leading-5 text-zinc-900 outline-none placeholder:text-zinc-400 focus:border-zinc-300 sm:min-h-[42px] sm:px-4 sm:py-2.5"
                             name="prompt"
                             placeholder="描述你想生成的图片..."
                             data-ai-prompt
@@ -196,14 +209,14 @@
                             </label>
                         </div>
 
-                        <div class="hidden flex-1 flex-wrap items-end gap-2" data-chat-controls>
-                            <button class="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-600 hover:bg-zinc-200" type="button" data-chat-files-button title="附加文件" aria-label="附加文件">
+                        <div class="hidden min-w-0 flex-1 items-end gap-1 overflow-x-auto whitespace-nowrap pb-0.5 sm:gap-2" data-chat-controls>
+                            <button class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-600 hover:bg-zinc-200 sm:h-10 sm:w-10" type="button" data-chat-files-button title="附加文件" aria-label="附加文件">
                                 <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="2"><path d="M21.4 11.6 12 21a6 6 0 0 1-8.5-8.5l10-10a4 4 0 1 1 5.7 5.7l-10 10a2 2 0 0 1-2.8-2.8l9.3-9.3"/></svg>
                             </button>
 
-                            <label class="min-w-32 flex-1 text-xs font-medium text-zinc-400 sm:flex-none">
-                                推理模式
-                                <select class="mt-1 h-9 w-full rounded-2xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-900" name="reasoning_mode" data-chat-reasoning>
+                            <label class="w-24 shrink-0 text-[11px] font-medium text-zinc-400 sm:w-32 sm:text-xs">
+                                推理
+                                <select class="mt-1 h-8 w-full rounded-2xl border border-zinc-200 bg-white px-2 text-sm font-medium text-zinc-900 sm:h-9 sm:px-3" name="reasoning_mode" data-chat-reasoning>
                                     <option value="low">低</option>
                                     <option value="medium">中</option>
                                     <option value="high">高</option>
@@ -211,7 +224,7 @@
                                 </select>
                             </label>
 
-                            <button class="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-400 transition hover:bg-zinc-200" type="button" data-chat-web-search aria-label="联网搜索" title="联网搜索" aria-pressed="false">
+                            <button class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-400 transition hover:bg-zinc-200 sm:h-10 sm:w-10" type="button" data-chat-web-search aria-label="联网搜索" title="联网搜索" aria-pressed="false">
                                 <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="2">
                                     <circle cx="12" cy="12" r="10"/>
                                     <path d="M2 12h20"/>
@@ -220,15 +233,15 @@
                                 </svg>
                             </button>
 
-                            <label class="ml-auto min-w-48 flex-1 text-xs font-medium text-zinc-400 sm:max-w-64 sm:flex-none">
+                            <label class="w-32 shrink-0 text-[11px] font-medium text-zinc-400 sm:w-56 sm:text-xs">
                                 模型
-                                <select class="mt-1 h-9 w-full rounded-2xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-900" name="chat_model" data-chat-model-select>
+                                <select class="mt-1 h-8 w-full rounded-2xl border border-zinc-200 bg-white px-2 text-sm font-medium text-zinc-900 sm:h-9 sm:px-3" name="chat_model" data-chat-model-select>
                                     <option value="">默认模型 gpt-5.5</option>
                                 </select>
                             </label>
                         </div>
 
-                        <button class="ml-auto inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-700 text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-zinc-200" type="button" data-generate-button title="生成" aria-label="生成">
+                        <button class="ml-auto inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-blue-700 text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-zinc-200 sm:h-10 sm:w-10" type="button" data-generate-button title="生成" aria-label="生成">
                             <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
                         </button>
                     </div>
@@ -539,6 +552,12 @@
                 const chatModelSelect = root.querySelector('[data-chat-model-select]');
                 const chatReasoning = root.querySelector('[data-chat-reasoning]');
                 const chatWebSearch = root.querySelector('[data-chat-web-search]');
+                const chatSidebar = root.querySelector('[data-chat-sidebar]');
+                const chatSidebarBackdrop = root.querySelector('[data-chat-sidebar-backdrop]');
+                const chatSidebarToggle = root.querySelector('[data-chat-sidebar-toggle]');
+                const chatSidebarClose = root.querySelector('[data-chat-sidebar-close]');
+                const chatStatus = root.querySelector('[data-chat-status]');
+                const chatQueuePanel = root.querySelector('[data-chat-queue]');
                 const csrf = form.querySelector('input[name="_token"]')?.value ?? document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '';
 
                 const defaultImageModel = 'gpt-image-2';
@@ -557,6 +576,8 @@
                 let webSearchEnabled = false;
                 let savedConfigs = [];
                 let showingChatTrash = false;
+                let chatBusy = false;
+                let chatQueue = [];
 
                 const urlFromTemplate = (template, placeholder, value) => String(template || '').replace(placeholder, encodeURIComponent(value));
                 const formData = () => new FormData(form);
@@ -568,6 +589,14 @@
                 const setStatus = (message, tone = 'zinc') => {
                     status.textContent = message;
                     status.className = `mt-3 text-xs ${tone === 'red' ? 'text-red-600' : tone === 'green' ? 'text-emerald-600' : 'text-zinc-500'}`;
+                };
+
+                const setChatStatus = (message = '', tone = 'blue') => {
+                    if (!chatStatus) return;
+
+                    chatStatus.textContent = message;
+                    chatStatus.className = `mt-1 text-xs ${tone === 'red' ? 'text-red-600' : tone === 'green' ? 'text-emerald-600' : 'text-blue-600'}`;
+                    chatStatus.classList.toggle('hidden', !message);
                 };
 
                 const activeModel = () => manualModel.value.trim() || modelSelect.value || (configMode.value === 'default' ? defaultImageModel : '');
@@ -586,9 +615,12 @@
                     referencePreview.classList.toggle('hidden', currentMode === 'chat' || referenceItems.length === 0);
                     chatFilesPreview.classList.toggle('hidden', currentMode !== 'chat' || chatFileItems.length === 0);
                     chatFilesPreview.classList.toggle('flex', currentMode === 'chat' && chatFileItems.length > 0);
+                    renderChatQueue();
                     promptInput.placeholder = currentMode === 'chat' ? '向 AI 发送消息...' : '描述你想生成的图片...';
                     generateButton.title = currentMode === 'chat' ? '发送' : '生成';
                     generateButton.setAttribute('aria-label', currentMode === 'chat' ? '发送' : '生成');
+                    if (currentMode !== 'chat') setChatStatus('');
+                    autoGrowPrompt();
 
                     root.querySelectorAll('[data-mode-button]').forEach((button) => {
                         const active = button.dataset.modeButton === currentMode;
@@ -621,6 +653,20 @@
                 root.querySelector('[data-settings-toggle]')?.addEventListener('click', openSettings);
                 root.querySelector('[data-settings-close]')?.addEventListener('click', closeSettings);
                 settingsBackdrop.addEventListener('click', closeSettings);
+
+                const openChatSidebar = () => {
+                    chatSidebar?.classList.remove('-translate-x-full');
+                    chatSidebarBackdrop?.classList.remove('hidden');
+                };
+
+                const closeChatSidebar = () => {
+                    chatSidebar?.classList.add('-translate-x-full');
+                    chatSidebarBackdrop?.classList.add('hidden');
+                };
+
+                chatSidebarToggle?.addEventListener('click', openChatSidebar);
+                chatSidebarClose?.addEventListener('click', closeChatSidebar);
+                chatSidebarBackdrop?.addEventListener('click', closeChatSidebar);
 
                 root.querySelector('[data-help-toggle]')?.addEventListener('click', () => {
                     helpPanel.classList.toggle('hidden');
@@ -891,7 +937,8 @@
 
                 const autoGrowPrompt = () => {
                     promptInput.style.height = 'auto';
-                    promptInput.style.height = `${Math.min(promptInput.scrollHeight, 128)}px`;
+                    const maxHeight = currentMode === 'chat' ? 56 : 128;
+                    promptInput.style.height = `${Math.min(promptInput.scrollHeight, maxHeight)}px`;
                     clearPromptButton?.classList.toggle('hidden', !promptInput.value.trim());
                     clearPromptButton?.classList.toggle('flex', Boolean(promptInput.value.trim()));
                 };
@@ -1087,6 +1134,78 @@
                     });
                 };
 
+                const renderChatQueue = () => {
+                    if (!chatQueuePanel) return;
+
+                    chatQueuePanel.innerHTML = '';
+                    const visible = currentMode === 'chat' && chatQueue.length > 0;
+                    chatQueuePanel.classList.toggle('hidden', !visible);
+
+                    if (!visible) return;
+
+                    chatQueue.forEach((item, index) => {
+                        const row = document.createElement('div');
+                        row.className = 'flex items-center gap-2 rounded-2xl border border-blue-100 bg-blue-50/90 px-3 py-2 text-xs text-blue-900';
+                        row.innerHTML = `
+                            <span class="shrink-0 rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-semibold text-white">队列 ${index + 1}</span>
+                            <span class="min-w-0 flex-1 truncate">${escapeHtml(item.message)}</span>
+                            ${item.files?.length ? `<span class="shrink-0 text-blue-500">${item.files.length} 个附件</span>` : ''}
+                            <button class="shrink-0 rounded-full border border-blue-200 bg-white px-2 py-1 font-medium text-blue-700 hover:bg-blue-100" type="button" data-chat-queue-guide="${item.id}">引导</button>
+                            <button class="shrink-0 rounded-full px-2 py-1 text-blue-400 hover:bg-blue-100 hover:text-blue-800" type="button" data-chat-queue-remove="${item.id}" aria-label="移除队列消息">x</button>
+                        `;
+                        chatQueuePanel.appendChild(row);
+                    });
+                };
+
+                const chatFilesSnapshot = () => chatFileItems.map((item) => ({
+                    file: item.file,
+                    url: item.url,
+                    name: item.file.name,
+                    size: item.file.size,
+                    type: item.file.type || 'file',
+                }));
+
+                const clearPromptAfterQueue = () => {
+                    promptInput.value = '';
+                    autoGrowPrompt();
+                    clearChatFiles({ revoke: false });
+                };
+
+                const buildQueuedChatItem = () => {
+                    const message = promptInput.value.trim();
+                    const payload = buildChatPayload();
+
+                    return {
+                        id: `queue-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+                        message,
+                        payload,
+                        files: chatFilesSnapshot(),
+                        model: selectedChatModel(),
+                        reasoning: chatReasoning.value,
+                        reasoningLabel: chatReasoningLabel(),
+                        queuedAt: new Date(),
+                    };
+                };
+
+                const processChatQueue = async () => {
+                    if (chatBusy || currentMode !== 'chat') return;
+                    const next = chatQueue.shift();
+                    renderChatQueue();
+                    if (!next) return;
+
+                    chatBusy = true;
+                    generateButton.disabled = false;
+
+                    try {
+                        await appendChatMessage(next.message, next.payload, next);
+                    } finally {
+                        chatBusy = false;
+                        if (chatQueue.length > 0) {
+                            window.setTimeout(processChatQueue, 120);
+                        }
+                    }
+                };
+
                 const clearChatFiles = ({ revoke = true } = {}) => {
                     if (revoke) {
                         chatFileItems.forEach((item) => {
@@ -1099,9 +1218,32 @@
                     renderChatFiles();
                 };
 
+                chatQueuePanel?.addEventListener('click', (event) => {
+                    const removeButton = event.target.closest('[data-chat-queue-remove]');
+                    if (removeButton) {
+                        chatQueue = chatQueue.filter((item) => item.id !== removeButton.dataset.chatQueueRemove);
+                        renderChatQueue();
+                        setChatStatus(chatQueue.length ? `还有 ${chatQueue.length} 条消息排队。` : '');
+                        return;
+                    }
+
+                    const guideButton = event.target.closest('[data-chat-queue-guide]');
+                    if (!guideButton) return;
+
+                    const index = chatQueue.findIndex((item) => item.id === guideButton.dataset.chatQueueGuide);
+                    if (index < 0) return;
+
+                    const [item] = chatQueue.splice(index, 1);
+                    chatQueue.unshift(item);
+                    renderChatQueue();
+                    setChatStatus(chatBusy ? '已将该消息设为下一条引导。' : '正在发送引导消息。', 'blue');
+                    processChatQueue();
+                });
+
                 root.querySelector('[data-chat-new]')?.addEventListener('click', () => {
                     showingChatTrash = false;
                     createChatSession('新会话', true);
+                    closeChatSidebar();
                     setStatus('已新增会话。', 'green');
                 });
                 root.querySelector('[data-chat-delete]')?.addEventListener('click', deleteActiveChat);
@@ -1119,6 +1261,7 @@
                     activeChatId = button.dataset.chatSession;
                     renderChatSessions();
                     renderChats();
+                    closeChatSidebar();
                 });
                 root.querySelector('[data-chat-files-button]')?.addEventListener('click', () => chatFilesInput.click());
                 chatFilesInput.addEventListener('change', () => {
@@ -1656,11 +1799,28 @@
 
                     try {
                         if (currentMode === 'chat') {
-                            generateButton.disabled = true;
-                            const chatPayload = buildChatPayload();
-                            await appendChatMessage(promptInput.value.trim(), chatPayload);
-                            promptInput.value = '';
-                            autoGrowPrompt();
+                            const queuedItem = buildQueuedChatItem();
+                            clearPromptAfterQueue();
+
+                            if (chatBusy) {
+                                chatQueue.push(queuedItem);
+                                renderChatQueue();
+                                setStatus(`AI 正在回复，已加入队列（${chatQueue.length} 条）。`, 'green');
+                                setChatStatus(`AI 正在回复，${chatQueue.length} 条消息排队中。`, 'blue');
+                                return;
+                            }
+
+                            chatBusy = true;
+
+                            try {
+                                await appendChatMessage(queuedItem.message, queuedItem.payload, queuedItem);
+                            } finally {
+                                chatBusy = false;
+                                if (chatQueue.length > 0) {
+                                    window.setTimeout(processChatQueue, 120);
+                                }
+                            }
+
                             return;
                         }
 
@@ -1784,16 +1944,36 @@
                     }
                 };
 
-                const appendChatMessage = async (message, payload) => {
+                const delay = (milliseconds) => new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+
+                const requestChatCompletion = async (payload) => {
+                    const response = await runWithRequestTimeout((signal) => fetch(root.dataset.chatUrl, {
+                        method: 'POST',
+                        body: payload,
+                        headers: { 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' },
+                        signal,
+                    }));
+                    const data = await response.json().catch(() => ({}));
+
+                    if (!response.ok) {
+                        const error = new Error(data.message || 'AI 聊天请求失败。');
+                        error.status = response.status;
+                        throw error;
+                    }
+
+                    return data;
+                };
+
+                const appendChatMessage = async (message, payload, options = {}) => {
                     const session = currentChat() || createChatSession();
-                    const model = selectedChatModel();
-                    const reasoning = chatReasoning.value;
-                    const reasoningLabel = chatReasoningLabel();
-                    const files = chatFileItems.map((item) => ({
-                        name: item.file.name,
-                        size: item.file.size,
-                        type: item.file.type || 'file',
-                        url: item.url,
+                    const model = options.model || selectedChatModel();
+                    const reasoning = options.reasoning || chatReasoning.value;
+                    const reasoningLabel = options.reasoningLabel || chatReasoningLabel();
+                    const files = (options.files ?? chatFilesSnapshot()).map((item) => ({
+                        name: item.name || item.file?.name || 'file',
+                        size: item.size ?? item.file?.size ?? 0,
+                        type: item.type || item.file?.type || 'file',
+                        url: item.url || '',
                     }));
 
                     session.messages.push({
@@ -1810,51 +1990,104 @@
                     renderChatSessions();
                     renderChats();
                     saveChatToServer(session);
+
+                    const assistantMessage = {
+                        role: 'assistant',
+                        content: 'AI 正在思考...',
+                        files: [],
+                        model,
+                        reasoning,
+                        reasoningLabel,
+                        pending: true,
+                        reconnecting: false,
+                        elapsedMs: 0,
+                        createdAt: new Date(),
+                    };
+                    session.messages.push(assistantMessage);
+                    renderChats();
+
+                    const startedAt = performance.now();
+                    let lastRenderedSecond = -1;
+                    const timer = window.setInterval(() => {
+                        assistantMessage.elapsedMs = performance.now() - startedAt;
+                        const second = Math.floor(assistantMessage.elapsedMs / 1000);
+                        if (second === lastRenderedSecond) return;
+
+                        lastRenderedSecond = second;
+                        setChatStatus(`${assistantMessage.reconnecting ? '连接中断，正在重新连接' : 'AI 正在思考'} ${formatSeconds(assistantMessage.elapsedMs)}`);
+                        renderChats();
+                    }, 500);
                     setStatus('正在请求 AI 回复...');
+                    setChatStatus('AI 正在思考 0秒');
 
                     try {
-                        const response = await runWithRequestTimeout((signal) => fetch(root.dataset.chatUrl, {
-                            method: 'POST',
-                            body: payload,
-                            headers: { 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' },
-                            signal,
-                        }));
-                        const data = await response.json().catch(() => ({}));
+                        let data;
+                        try {
+                            data = await requestChatCompletion(payload);
+                        } catch (error) {
+                            if (error.status) throw error;
 
-                        if (!response.ok) throw new Error(data.message || 'AI 聊天请求失败。');
+                            assistantMessage.reconnecting = true;
+                            assistantMessage.content = '连接中断，正在重新连接...';
+                            setChatStatus('连接中断，正在重新连接...', 'blue');
+                            renderChats();
+                            await delay(1000);
+                            data = await requestChatCompletion(payload);
+                        }
 
-                        session.messages.push({
-                            role: 'assistant',
-                            content: data.message || '',
-                            files: [],
-                            model: data.meta?.model || model,
-                            reasoning,
-                            reasoningLabel,
-                            createdAt: new Date(),
-                        });
+                        window.clearInterval(timer);
+                        assistantMessage.pending = false;
+                        assistantMessage.reconnecting = false;
+                        assistantMessage.content = data.message || '';
+                        assistantMessage.model = data.meta?.model || model;
+                        assistantMessage.elapsedMs = performance.now() - startedAt;
                         session.updatedAt = new Date();
-                        clearChatFiles({ revoke: false });
                         renderChatSessions();
                         renderChats();
                         saveChatToServer(session);
                         setStatus('Chat 消息已发送。', 'green');
+                        setChatStatus(`回复完成，用时 ${formatSeconds(assistantMessage.elapsedMs)}`, 'green');
                     } catch (error) {
-                        session.messages.push({
-                            role: 'assistant',
-                            content: error.message || 'AI 聊天请求失败。',
-                            files: [],
-                            model,
-                            reasoning,
-                            reasoningLabel,
-                            error: true,
-                            createdAt: new Date(),
-                        });
+                        window.clearInterval(timer);
+                        assistantMessage.pending = false;
+                        assistantMessage.reconnecting = false;
+                        assistantMessage.error = true;
+                        assistantMessage.content = error.message || 'AI 聊天请求失败。';
+                        assistantMessage.elapsedMs = performance.now() - startedAt;
                         session.updatedAt = new Date();
                         renderChatSessions();
                         renderChats();
                         saveChatToServer(session);
                         setStatus(error.message || 'AI 聊天请求失败。', 'red');
+                        setChatStatus(error.message || 'AI 聊天请求失败。', 'red');
                     }
+                };
+
+                const renderMarkdown = (value) => {
+                    const codeBlocks = [];
+                    const tokenPrefix = `@@CODE_${Date.now()}_`;
+                    let source = String(value ?? '').replace(/```(?:[a-zA-Z0-9_-]+)?\n?([\s\S]*?)```/g, (_, code) => {
+                        const token = `${tokenPrefix}${codeBlocks.length}@@`;
+                        codeBlocks.push(`<pre class="my-2 overflow-x-auto rounded-2xl bg-zinc-950 px-3 py-2 text-xs leading-5 text-zinc-50"><code>${escapeHtml(code.trim())}</code></pre>`);
+                        return token;
+                    });
+
+                    let html = escapeHtml(source)
+                        .replace(/^###\s+(.+)$/gm, '<h4 class="mt-3 text-sm font-semibold text-zinc-950">$1</h4>')
+                        .replace(/^##\s+(.+)$/gm, '<h3 class="mt-3 text-base font-semibold text-zinc-950">$1</h3>')
+                        .replace(/^#\s+(.+)$/gm, '<h2 class="mt-3 text-lg font-semibold text-zinc-950">$1</h2>')
+                        .replace(/\[([^\]]+)]\((https?:\/\/[^)\s]+)\)/g, '<a class="text-blue-700 underline underline-offset-2" href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
+                        .replace(/`([^`]+)`/g, '<code class="rounded bg-zinc-100 px-1 py-0.5 text-[0.92em] text-zinc-900">$1</code>')
+                        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+                        .replace(/(^|\s)\*([^*\n]+)\*/g, '$1<em>$2</em>')
+                        .replace(/^\s*[-*]\s+(.+)$/gm, '<span class="block pl-4 before:content-[\'•\'] before:-ml-4 before:mr-2">$1</span>')
+                        .replace(/\n/g, '<br>');
+
+                    codeBlocks.forEach((block, index) => {
+                        html = html.replace(`${tokenPrefix}${index}@@`, block);
+                    });
+
+                    return html;
                 };
 
                 const renderChats = () => {
@@ -1882,13 +2115,16 @@
                             </div>
                         `).join('');
                         row.innerHTML = `
-                            <div class="max-w-[78%] rounded-3xl px-4 py-3 text-sm leading-6 shadow-sm ${mine ? 'bg-zinc-950 text-white' : 'border border-zinc-200 bg-white text-zinc-800'}">
-                                <div class="whitespace-pre-wrap">${escapeHtml(chat.content)}</div>
+                            <div class="max-w-[86%] rounded-3xl px-4 py-3 text-sm leading-6 shadow-sm sm:max-w-[78%] ${mine ? 'bg-zinc-950 text-white' : chat.error ? 'border border-red-200 bg-red-50 text-red-800' : 'border border-zinc-200 bg-white text-zinc-800'}">
+                                <div class="${mine || chat.error ? 'whitespace-pre-wrap' : 'space-y-1'}">${mine || chat.error ? escapeHtml(chat.content) : renderMarkdown(chat.content)}</div>
                                 ${attachments}
                                 <div class="mt-2 flex flex-wrap gap-2 text-[11px] ${mine ? 'text-white/55' : 'text-zinc-400'}">
                                     <span>${formatDate(chat.createdAt)}</span>
                                     <span>${escapeHtml(chat.model)}</span>
                                     <span>推理：${escapeHtml(chat.reasoningLabel)}</span>
+                                    ${chat.pending ? '<span>思考中</span>' : ''}
+                                    ${chat.reconnecting ? '<span>重连中</span>' : ''}
+                                    ${chat.elapsedMs ? `<span>用时：${formatSeconds(chat.elapsedMs)}</span>` : ''}
                                 </div>
                             </div>
                         `;
