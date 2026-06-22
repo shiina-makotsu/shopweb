@@ -7,6 +7,7 @@ use App\Models\AiChatSession;
 use App\Models\AiImageTask;
 use App\Models\MediaAsset;
 use App\Models\SiteSetting;
+use App\Models\User;
 use App\Services\AiUsageService;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\JsonResponse;
@@ -94,7 +95,7 @@ class AiImageController extends Controller
     {
         $data = $request->validate([
             'config_id' => ['nullable', 'integer'],
-            'name' => ['required', 'string', 'max:100'],
+            'name' => ['nullable', 'string', 'max:100'],
             'image_endpoint' => ['nullable', 'url:http,https', 'max:2048'],
             'image_api_key' => ['nullable', 'string', 'max:4096'],
             'chat_endpoint' => ['nullable', 'url:http,https', 'max:2048'],
@@ -127,8 +128,13 @@ class AiImageController extends Controller
             ? (string) $data['chat_api_key']
             : $config->chat_api_key;
 
+        $name = trim((string) ($data['name'] ?? ''));
+        if ($name === '') {
+            $name = $this->nextUserConfigName($user);
+        }
+
         $config->fill([
-            'name' => trim((string) $data['name']),
+            'name' => $name,
             'image_endpoint' => blank($data['image_endpoint'] ?? null) ? null : trim((string) $data['image_endpoint']),
             'image_api_key' => $imageApiKey,
             'chat_endpoint' => blank($data['chat_endpoint'] ?? null) ? null : trim((string) $data['chat_endpoint']),
@@ -149,6 +155,23 @@ class AiImageController extends Controller
         return response()->json([
             'config' => $this->publicAiConfig($config->fresh()),
         ]);
+    }
+
+    private function nextUserConfigName(User $user): string
+    {
+        $count = AiUserConfig::query()
+            ->whereBelongsTo($user)
+            ->count();
+
+        do {
+            $count++;
+            $name = '自定义配置 '.$count;
+        } while (AiUserConfig::query()
+            ->whereBelongsTo($user)
+            ->where('name', $name)
+            ->exists());
+
+        return $name;
     }
 
     public function deleteConfig(Request $request, AiUserConfig $config): JsonResponse

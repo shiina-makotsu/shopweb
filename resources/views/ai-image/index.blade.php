@@ -292,7 +292,11 @@
 
                         <label class="block text-sm" data-key-field>
                             <span class="font-medium text-zinc-700">API Key</span>
-                            <input class="mt-1 w-full rounded-lg border border-zinc-200 px-4 py-3 text-sm outline-none focus:border-zinc-400" name="api_key" type="password" autocomplete="off" placeholder="sk-..." data-ai-key>
+                            <span class="mt-1 block text-xs text-zinc-500" data-image-key-status>未保存密钥，填写后保存配置。</span>
+                            <div class="mt-1 flex gap-2">
+                                <input class="min-w-0 flex-1 rounded-lg border border-zinc-200 px-4 py-3 text-sm outline-none focus:border-zinc-400" name="api_key" type="password" autocomplete="off" placeholder="sk-..." data-ai-key>
+                                <button class="shrink-0 rounded-lg border border-zinc-200 px-3 text-xs font-medium text-zinc-700 hover:bg-zinc-50" type="button" data-replace-image-key>替换</button>
+                            </div>
                         </label>
 
                         <label class="block text-sm" data-chat-endpoint-field>
@@ -302,10 +306,15 @@
 
                         <label class="block text-sm" data-chat-key-field>
                             <span class="font-medium text-zinc-700">Chat / Responses API Key</span>
-                            <input class="mt-1 w-full rounded-lg border border-zinc-200 px-4 py-3 text-sm outline-none focus:border-zinc-400" name="chat_api_key" type="password" autocomplete="off" placeholder="sk-..." data-ai-chat-key>
+                            <span class="mt-1 block text-xs text-zinc-500" data-chat-key-status>未保存密钥，填写后保存配置。</span>
+                            <div class="mt-1 flex gap-2">
+                                <input class="min-w-0 flex-1 rounded-lg border border-zinc-200 px-4 py-3 text-sm outline-none focus:border-zinc-400" name="chat_api_key" type="password" autocomplete="off" placeholder="sk-..." data-ai-chat-key>
+                                <button class="shrink-0 rounded-lg border border-zinc-200 px-3 text-xs font-medium text-zinc-700 hover:bg-zinc-50" type="button" data-replace-chat-key>替换</button>
+                            </div>
                         </label>
 
                         <div class="flex flex-wrap gap-2" data-custom-config-actions>
+                            <button class="rounded-full border border-zinc-200 px-3 py-2 text-xs font-medium text-zinc-700 hover:bg-zinc-50" type="button" data-new-ai-config>新建配置</button>
                             <button class="rounded-full border border-zinc-200 px-3 py-2 text-xs font-medium text-zinc-700 hover:bg-zinc-50" type="button" data-save-ai-config>Save config</button>
                             <button class="rounded-full border border-red-200 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50" type="button" data-delete-ai-config>Delete config</button>
                         </div>
@@ -510,6 +519,8 @@
                 const keyField = root.querySelector('[data-key-field]');
                 const chatEndpointField = root.querySelector('[data-chat-endpoint-field]');
                 const chatKeyField = root.querySelector('[data-chat-key-field]');
+                const imageKeyStatus = root.querySelector('[data-image-key-status]');
+                const chatKeyStatus = root.querySelector('[data-chat-key-status]');
                 const savedConfigField = root.querySelector('[data-saved-config-field]');
                 const savedConfigSelect = root.querySelector('[data-ai-config-select]');
                 const customConfigActions = root.querySelector('[data-custom-config-actions]');
@@ -597,6 +608,17 @@
                     chatStatus.textContent = message;
                     chatStatus.className = `mt-1 text-xs ${tone === 'red' ? 'text-red-600' : tone === 'green' ? 'text-emerald-600' : 'text-blue-600'}`;
                     chatStatus.classList.toggle('hidden', !message);
+                };
+
+                const setKeyStatus = (element, hasKey, isEditing = false) => {
+                    if (!element) return;
+
+                    element.textContent = hasKey
+                        ? (isEditing ? '正在替换密钥，保存配置后生效。' : '已保存密钥。为安全起见不会明文显示；需要修改时点击“替换”后重新填写。')
+                        : '未保存密钥，填写后保存配置。';
+                    element.classList.toggle('text-emerald-600', Boolean(hasKey) && !isEditing);
+                    element.classList.toggle('text-blue-600', Boolean(hasKey) && isEditing);
+                    element.classList.toggle('text-zinc-500', !hasKey);
                 };
 
                 const activeModel = () => manualModel.value.trim() || modelSelect.value || (configMode.value === 'default' ? defaultImageModel : '');
@@ -694,6 +716,11 @@
                 configMode.addEventListener('change', () => {
                     if (configMode.value === 'default') {
                         configName.value = configName.value.trim() || '默认配置';
+                        savedConfigSelect.value = '';
+                        apiKeyInput.value = '';
+                        chatApiKeyInput.value = '';
+                        setKeyStatus(imageKeyStatus, false);
+                        setKeyStatus(chatKeyStatus, false);
                     }
                     updateConfigMode();
                 });
@@ -724,9 +751,11 @@
                     endpointInput.value = config.image_endpoint || '';
                     apiKeyInput.value = '';
                     apiKeyInput.placeholder = config.has_image_key ? 'Saved key; fill to replace' : 'sk-...';
+                    setKeyStatus(imageKeyStatus, Boolean(config.has_image_key));
                     chatEndpointInput.value = config.chat_endpoint || '';
                     chatApiKeyInput.value = '';
                     chatApiKeyInput.placeholder = config.has_chat_key ? 'Saved key; fill to replace' : 'sk-...';
+                    setKeyStatus(chatKeyStatus, Boolean(config.has_chat_key));
                     manualModel.value = config.image_model || '';
                     if (config.chat_model && !Array.from(chatModelSelect.options).some((option) => option.value === config.chat_model)) {
                         const option = document.createElement('option');
@@ -739,6 +768,35 @@
                     updateConfigMode();
                     syncChatModelOptions();
                 };
+
+                const startNewConfig = () => {
+                    configMode.value = 'custom';
+                    savedConfigSelect.value = '';
+                    configName.value = '';
+                    apiKeyInput.value = '';
+                    chatApiKeyInput.value = '';
+                    apiKeyInput.placeholder = 'sk-...';
+                    chatApiKeyInput.placeholder = 'sk-...';
+                    setKeyStatus(imageKeyStatus, false);
+                    setKeyStatus(chatKeyStatus, false);
+                    updateConfigMode();
+                    setStatus('正在新建配置；名称留空会自动命名。');
+                    configName.focus();
+                };
+
+                root.querySelector('[data-replace-image-key]')?.addEventListener('click', () => {
+                    apiKeyInput.value = '';
+                    apiKeyInput.placeholder = '填写新的 Image API Key';
+                    setKeyStatus(imageKeyStatus, true, true);
+                    apiKeyInput.focus();
+                });
+
+                root.querySelector('[data-replace-chat-key]')?.addEventListener('click', () => {
+                    chatApiKeyInput.value = '';
+                    chatApiKeyInput.placeholder = '填写新的 Chat API Key';
+                    setKeyStatus(chatKeyStatus, true, true);
+                    chatApiKeyInput.focus();
+                });
 
                 const loadSavedConfigs = async () => {
                     try {
@@ -756,7 +814,7 @@
 
                 const saveCurrentConfig = async () => {
                     const payload = new FormData();
-                    payload.set('name', configName.value.trim() || 'Custom config');
+                    payload.set('name', configName.value.trim());
                     if (savedConfigSelect.value) payload.set('config_id', savedConfigSelect.value);
                     payload.set('image_endpoint', endpointInput.value.trim());
                     payload.set('image_api_key', apiKeyInput.value);
@@ -805,7 +863,15 @@
 
                 savedConfigSelect?.addEventListener('change', () => {
                     const config = savedConfigs.find((item) => String(item.id) === savedConfigSelect.value);
-                    if (config) applySavedConfig(config);
+                    if (config) {
+                        applySavedConfig(config);
+                        return;
+                    }
+
+                    apiKeyInput.value = '';
+                    chatApiKeyInput.value = '';
+                    setKeyStatus(imageKeyStatus, false);
+                    setKeyStatus(chatKeyStatus, false);
                 });
                 root.querySelector('[data-save-ai-config]')?.addEventListener('click', () => {
                     saveCurrentConfig().catch((error) => setStatus(error.message || 'Config save failed.', 'red'));
@@ -813,6 +879,7 @@
                 root.querySelector('[data-delete-ai-config]')?.addEventListener('click', () => {
                     deleteCurrentConfig().catch((error) => setStatus(error.message || 'Config delete failed.', 'red'));
                 });
+                root.querySelector('[data-new-ai-config]')?.addEventListener('click', startNewConfig);
 
                 const serverFetch = async (url, options = {}) => {
                     const response = await fetch(url, {
@@ -2309,7 +2376,6 @@
                 const applyStoredChats = (items, targetStore = chatStore) => {
                     if (!Array.isArray(items)) return;
 
-                    targetStore.clear();
                     items.forEach((session) => {
                         if (!session?.id) return;
 
@@ -2344,7 +2410,6 @@
                         const serverTrashedChats = Array.isArray(data.trashed_chats) ? data.trashed_chats : [];
 
                         if (serverTasks.length) {
-                            tasks.clear();
                             applyStoredTasks(serverTasks);
                         } else {
                             localTasks.forEach((task) => saveTaskToServer(task));

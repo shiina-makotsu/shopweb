@@ -326,7 +326,7 @@ class OrderResource extends Resource
 
         return new HtmlString(<<<HTML
             <div class="shopweb-order-submenu" data-shopweb-order-submenu>
-                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;padding:14px 18px 14px 28px;background:#f8fafc;border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;border-left:3px solid #94a3b8;color:#0f172a;font-size:13px;line-height:1.6;">
+                <div class="shopweb-order-quick-panel" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;padding:14px 18px 14px 28px;background:#f8fafc;border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;border-left:3px solid #94a3b8;color:#0f172a;font-size:13px;line-height:1.6;">
                     <div style="display:grid;grid-template-columns:92px minmax(0,1fr);gap:6px 10px;">
                         <strong style="color:#475569;">购买商品</strong>
                         <div style="word-break:break-word;">{$items}</div>

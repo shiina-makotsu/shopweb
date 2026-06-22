@@ -561,12 +561,12 @@ HTML);
                 $stock = e((string) (int) $variant->stock);
 
                 return <<<HTML
-                    <div style="display:grid;grid-template-columns:minmax(110px,1fr) minmax(130px,1.1fr) 90px 80px;gap:8px;align-items:center;border-top:1px solid #e2e8f0;padding-top:8px;">
+                    <div class="shopweb-product-variant-row" style="display:grid;grid-template-columns:minmax(110px,1fr) minmax(130px,1.1fr) 90px 80px;gap:8px;align-items:center;border-top:1px solid #e2e8f0;padding-top:8px;">
                         <input type="hidden" name="variants[{$id}][id]" value="{$id}">
-                        <div style="font-weight:600;color:#334155;word-break:break-word;">{$sku}</div>
-                        <input name="variants[{$id}][spec_name]" value="{$specName}" placeholder="规格参数名" aria-label="{$sku} 规格参数名" style="min-height:32px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;padding:4px 8px;color:#0f172a;min-width:0;" />
-                        <input name="variants[{$id}][price_cents]" value="{$price}" aria-label="{$sku} 价格" inputmode="decimal" style="min-height:32px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;padding:4px 8px;color:#0f172a;min-width:0;" />
-                        <input name="variants[{$id}][stock]" value="{$stock}" aria-label="{$sku} 库存" inputmode="numeric" style="min-height:32px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;padding:4px 8px;color:#0f172a;min-width:0;" />
+                        <div class="shopweb-product-quick-sku" style="font-weight:600;color:#334155;word-break:break-word;">{$sku}</div>
+                        <input class="shopweb-product-quick-input" name="variants[{$id}][spec_name]" value="{$specName}" placeholder="规格参数名" aria-label="{$sku} 规格参数名" style="min-height:32px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;padding:4px 8px;color:#0f172a;min-width:0;" />
+                        <input class="shopweb-product-quick-input" name="variants[{$id}][price_cents]" value="{$price}" aria-label="{$sku} 价格" inputmode="decimal" style="min-height:32px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;padding:4px 8px;color:#0f172a;min-width:0;" />
+                        <input class="shopweb-product-quick-input" name="variants[{$id}][stock]" value="{$stock}" aria-label="{$sku} 库存" inputmode="numeric" style="min-height:32px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;padding:4px 8px;color:#0f172a;min-width:0;" />
                     </div>
                 HTML;
             })
@@ -578,26 +578,26 @@ HTML);
 
         return new HtmlString(<<<HTML
             <div class="shopweb-product-submenu" data-shopweb-product-submenu>
-                <form method="POST" action="{$action}" data-shopweb-product-row-form onclick="event.stopPropagation();" style="display:grid;gap:12px;padding:14px 18px 14px 28px;background:#f8fafc;border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;border-left:3px solid #94a3b8;color:#0f172a;font-size:13px;line-height:1.6;">
+                <form class="shopweb-product-quick-form" method="POST" action="{$action}" data-shopweb-product-row-form onclick="event.stopPropagation();" style="display:grid;gap:12px;padding:14px 18px 14px 28px;background:#f8fafc;border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;border-left:3px solid #94a3b8;color:#0f172a;font-size:13px;line-height:1.6;">
                     <input type="hidden" name="_token" value="{$csrf}">
                     <div style="display:grid;grid-template-columns:minmax(220px,1.3fr) 150px 110px auto;gap:10px;align-items:end;">
-                        <label style="display:grid;gap:4px;font-weight:600;color:#475569;">商品标题
-                            <input name="title" value="{$title}" required style="min-height:34px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;padding:4px 8px;color:#0f172a;min-width:0;" />
+                        <label class="shopweb-product-quick-label" style="display:grid;gap:4px;font-weight:600;color:#475569;">商品标题
+                            <input class="shopweb-product-quick-input" name="title" value="{$title}" required style="min-height:34px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;padding:4px 8px;color:#0f172a;min-width:0;" />
                         </label>
-                        <label style="display:grid;gap:4px;font-weight:600;color:#475569;">商品状态
-                            <select name="status" required style="min-height:34px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;padding:4px 8px;color:#0f172a;">
+                        <label class="shopweb-product-quick-label" style="display:grid;gap:4px;font-weight:600;color:#475569;">商品状态
+                            <select class="shopweb-product-quick-input" name="status" required style="min-height:34px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;padding:4px 8px;color:#0f172a;">
                                 {$statusOptions}
                             </select>
                         </label>
-                        <label style="display:flex;align-items:center;gap:8px;min-height:34px;font-weight:600;color:#475569;">
+                        <label class="shopweb-product-quick-label" style="display:flex;align-items:center;gap:8px;min-height:34px;font-weight:600;color:#475569;">
                             <input type="hidden" name="is_featured" value="0">
                             <input type="checkbox" name="is_featured" value="1"{$featuredChecked}>
                             推荐
                         </label>
-                        <button type="submit" style="justify-self:start;border:1px solid #94a3b8;border-radius:6px;background:#fff;padding:7px 14px;color:#0f172a;cursor:pointer;">保存快速修改</button>
+                        <button class="shopweb-product-quick-button" type="submit" style="justify-self:start;border:1px solid #94a3b8;border-radius:6px;background:#fff;padding:7px 14px;color:#0f172a;cursor:pointer;">保存快速修改</button>
                     </div>
                     <div style="display:grid;gap:8px;">
-                        <div style="display:grid;grid-template-columns:minmax(110px,1fr) minmax(130px,1.1fr) 90px 80px;gap:8px;color:#64748b;font-weight:600;">
+                        <div class="shopweb-product-quick-head" style="display:grid;grid-template-columns:minmax(110px,1fr) minmax(130px,1.1fr) 90px 80px;gap:8px;color:#64748b;font-weight:600;">
                             <span>SKU</span>
                             <span>规格参数名</span>
                             <span>价格</span>
