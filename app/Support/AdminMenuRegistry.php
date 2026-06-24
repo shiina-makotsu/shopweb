@@ -31,6 +31,8 @@ use Throwable;
 
 class AdminMenuRegistry
 {
+    private bool $syncedDefaults = false;
+
     /**
      * @return array<int, array{label: string, icon: mixed, sort: int}>
      */
@@ -106,13 +108,17 @@ class AdminMenuRegistry
 
     public function syncDefaults(): void
     {
+        if ($this->syncedDefaults) {
+            return;
+        }
+
         if (! $this->tableReady()) {
             return;
         }
 
         DB::transaction(function (): void {
             foreach ($this->defaultGroups() as $group) {
-                AdminMenuItem::query()->firstOrCreate(
+                $record = AdminMenuItem::query()->firstOrCreate(
                     ['item_key' => $this->groupKey($group['label'])],
                     [
                         'type' => AdminMenuItem::TYPE_GROUP,
@@ -121,6 +127,13 @@ class AdminMenuRegistry
                         'is_active' => true,
                     ],
                 );
+
+                if ($group['label'] === '主页' && (! $record->is_active || (int) $record->sort_order !== (int) $group['sort'])) {
+                    $record->forceFill([
+                        'sort_order' => $group['sort'],
+                        'is_active' => true,
+                    ])->save();
+                }
             }
 
             foreach ($this->navigationClasses() as $class) {
@@ -161,6 +174,8 @@ class AdminMenuRegistry
                 $this->moveAiItemToAiGroup($class, $group);
             }
         });
+
+        $this->syncedDefaults = true;
     }
 
     /**
@@ -194,6 +209,8 @@ class AdminMenuRegistry
         $groups = collect($this->defaultGroups())->keyBy('label');
 
         if ($this->tableReady()) {
+            $this->syncDefaults();
+
             $configured = AdminMenuItem::query()
                 ->where('type', AdminMenuItem::TYPE_GROUP)
                 ->where('is_active', true)
@@ -226,6 +243,8 @@ class AdminMenuRegistry
         if (! $this->tableReady()) {
             return ['groups' => [], 'items' => []];
         }
+
+        $this->syncDefaults();
 
         $groups = AdminMenuItem::query()
             ->where('type', AdminMenuItem::TYPE_GROUP)
