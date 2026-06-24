@@ -3,7 +3,9 @@
 namespace App\Filament\Resources\NavigationMenuItemResource\Pages;
 
 use App\Filament\Resources\NavigationMenuItemResource;
+use App\Models\AdminMenuItem;
 use App\Models\NavigationMenuItem;
+use App\Support\AdminMenuRegistry;
 use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Schemas\Components\View;
@@ -45,6 +47,14 @@ class ListNavigationMenuItems extends ListRecords
     }
 
     /**
+     * @return array<string, mixed>
+     */
+    public function getAdminMenuTree(): array
+    {
+        return app(AdminMenuRegistry::class)->tree();
+    }
+
+    /**
      * @param  array<int, array<string, mixed>>  $items
      */
     public function saveNavigationMenuTree(string $placement, array $items): void
@@ -55,6 +65,24 @@ class ListNavigationMenuItems extends ListRecords
 
         DB::transaction(function () use ($placement, $items): void {
             $this->persistTreeItems($placement, $items);
+        });
+
+        $this->dispatch('navigation-menu-tree-saved');
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $items
+     */
+    public function saveAdminMenuTree(string $placement, array $items): void
+    {
+        if ($placement !== 'admin') {
+            return;
+        }
+
+        app(AdminMenuRegistry::class)->syncDefaults();
+
+        DB::transaction(function () use ($items): void {
+            $this->persistAdminMenuItems($items);
         });
 
         $this->dispatch('navigation-menu-tree-saved');
@@ -83,6 +111,39 @@ class ListNavigationMenuItems extends ListRecords
             $children = is_array($item['children'] ?? null) ? $item['children'] : [];
 
             $this->persistTreeItems($placement, $children, $id);
+        }
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $items
+     */
+    private function persistAdminMenuItems(array $items, ?int $parentId = null): void
+    {
+        foreach (array_values($items) as $index => $item) {
+            $id = (int) ($item['id'] ?? 0);
+
+            if ($id <= 0) {
+                continue;
+            }
+
+            $record = AdminMenuItem::query()->find($id);
+
+            if (! $record) {
+                continue;
+            }
+
+            $targetParentId = $record->type === AdminMenuItem::TYPE_GROUP ? null : $parentId;
+
+            $record->forceFill([
+                'parent_id' => $targetParentId,
+                'sort_order' => ($index + 1) * 10,
+            ])->save();
+
+            $children = is_array($item['children'] ?? null) ? $item['children'] : [];
+
+            if ($record->type === AdminMenuItem::TYPE_GROUP) {
+                $this->persistAdminMenuItems($children, $record->getKey());
+            }
         }
     }
 

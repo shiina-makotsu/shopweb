@@ -3,18 +3,21 @@
 namespace App\Http\Controllers;
 
 use App\Models\Category;
+use App\Models\AnalyticsEvent;
 use App\Models\Product;
 use App\Models\ProductBrowsingHistory;
 use App\Models\ProductIntentVote;
 use App\Models\ProductTag;
+use App\Services\AnalyticsTracker;
 use App\Support\RegexSearch;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class ProductController extends Controller
 {
-    public function index(Request $request): View
+    public function index(Request $request, AnalyticsTracker $analytics): View
     {
+        $analytics->track($request, AnalyticsEvent::PAGE_VIEW, ['source' => 'products_index']);
         $category = null;
         $status = $request->string('status')->toString();
         $status = array_key_exists($status, Product::statusOptions()) && $status !== Product::STATUS_DRAFT
@@ -55,8 +58,11 @@ class ProductController extends Controller
             RegexSearch::where($query, ['title', 'summary', 'description'], $keyword);
         }
 
+        $products = $query->paginate(12)->withQueryString();
+        $analytics->trackProductImpressions($request, $products->getCollection(), 'products_index');
+
         return view('products.index', [
-            'products' => $query->paginate(12)->withQueryString(),
+            'products' => $products,
             'categories' => Category::query()->active()->orderBy('sort_order')->get(),
             'currentCategory' => $category,
             'currentStatus' => $status,
@@ -66,9 +72,10 @@ class ProductController extends Controller
         ]);
     }
 
-    public function tag(Request $request, ProductTag $tag): View
+    public function tag(Request $request, ProductTag $tag, AnalyticsTracker $analytics): View
     {
         abort_unless($tag->is_active, 404);
+        $analytics->track($request, AnalyticsEvent::PAGE_VIEW, ['source' => 'tag']);
 
         $query = Product::query()
             ->whereHas('tags', fn ($query) => $query->whereKey($tag->id))
@@ -81,8 +88,11 @@ class ProductController extends Controller
             RegexSearch::where($query, ['title', 'summary', 'description'], trim($request->string('q')->toString()));
         }
 
+        $products = $query->paginate(12)->withQueryString();
+        $analytics->trackProductImpressions($request, $products->getCollection(), 'tag:'.$tag->slug);
+
         return view('products.index', [
-            'products' => $query->paginate(12)->withQueryString(),
+            'products' => $products,
             'categories' => Category::query()->active()->orderBy('sort_order')->get(),
             'currentCategory' => null,
             'currentTag' => $tag,
@@ -102,16 +112,16 @@ class ProductController extends Controller
         ]);
     }
 
-    public function showByStatus(string $statusSlug, string $productSlug): View
+    public function showByStatus(Request $request, string $statusSlug, string $productSlug, AnalyticsTracker $analytics): View
     {
         $product = Product::findPublicForStatusRoute($statusSlug, $productSlug);
 
         abort_unless($product, 404);
 
-        return $this->renderProduct($product);
+        return $this->renderProduct($request, $product, $analytics);
     }
 
-    public function showLegacy(string $productSlug): View
+    public function showLegacy(Request $request, string $productSlug, AnalyticsTracker $analytics): View
     {
         $product = Product::query()
             ->publiclyVisible()
@@ -121,10 +131,10 @@ class ProductController extends Controller
 
         abort_unless($product, 404);
 
-        return $this->renderProduct($product);
+        return $this->renderProduct($request, $product, $analytics);
     }
 
-    private function renderProduct(Product $product): View
+    private function renderProduct(Request $request, Product $product, AnalyticsTracker $analytics): View
     {
         $product->load([
             'category',
@@ -134,6 +144,15 @@ class ProductController extends Controller
             'comments' => fn ($query) => $query->visible()->whereNull('parent_id')->with(['user', 'replies.user'])->latest(),
             'variants' => fn ($query) => $query->active(),
             'priceVoteOptions' => fn ($query) => $query->active(),
+        ]);
+
+        $analytics->track($request, AnalyticsEvent::PRODUCT_VIEW, [
+            'product_id' => $product->id,
+            'source' => 'product_detail',
+            'metadata' => [
+                'status' => $product->status,
+                'title' => $product->title,
+            ],
         ]);
 
         if (auth()->check()) {

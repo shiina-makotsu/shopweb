@@ -147,14 +147,10 @@ class SiteSettingResource extends Resource
             ])->columns(2)->columnSpanFull(),
 
             Section::make('导购网页宠物')
-                ->description('导购宠物和前台导购 AI 的预留配置。客服 AI 已移动到客服菜单。')
+                ->description('导购 AI 已迁移到后台 AI 菜单；此处只保留基础入口和素材配置。')
                 ->schema([
                 Toggle::make('guide_pet_enabled')->label('启用导购网页宠物')->default(false),
                 self::assetPathSelect('guide_pet_asset_path', '导购宠物资源', '可上传宠物图片或动效资源，后续对接 AI 导购。'),
-                TextInput::make('guide_pet_api_endpoint')->label('AI 接口地址')->maxLength(500),
-                TextInput::make('guide_pet_api_key')->label('AI API Key')->password()->revealable()->maxLength(255),
-                TextInput::make('guide_pet_model')->label('AI 模型标识')->maxLength(255),
-                Textarea::make('guide_pet_system_prompt')->label('导购 AI 预设内容')->rows(5)->columnSpanFull(),
                 Select::make('guide_pet_context_mode')->label('导购上下文')->options([
                     'storefront' => '前台页面',
                     'product' => '商品页',

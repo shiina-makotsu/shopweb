@@ -20,6 +20,14 @@ class SupportNotificationService
             return;
         }
 
+        app(AlertBotService::class)->notify('ShopWeb P2 客户客服消息', '有新的客户客服消息等待处理。', [
+            'session_id' => $session->id,
+            'message_id' => $message->id,
+            'sender_type' => $message->sender_type,
+            'order_id' => $session->order_id,
+            'user_id' => $session->user_id,
+        ], 'P2');
+
         $settings = SiteSetting::query()->first();
 
         if (! $this->mailEnabled($settings)) {

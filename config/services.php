@@ -12,4 +12,9 @@ return [
         'use_native_ca' => env('AI_HTTP_USE_NATIVE_CA', true),
         'responses_image_model' => env('AI_RESPONSES_IMAGE_MODEL', 'gpt-5.5'),
     ],
+
+    'local_ai' => [
+        'runner_url' => env('LOCAL_AI_RUNNER_URL'),
+        'fallback_enabled' => env('LOCAL_AI_FALLBACK_ENABLED', true),
+    ],
 ];

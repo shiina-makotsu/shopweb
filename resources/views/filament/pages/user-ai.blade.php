@@ -133,9 +133,19 @@
                         <form wire:submit="saveUser" class="space-y-4 p-4">
                             {{ $this->userForm }}
 
-                            <x-filament::button type="submit">
-                                保存用户配置
-                            </x-filament::button>
+                            <div class="flex flex-wrap items-center gap-3">
+                                <x-filament::button type="submit">
+                                    保存用户配置
+                                </x-filament::button>
+                                <x-filament::button type="button" color="gray" wire:click="resetUserUsage">
+                                    重置 token 用量
+                                </x-filament::button>
+                                @if($userStats['reset_at'] ?? null)
+                                    <span class="text-xs text-slate-500 dark:text-slate-400">
+                                        余额扣减从 {{ $userStats['reset_at']->format('Y-m-d H:i:s') }} 起计算
+                                    </span>
+                                @endif
+                            </div>
                         </form>
                     </section>
 

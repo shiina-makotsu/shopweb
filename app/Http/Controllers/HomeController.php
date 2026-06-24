@@ -6,45 +6,59 @@ use App\Models\FlashSale;
 use App\Models\NavigationMenuItem;
 use App\Models\Product;
 use App\Models\SiteSetting;
+use App\Models\AnalyticsEvent;
+use App\Services\AnalyticsTracker;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\View\View;
 
 class HomeController extends Controller
 {
-    public function index(): View
+    public function index(Request $request, AnalyticsTracker $analytics): View
     {
+        $analytics->track($request, AnalyticsEvent::PAGE_VIEW, ['source' => 'home']);
+        $featuredProducts = Product::query()
+            ->whereIn('status', [Product::STATUS_PRESALE, Product::STATUS_INCOMING, Product::STATUS_PUBLISHED, Product::STATUS_SOLD_OUT])
+            ->where('is_featured', true)
+            ->with(['coverMedia', 'variants'])
+            ->orderBy('sort_order')
+            ->limit(8)
+            ->get();
+        $discountProducts = Product::query()
+            ->whereIn('status', [Product::STATUS_PRESALE, Product::STATUS_INCOMING, Product::STATUS_PUBLISHED, Product::STATUS_SOLD_OUT])
+            ->whereHas('variants', fn ($query) => $query
+                ->where('is_active', true)
+                ->whereNotNull('discount_price_cents')
+                ->where(fn ($query) => $query->whereNull('discount_starts_at')->orWhere('discount_starts_at', '<=', now()))
+                ->where(fn ($query) => $query->whereNull('discount_ends_at')->orWhere('discount_ends_at', '>=', now())))
+            ->with(['coverMedia', 'variants'])
+            ->latest()
+            ->limit(8)
+            ->get();
+        $latestProducts = Product::query()
+            ->whereIn('status', [Product::STATUS_PRESALE, Product::STATUS_INCOMING, Product::STATUS_PUBLISHED, Product::STATUS_SOLD_OUT])
+            ->with(['coverMedia', 'variants'])
+            ->latest()
+            ->limit(8)
+            ->get();
+        $conceptProducts = Product::query()
+            ->where('status', Product::STATUS_CONCEPT)
+            ->with(['coverMedia', 'variants'])
+            ->latest()
+            ->limit(8)
+            ->get();
+
+        $analytics->trackProductImpressions($request, $featuredProducts, 'home_featured');
+        $analytics->trackProductImpressions($request, $discountProducts, 'home_discount');
+        $analytics->trackProductImpressions($request, $latestProducts, 'home_latest');
+        $analytics->trackProductImpressions($request, $conceptProducts, 'home_concept');
+
         return view('home', [
             'settings' => SiteSetting::query()->first(),
-            'featuredProducts' => Product::query()
-                ->whereIn('status', [Product::STATUS_PRESALE, Product::STATUS_INCOMING, Product::STATUS_PUBLISHED, Product::STATUS_SOLD_OUT])
-                ->where('is_featured', true)
-                ->with(['coverMedia', 'variants'])
-                ->orderBy('sort_order')
-                ->limit(8)
-                ->get(),
-            'discountProducts' => Product::query()
-                ->whereIn('status', [Product::STATUS_PRESALE, Product::STATUS_INCOMING, Product::STATUS_PUBLISHED, Product::STATUS_SOLD_OUT])
-                ->whereHas('variants', fn ($query) => $query
-                    ->where('is_active', true)
-                    ->whereNotNull('discount_price_cents')
-                    ->where(fn ($query) => $query->whereNull('discount_starts_at')->orWhere('discount_starts_at', '<=', now()))
-                    ->where(fn ($query) => $query->whereNull('discount_ends_at')->orWhere('discount_ends_at', '>=', now())))
-                ->with(['coverMedia', 'variants'])
-                ->latest()
-                ->limit(8)
-                ->get(),
-            'latestProducts' => Product::query()
-                ->whereIn('status', [Product::STATUS_PRESALE, Product::STATUS_INCOMING, Product::STATUS_PUBLISHED, Product::STATUS_SOLD_OUT])
-                ->with(['coverMedia', 'variants'])
-                ->latest()
-                ->limit(8)
-                ->get(),
-            'conceptProducts' => Product::query()
-                ->where('status', Product::STATUS_CONCEPT)
-                ->with(['coverMedia', 'variants'])
-                ->latest()
-                ->limit(8)
-                ->get(),
+            'featuredProducts' => $featuredProducts,
+            'discountProducts' => $discountProducts,
+            'latestProducts' => $latestProducts,
+            'conceptProducts' => $conceptProducts,
             'flashSales' => FlashSale::query()
                 ->with(['product.coverMedia', 'product.variants'])
                 ->whereHas('product', fn ($query) => $query->whereIn('status', [Product::STATUS_PUBLISHED, Product::STATUS_PRESALE]))

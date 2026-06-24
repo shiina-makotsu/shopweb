@@ -85,6 +85,7 @@
     $bodyThemeClasses = $userThemeMode === 'dark'
         ? 'shop-mode-dark'
         : ($userThemeMode === 'light' ? 'shop-mode-light' : 'shop-mode-auto');
+    $guidePetAssetUrl = $siteSettings?->guide_pet_enabled ? $siteSettings->guidePetAssetUrl() : null;
 @endphp
 
 <!doctype html>
@@ -604,6 +605,44 @@
         </div>
     </div>
     @endunless
+    @if($siteSettings?->guide_pet_enabled)
+        <section
+            class="shop-guide-pet"
+            data-guide-pet
+            data-guide-chat-url="{{ $path('guide-pet.chat') }}"
+            data-guide-asset-url="{{ $guidePetAssetUrl }}"
+            data-guide-store-name="{{ $storeName }}"
+            aria-label="AI 导购助手"
+        >
+            <div class="shop-guide-pet-bubble hidden" data-guide-bubble>
+                <p data-guide-bubble-text>我可以帮你介绍当前页面。</p>
+            </div>
+            <div class="shop-guide-pet-panel hidden" data-guide-panel>
+                <div class="shop-guide-pet-panel-header">
+                    <div>
+                        <p class="shop-guide-pet-title">AI 导购</p>
+                        <p class="shop-guide-pet-subtitle" data-guide-page-label>正在识别页面</p>
+                    </div>
+                    <button type="button" data-guide-close aria-label="收起导购助手">×</button>
+                </div>
+                <div class="shop-guide-pet-messages" data-guide-messages>
+                    <div class="shop-guide-message shop-guide-message-assistant">你好，我可以根据当前页面帮你找商品、说明流程或联系入口。</div>
+                </div>
+                <form class="shop-guide-pet-form" data-guide-form>
+                    <input data-guide-input name="message" maxlength="1200" autocomplete="off" placeholder="问问当前页面、商品或购买流程">
+                    <button type="button" data-guide-voice aria-label="语音输入" title="语音输入">MIC</button>
+                    <button type="submit">发送</button>
+                </form>
+            </div>
+            <button type="button" class="shop-guide-pet-toggle" data-guide-toggle aria-expanded="false">
+                @if($guidePetAssetUrl)
+                    <img src="{{ $guidePetAssetUrl }}" alt="">
+                @else
+                    <span>AI</span>
+                @endif
+            </button>
+        </section>
+    @endif
     <a href="#top" onclick="window.scrollTo({ top: 0, behavior: 'smooth' }); return false;" class="fixed bottom-5 right-5 z-40 inline-flex h-10 w-10 items-center justify-center rounded-full border border-blue-700 bg-white text-blue-800 shadow hover:bg-blue-50" aria-label="回到顶部">↑</a>
     @auth
         @if(session('show_registration_onboarding'))

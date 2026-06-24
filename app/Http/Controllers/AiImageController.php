@@ -9,6 +9,7 @@ use App\Models\MediaAsset;
 use App\Models\SiteSetting;
 use App\Models\User;
 use App\Services\AiUsageService;
+use App\Services\LocalAiModelService;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -23,7 +24,10 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AiImageController extends Controller
 {
-    public function __construct(private readonly AiUsageService $usage)
+    public function __construct(
+        private readonly AiUsageService $usage,
+        private readonly LocalAiModelService $localAi,
+    )
     {
     }
 
@@ -48,8 +52,26 @@ class AiImageController extends Controller
         ]);
         $feature = ($data['feature'] ?? 'image') === 'chat' ? 'chat' : 'image';
         $data = $this->applySavedUserConfig($request, $data);
+        $localModels = $this->localAiModelsForResponse($feature);
 
-        $config = $this->usage->resolveConfig($request->user(), $data, $feature);
+        try {
+            $config = $this->usage->resolveConfig($request->user(), $data, $feature);
+        } catch (ValidationException $exception) {
+            if ($localModels !== []) {
+                return response()->json([
+                    'models' => $localModels,
+                    'feature' => $feature,
+                    'base_url' => 'local',
+                    'config_name' => '本地模型',
+                    'provider_source' => 'local',
+                    'local_runner_configured' => $this->localAi->runnerConfigured(),
+                    'remote_error' => collect($exception->errors())->flatten()->first(),
+                ]);
+            }
+
+            throw $exception;
+        }
+
         $baseUrl = $this->apiBaseUrl((string) $config['endpoint']);
         try {
             $response = $this->aiHttp(30)
@@ -57,6 +79,18 @@ class AiImageController extends Controller
                 ->withHeaders($this->apiHeaders($config['api_key'] ?? null))
                 ->get($baseUrl.'/models');
         } catch (ConnectionException $exception) {
+            if ($localModels !== []) {
+                return response()->json([
+                    'models' => $localModels,
+                    'feature' => $feature,
+                    'base_url' => 'local',
+                    'config_name' => '本地模型',
+                    'provider_source' => 'local',
+                    'local_runner_configured' => $this->localAi->runnerConfigured(),
+                    'remote_error' => $exception->getMessage(),
+                ]);
+            }
+
             return response()->json([
                 'message' => '模型列表获取失败：'.$exception->getMessage(),
             ], 502);
@@ -66,7 +100,11 @@ class AiImageController extends Controller
             return $this->providerErrorResponse((array) $response->json(), $response->status(), '模型列表获取失败。');
         }
 
-        $models = $this->extractModels((array) $response->json(), $feature);
+        $models = collect($this->extractModels((array) $response->json(), $feature))
+            ->merge($localModels)
+            ->unique('id')
+            ->values()
+            ->all();
 
         return response()->json([
             'models' => $models,
@@ -74,6 +112,7 @@ class AiImageController extends Controller
             'base_url' => $baseUrl,
             'config_name' => $config['config_name'],
             'provider_source' => $config['source'],
+            'local_runner_configured' => $this->localAi->runnerConfigured(),
         ]);
     }
 
@@ -91,6 +130,22 @@ class AiImageController extends Controller
         ]);
     }
 
+    public function localModels(): JsonResponse
+    {
+        return response()->json([
+            'language_models' => $this->localAi->models('chat'),
+            'image_models' => $this->localAi->models('image'),
+            'loras' => $this->localAi->loras(),
+            'runner_configured' => $this->localAi->runnerConfigured(),
+            'fallback_enabled' => $this->localAi->enabledFallback(),
+            'directories' => [
+                'language' => $this->localAi->languagePath(),
+                'image' => $this->localAi->imagePath(),
+                'lora' => $this->localAi->loraPath(),
+            ],
+        ]);
+    }
+
     public function saveConfig(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -105,7 +160,10 @@ class AiImageController extends Controller
             'is_default' => ['nullable', 'boolean'],
         ]);
 
-        if (blank($data['image_endpoint'] ?? null) && blank($data['chat_endpoint'] ?? null)) {
+        $hasLocalModel = Str::startsWith((string) ($data['image_model'] ?? ''), 'local:')
+            || Str::startsWith((string) ($data['chat_model'] ?? ''), 'local:');
+
+        if (! $hasLocalModel && blank($data['image_endpoint'] ?? null) && blank($data['chat_endpoint'] ?? null)) {
             throw ValidationException::withMessages([
                 'image_endpoint' => 'Please fill at least one image or chat API URL.',
             ]);
@@ -448,6 +506,12 @@ class AiImageController extends Controller
         $data = $this->validatedGenerationData($request);
         $data = $this->applySavedUserConfig($request, $data);
         $usedMode = $this->initialImageApiMode($data);
+        $payload = $this->generationPayload($data);
+        $references = $this->generationReferenceFiles($request, $data);
+
+        if ($this->localAi->shouldUseLocal($data, 'image')) {
+            return $this->generateWithLocalModel($request, $data, $payload, $references);
+        }
 
         try {
             $config = $this->usage->resolveConfig($request->user(), $data, 'image');
@@ -459,13 +523,11 @@ class AiImageController extends Controller
             $config = $this->usage->resolveConfig($request->user(), $data, 'chat');
         }
 
-        if (($config['tracked'] ?? false) && $request->user()) {
+        if ($this->usage->shouldApplyQuota($request->user(), $config)) {
             $this->usage->assertWithinQuota($request->user(), $data);
         }
 
         $baseUrl = $this->apiBaseUrl((string) $config['endpoint']);
-        $payload = $this->generationPayload($data);
-        $references = $this->generationReferenceFiles($request, $data);
         $mask = $request->file('mask_image');
         $responsesConfig = null;
         $usedConfig = $config;
@@ -511,6 +573,14 @@ class AiImageController extends Controller
         try {
             $response = $sendAttempt($usedMode, $usedMode === 'responses');
         } catch (ConnectionException $exception) {
+            if ($this->localAi->enabledFallback()) {
+                $fallback = $this->localImageFallback($request, $data, $payload, $references);
+
+                if ($fallback !== null) {
+                    return $fallback;
+                }
+            }
+
             return response()->json([
                 'message' => '图片生成失败：'.$exception->getMessage(),
             ], 502);
@@ -559,6 +629,14 @@ class AiImageController extends Controller
         }
 
         if ($response->failed()) {
+            if ($this->localAi->enabledFallback()) {
+                $fallback = $this->localImageFallback($request, $data, $payload, $references);
+
+                if ($fallback !== null) {
+                    return $fallback;
+                }
+            }
+
             $fallbackModels = $this->fallbackImageModels($baseUrl, $config['api_key'] ?? null, $providerPayload, trim((string) $data['model']));
 
             foreach ($fallbackModels as $fallbackModel) {
@@ -668,7 +746,7 @@ class AiImageController extends Controller
         $usedMode = $this->initialStreamImageApiMode($data);
         $config = $this->usage->resolveConfig($request->user(), $data, $usedMode === 'responses' ? 'chat' : 'image');
 
-        if (($config['tracked'] ?? false) && $request->user()) {
+        if ($this->usage->shouldApplyQuota($request->user(), $config)) {
             $this->usage->assertWithinQuota($request->user(), $data);
         }
 
@@ -738,9 +816,15 @@ class AiImageController extends Controller
     {
         $data = $this->validatedChatData($request);
         $data = $this->applySavedUserConfig($request, $data);
+        $payload = $this->chatPayload($data, $request->file('chat_files', []));
+
+        if ($this->localAi->shouldUseLocal($data, 'chat')) {
+            return $this->chatWithLocalModel($request, $data, $payload);
+        }
+
         $config = $this->usage->resolveConfig($request->user(), $data, 'chat');
 
-        if (($config['tracked'] ?? false) && $request->user()) {
+        if ($this->usage->shouldApplyQuota($request->user(), $config)) {
             $this->usage->assertWithinQuota($request->user(), [
                 ...$data,
                 'count' => 1,
@@ -748,7 +832,6 @@ class AiImageController extends Controller
         }
 
         $baseUrl = $this->apiBaseUrl((string) $config['endpoint']);
-        $payload = $this->chatPayload($data, $request->file('chat_files', []));
 
         $startedAt = microtime(true);
         try {
@@ -757,6 +840,14 @@ class AiImageController extends Controller
                 ->withHeaders($this->apiHeaders($config['api_key'] ?? null))
                 ->post($baseUrl.'/chat/completions', $payload);
         } catch (ConnectionException $exception) {
+            if ($this->localAi->enabledFallback()) {
+                $fallback = $this->localChatFallback($request, $data, $payload);
+
+                if ($fallback !== null) {
+                    return $fallback;
+                }
+            }
+
             return response()->json([
                 'message' => 'AI 聊天请求失败：'.$exception->getMessage(),
             ], 502);
@@ -862,6 +953,22 @@ class AiImageController extends Controller
         ];
     }
 
+    /**
+     * @return array<int, array{id:string,name:string,source:string,local:bool,lora?:bool}>
+     */
+    private function localAiModelsForResponse(string $feature): array
+    {
+        $models = collect($this->localAi->models($feature))
+            ->map(fn (array $model): array => [
+                'id' => $model['id'],
+                'name' => '[本地] '.$model['name'],
+                'source' => 'local',
+                'local' => true,
+            ]);
+
+        return $models->values()->all();
+    }
+
     private function apiBaseUrl(string $endpoint): string
     {
         $url = $this->assertSafeEndpoint($endpoint);
@@ -943,6 +1050,8 @@ class AiImageController extends Controller
             'reference_images.*' => ['image', 'max:10240'],
             'reference_asset_ids' => ['nullable', 'array', 'max:6'],
             'reference_asset_ids.*' => ['integer'],
+            'lora_models' => ['nullable', 'array', 'max:8'],
+            'lora_models.*' => ['string', 'max:255'],
             'mask_image' => ['nullable', 'image', 'max:10240'],
         ]);
 
@@ -1376,6 +1485,128 @@ class AiImageController extends Controller
         }
 
         return null;
+    }
+
+    private function generateWithLocalModel(Request $request, array $data, array $payload, array $references): JsonResponse
+    {
+        $referenceAttachments = collect($references)
+            ->map(fn (mixed $file, int $index): ?array => $this->attachmentData($file, $index))
+            ->filter()
+            ->values()
+            ->all();
+
+        try {
+            $result = $this->localAi->generateImage($data, $payload, $referenceAttachments);
+        } catch (RuntimeException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 502);
+        }
+
+        if ($result['images'] === []) {
+            return response()->json([
+                'message' => '本地 AI runner 没有返回可识别的图片数据。',
+                'provider_payload_preview' => $this->providerPayloadPreview($result['payload']),
+            ], 502);
+        }
+
+        $config = [
+            'endpoint' => 'local',
+            'api_key' => null,
+            'source' => 'local',
+            'config_name' => '本地模型',
+            'tracked' => false,
+            'feature' => 'image',
+        ];
+
+        $this->usage->record($request->user(), $data, $config, $result['payload'], $result['request_ms'], metadata: [
+            'feature' => 'image',
+            'image_count' => count($result['images']),
+            'stream' => false,
+            'local_model' => true,
+        ]);
+
+        return response()->json([
+            'images' => $result['images'],
+            'meta' => [
+                ...$this->generationMeta($data, 'local', $config),
+                'provider_source' => 'local',
+                'local_runner' => true,
+                'request_ms' => $result['request_ms'],
+            ],
+        ]);
+    }
+
+    private function localImageFallback(Request $request, array $data, array $payload, array $references): ?JsonResponse
+    {
+        $models = $this->localAi->models('image');
+
+        if ($models === []) {
+            return null;
+        }
+
+        $data['model'] = $models[0]['id'];
+        $payload['model'] = $models[0]['id'];
+
+        return $this->generateWithLocalModel($request, $data, $payload, $references);
+    }
+
+    private function chatWithLocalModel(Request $request, array $data, array $payload): JsonResponse
+    {
+        try {
+            $result = $this->localAi->chat($data, $payload);
+        } catch (RuntimeException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 502);
+        }
+
+        $config = [
+            'endpoint' => 'local',
+            'api_key' => null,
+            'source' => 'local',
+            'config_name' => '本地模型',
+            'tracked' => false,
+            'feature' => 'chat',
+        ];
+
+        $this->usage->record($request->user(), [
+            ...$data,
+            'count' => 1,
+        ], $config, $result['payload'], $result['request_ms'], metadata: [
+            'feature' => 'chat',
+            'reasoning_mode' => $data['reasoning_mode'] ?? 'low',
+            'web_search' => (bool) ($data['web_search'] ?? false),
+            'local_model' => true,
+        ]);
+
+        return response()->json([
+            'message' => $result['message'],
+            'meta' => [
+                'source' => 'local',
+                'config_name' => '本地模型',
+                'provider_source' => 'local',
+                'model' => trim((string) $data['model']),
+                'reasoning_mode' => $data['reasoning_mode'] ?? 'low',
+                'web_search' => (bool) ($data['web_search'] ?? false),
+                'request_ms' => $result['request_ms'],
+                'local_runner' => true,
+            ],
+        ]);
+    }
+
+    private function localChatFallback(Request $request, array $data, array $payload): ?JsonResponse
+    {
+        $models = $this->localAi->models('chat');
+
+        if ($models === []) {
+            return null;
+        }
+
+        $data['model'] = $models[0]['id'];
+        $payload['model'] = $models[0]['id'];
+
+        return $this->chatWithLocalModel($request, $data, $payload);
     }
 
     /**

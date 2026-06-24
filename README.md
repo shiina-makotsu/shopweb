@@ -107,6 +107,9 @@ php artisan serve
 - 前台 AI 页面包含画廊和 Chat 两种模式。
 - 生图支持自定义 API URL/Key、后台默认配置、模型获取、参考图、提示词、多图生成、尺寸、质量、格式、透明背景、流式预览和任务详情。
 - Chat 支持会话侧边栏、新增/删除会话、自动命名、附件、模型选择、推理强度和联网搜索开关。
+- 后台 AI 已独立为一级菜单，集中管理客服 AI、导购 AI、Token 监视、本地模型和 AI 工作流。
+- AI 工作流提供类似 ComfyUI 的画布：组件库按一级/二级分类折叠，支持拖入组件、右键添加组件、节点内配置参数、端点连线、缩放、画布尺寸切换和自动排列。
+- 本地模型预留目录位于 `storage/app/ai-models`，语言模型、图像模型和 LoRA 分开存放；读取到模型后可作为 AI 接口可选模型或第三方 API 异常时的备用接入。
 - Image API 默认使用 `gpt-image-2`；当兼容网关需要走 Responses 图像工具时，可用 `AI_RESPONSES_IMAGE_MODEL` 指定承载 `image_generation` 工具的主线模型。
 - AI 出站请求由 Laravel 后端代理发送，支持 `AI_HTTP_VERIFY_SSL`、`AI_HTTP_USE_NATIVE_CA` 和 `AI_HTTP_CA_BUNDLE` 配置 PHP/cURL 证书校验，避免 Windows 或精简服务器上出现 `cURL error 60`。
 - 后台可配置默认生图/聊天 URL 和 Key，也可为单个用户配置专属 URL、Key 和 token 上限。
@@ -120,7 +123,9 @@ php artisan serve
 - 前台用户、后台用户、权限角色、登录日志和后台活动日志；前台用户可维护生日和是否持有诊断证明，后台客户列表显示生日/持证信息并在当天生日显示标识，相关变更会写入记录。
 - 内容页面、页面评论、公告、前台菜单、友情链接、媒体库和资源库。
 - 论坛版块、帖子、评论、活动日志和版主管理。
-- 站点设置、安装向导、缓存管理、备份下载、系统信息和默认外观。
+- 站点设置、安装向导、缓存管理、备份下载、系统信息、默认外观、告警 Bot 和 SMTP 通知。
+- 仪表盘聚焦网站运行负载，显示 Redis、MySQL、接口、缓存、队列和请求耗时等实时指标；销售数据迁移到报告页查看。
+- 支持缓存预热、请求令牌桶限流、指数退避兜底页和自动告警预留；P0 用于站点崩溃，P2 用于客户消息，P3 用于订单待确认或普通未读提醒。
 
 ## 主要路由
 
@@ -166,6 +171,12 @@ php artisan shop:database-health
 php artisan shop:database-health --fix
 ```
 
+预热首页、商品、菜单和常用缓存：
+
+```bash
+php artisan shop:cache-prewarm
+```
+
 构建前端资源：
 
 ```bash
@@ -186,7 +197,9 @@ php artisan serve
 - 生产环境 Web 根目录必须指向 `public`。
 - 首次部署可访问 `/install` 完成安装向导。
 - 已安装站点默认会在启动/首次请求时检查未执行迁移并自动补齐，可通过 `SHOP_AUTO_MIGRATE_ON_BOOT=false` 关闭；手动自查可运行 `php artisan shop:database-health`。
+- 生产环境建议在发布后显式执行 `php artisan migrate --force` 和 `php artisan shop:cache-prewarm`，再清理并重建配置、路由和视图缓存。
 - 建议使用 MySQL/MariaDB，并配置稳定的队列、缓存和文件存储策略。
+- 高访问量场景建议启用 Redis 缓存、队列和限流；如需要高可用，可按 `config/database.php` 的 Sentinel 配置启用三主三从/哨兵部署，并配合告警 Bot 和 [docs/runbooks.md](docs/runbooks.md) 的预案处理故障。
 - 需要确保 `storage`、`bootstrap/cache` 和上传目录可写。
 - 域名、反向代理、Cloudflare 等环境请检查 `APP_URL`、代理头和 HTTPS 设置。
 - 如果 AI 模型列表或生图/聊天请求出现 `cURL error 60`，请优先保持 `AI_HTTP_USE_NATIVE_CA=true`，或配置 `AI_HTTP_CA_BUNDLE=/path/to/cacert.pem`，不要在生产环境随意关闭 SSL 校验。
@@ -218,5 +231,6 @@ chmod +x start-linux.sh
 
 - [DEPLOY.md](DEPLOY.md)：部署、服务器配置和 Release 包说明。
 - [docs/requirements.md](docs/requirements.md)：功能需求、已实现状态和后续规划。
+- [docs/runbooks.md](docs/runbooks.md)：数据库、CDN、支付通道、第三方接口、缓存预热和告警分级预案。
 - [docs/about-us.md](docs/about-us.md)：关于我们页面示例 Markdown。
 - [docs/nginx.conf.example](docs/nginx.conf.example)：Nginx 配置示例。

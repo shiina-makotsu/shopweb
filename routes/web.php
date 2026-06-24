@@ -16,6 +16,7 @@ use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\FlashSaleCheckoutController;
 use App\Http\Controllers\ForumController;
 use App\Http\Controllers\FriendLinkController;
+use App\Http\Controllers\GuidePetController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\InstallController;
 use App\Http\Controllers\OrderController;
@@ -56,9 +57,11 @@ Route::get('/products/{statusSlug}/{productSlug}', [ProductController::class, 's
 Route::get('/products/{productSlug}', [ProductController::class, 'showLegacy'])->name('products.show');
 Route::get('/search', [SearchController::class, 'index'])->name('search.index');
 Route::get('/friend-links', [FriendLinkController::class, 'index'])->name('friend-links.index');
+Route::post('/guide-pet/chat', [GuidePetController::class, 'chat'])->name('guide-pet.chat');
 Route::middleware('auth')->group(function (): void {
     Route::get('/ai-image', [AiImageController::class, 'index'])->name('ai-image.index');
     Route::post('/ai-image/models', [AiImageController::class, 'models'])->name('ai-image.models');
+    Route::get('/ai-image/local-models', [AiImageController::class, 'localModels'])->name('ai-image.local-models');
     Route::get('/ai-image/configs', [AiImageController::class, 'configs'])->name('ai-image.configs');
     Route::post('/ai-image/configs', [AiImageController::class, 'saveConfig'])->name('ai-image.configs.store');
     Route::delete('/ai-image/configs/{config}', [AiImageController::class, 'deleteConfig'])->name('ai-image.configs.destroy');

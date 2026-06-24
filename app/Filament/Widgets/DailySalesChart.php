@@ -38,6 +38,15 @@ class DailySalesChart extends Widget
      * @param  Collection<int, array{date: string, label: string, sales_cents: int, order_count: int}>  $daily
      * @return array{sales_points: string, order_points: string, baseline_points: string, y_labels: array<int, string>, x_labels: array<int, array{label: string, x: float}>}
      */
+    public function publicBuildChartForReports(Collection $daily): array
+    {
+        return $this->buildChart($daily);
+    }
+
+    /**
+     * @param  Collection<int, array{date: string, label: string, sales_cents: int, order_count: int}>  $daily
+     * @return array{sales_points: string, order_points: string, baseline_points: string, y_labels: array<int, string>, x_labels: array<int, array{label: string, x: float}>}
+     */
     private function buildChart(Collection $daily): array
     {
         $width = 1000;

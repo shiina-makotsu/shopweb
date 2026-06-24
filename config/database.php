@@ -50,5 +50,19 @@ return [
             'port' => env('REDIS_PORT', '6379'),
             'database' => env('REDIS_DB', '0'),
         ],
+        'cache' => [
+            'url' => env('REDIS_CACHE_URL', env('REDIS_URL')),
+            'host' => env('REDIS_CACHE_HOST', env('REDIS_HOST', '127.0.0.1')),
+            'username' => env('REDIS_CACHE_USERNAME', env('REDIS_USERNAME')),
+            'password' => env('REDIS_CACHE_PASSWORD', env('REDIS_PASSWORD')),
+            'port' => env('REDIS_CACHE_PORT', env('REDIS_PORT', '6379')),
+            'database' => env('REDIS_CACHE_DB', '1'),
+        ],
+        'sentinel' => [
+            'master' => env('REDIS_SENTINEL_MASTER', 'mymaster'),
+            'nodes' => array_values(array_filter(array_map('trim', explode(',', (string) env('REDIS_SENTINEL_NODES', ''))))),
+            'service' => env('REDIS_SENTINEL_SERVICE', 'mymaster'),
+            'password' => env('REDIS_SENTINEL_PASSWORD'),
+        ],
     ],
 ];

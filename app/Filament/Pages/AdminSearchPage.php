@@ -5,6 +5,7 @@ namespace App\Filament\Pages;
 use App\Filament\Resources\AdminActivityLogResource;
 use App\Filament\Resources\AdminLoginLogResource;
 use App\Filament\Resources\AdminUserResource;
+use App\Filament\Resources\AiWorkflowResource;
 use App\Filament\Resources\AnnouncementResource;
 use App\Filament\Resources\AfterSalesRequestResource;
 use App\Filament\Resources\CatalogAttributeResource;
@@ -17,6 +18,7 @@ use App\Filament\Resources\ForumSectionResource;
 use App\Filament\Resources\ForumThreadResource;
 use App\Filament\Resources\FlashSaleResource;
 use App\Filament\Resources\GuestSupportChatSessionResource;
+use App\Filament\Pages\GuideAiSettingsPage;
 use App\Filament\Resources\InventoryMovementResource;
 use App\Filament\Resources\ManufacturerResource;
 use App\Filament\Resources\MediaAssetResource;
@@ -121,13 +123,15 @@ class AdminSearchPage extends Page
             ['group' => '仓库', 'label' => '仓库流水', 'keywords' => '入库 出库 退回 加工 调整 仓库流水', 'url' => WarehouseMovementResource::getUrl()],
             ['group' => '仓库', 'label' => '库存流水', 'keywords' => '商品 SKU 库存管理 扣减 恢复 低库存', 'url' => InventoryMovementResource::getUrl()],
             ['group' => '用户', 'label' => '前台用户', 'keywords' => '客户 普通用户 会员用户 订单号可见 物流号可见', 'url' => CustomerResource::getUrl()],
-            ['group' => '用户', 'label' => 'AI', 'keywords' => 'AI 配额 token key url 模型 用量 用户', 'url' => UserAiPage::getUrl()],
             ['group' => '用户', 'label' => '后台用户', 'keywords' => '管理员 运营 财务 仓库 权限', 'url' => AdminUserResource::getUrl()],
+            ['group' => 'AI', 'label' => 'Token 监视', 'keywords' => 'AI 配额 token key url 模型 用量 用户', 'url' => UserAiPage::getUrl()],
+            ['group' => 'AI', 'label' => 'AI 工作流', 'keywords' => 'AI 工作流 comfyui 画布 节点 lora 语言模型 画图模型 串联', 'url' => AiWorkflowResource::getUrl()],
+            ['group' => 'AI', 'label' => '导购 AI', 'keywords' => '导购 桌宠 AI 工作流 商品推荐', 'url' => GuideAiSettingsPage::getUrl()],
             ['group' => '客服', 'label' => '客服会话', 'keywords' => '即时聊天 图片 文件 接待 结束', 'url' => SupportChatSessionResource::getUrl()],
             ['group' => '客服', 'label' => '游客会话', 'keywords' => '游客 客服 即时聊天 游客ID', 'url' => GuestSupportChatSessionResource::getUrl()],
             ['group' => '客服', 'label' => '售后需求', 'keywords' => '订单售后 退款 补偿 优惠券 处理留言', 'url' => AfterSalesRequestResource::getUrl()],
             ['group' => '客服', 'label' => '客服工单', 'keywords' => '投诉 反馈 工单 支持 提需求', 'url' => SupportTicketResource::getUrl()],
-            ['group' => '客服', 'label' => '客服 AI 设置', 'keywords' => 'AI 安抚 等待时间 接口 key 模型 预设', 'url' => SupportAiSettingsPage::getUrl()],
+            ['group' => 'AI', 'label' => '客服 AI 设置', 'keywords' => 'AI 安抚 等待时间 接口 key 模型 预设 工作流', 'url' => SupportAiSettingsPage::getUrl()],
             ['group' => '内容', 'label' => '首页', 'keywords' => '首页 Markdown 首页标题', 'url' => HomeContentPage::getUrl()],
             ['group' => '内容', 'label' => '公告', 'keywords' => '铃铛 未读 弹窗 置顶 发布 删除 评论', 'url' => AnnouncementResource::getUrl()],
             ['group' => '内容', 'label' => '自定义页面', 'keywords' => '页面 markdown 关于我们 说明', 'url' => PageResource::getUrl()],

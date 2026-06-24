@@ -77,12 +77,14 @@ class SiteSetting extends Model
         'guide_pet_model',
         'guide_pet_system_prompt',
         'guide_pet_context_mode',
+        'guide_ai_workflow_slug',
         'support_ai_enabled',
         'support_ai_endpoint',
         'support_ai_api_key',
         'support_ai_model',
         'support_ai_system_prompt',
         'support_ai_idle_minutes',
+        'support_ai_workflow_slug',
         'ai_default_endpoint',
         'ai_default_api_key',
         'ai_default_image_endpoint',
@@ -154,6 +156,11 @@ class SiteSetting extends Model
     public function paymentFriendQrUrl(): ?string
     {
         return $this->assetUrl($this->payment_fallback_config['friend_qr_path'] ?? null);
+    }
+
+    public function guidePetAssetUrl(): ?string
+    {
+        return $this->assetUrl($this->guide_pet_asset_path);
     }
 
     /**

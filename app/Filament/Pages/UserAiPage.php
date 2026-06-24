@@ -19,10 +19,10 @@ class UserAiPage extends Page implements HasSchemas
 {
     use \Filament\Schemas\Concerns\InteractsWithSchemas;
 
-    protected static ?string $navigationLabel = 'AI';
-    protected static string|\UnitEnum|null $navigationGroup = '用户';
-    protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedUsers;
-    protected static ?int $navigationSort = 35;
+    protected static ?string $navigationLabel = 'Token 监视';
+    protected static string|\UnitEnum|null $navigationGroup = 'AI';
+    protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedChartBarSquare;
+    protected static ?int $navigationSort = 10;
     protected static ?string $slug = 'user-ai';
     protected string $view = 'filament.pages.user-ai';
 
@@ -200,6 +200,27 @@ class UserAiPage extends Page implements HasSchemas
         $this->loadUser();
     }
 
+    public function resetUserUsage(): void
+    {
+        $user = $this->selectedUser();
+
+        if (! $user) {
+            Notification::make()->title('请选择用户')->danger()->send();
+
+            return;
+        }
+
+        app(AiUsageService::class)->resetUsage($user);
+
+        Notification::make()
+            ->title('用户 token 用量已重置')
+            ->body('历史使用记录已保留，余额和用量会从当前时间重新计算。')
+            ->success()
+            ->send();
+
+        $this->loadUser();
+    }
+
     public function selectedUser(): ?User
     {
         return User::query()
@@ -299,6 +320,7 @@ class UserAiPage extends Page implements HasSchemas
             'tokens_24h' => $usage->usedTokens($user, now()->subDay()),
             'prompt_tokens' => $totals['prompt_tokens'],
             'completion_tokens' => $totals['completion_tokens'],
+            'reset_at' => $user->ai_usage_reset_at,
             'model_breakdown' => $usage->modelBreakdown($user),
             'hourly_usage' => $usage->hourlyModelUsage($user),
             'recent_logs' => $usage->recentLogs($user, 20),

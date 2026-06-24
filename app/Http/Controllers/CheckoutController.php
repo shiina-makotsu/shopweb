@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Services\CartService;
+use App\Models\AnalyticsEvent;
+use App\Services\AnalyticsTracker;
 use App\Services\CouponService;
 use App\Services\OrderService;
 use App\Services\ShippingQuoteService;
@@ -14,11 +16,19 @@ use Illuminate\View\View;
 
 class CheckoutController extends Controller
 {
-    public function create(Request $request, CartService $cart, ShippingQuoteService $shippingQuotes, CouponService $coupons): View|RedirectResponse
+    public function create(Request $request, CartService $cart, ShippingQuoteService $shippingQuotes, CouponService $coupons, AnalyticsTracker $analytics): View|RedirectResponse
     {
         if ($cart->isEmpty()) {
             return redirect()->route('cart.show')->withErrors(['cart' => '购物车为空。']);
         }
+
+        $analytics->track($request, AnalyticsEvent::CHECKOUT_VIEW, [
+            'source' => 'checkout',
+            'amount_cents' => $cart->subtotalCents(),
+            'metadata' => [
+                'item_count' => $cart->items()->sum('quantity'),
+            ],
+        ]);
 
         $defaultAddress = $request->user()->addresses()->where('is_default', true)->first();
         $shippingProvince = $request->old(
@@ -40,7 +50,7 @@ class CheckoutController extends Controller
         ]);
     }
 
-    public function store(Request $request, CartService $cart, OrderService $orders): RedirectResponse
+    public function store(Request $request, CartService $cart, OrderService $orders, AnalyticsTracker $analytics): RedirectResponse
     {
         $requiresShipping = $cart->requiresShipping();
         $input = $request->all();
@@ -76,6 +86,7 @@ class CheckoutController extends Controller
         $data['payment_method'] ??= Order::PAYMENT_METHOD_QR_CODE;
 
         $order = $orders->createFromCart($request->user(), $data);
+        $analytics->trackOrderCreated($request, $order);
 
         return redirect()->route('orders.show', $order)->with('status', '订单已创建，请按页面说明付款并上传凭证。');
     }

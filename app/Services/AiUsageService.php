@@ -187,7 +187,7 @@ class AiUsageService
     {
         $limitTokens = $this->quotaLimitK($user) * 1000;
 
-        return max(0, (int) floor(($limitTokens - $this->usedTokens($user)) / 1000));
+        return max(0, (int) floor(($limitTokens - $this->quotaUsedTokens($user)) / 1000));
     }
 
     /**
@@ -308,7 +308,7 @@ class AiUsageService
             ]);
         }
 
-        $remainingTokens = $limitTokens - $this->usedTokens($user);
+        $remainingTokens = $limitTokens - $this->quotaUsedTokens($user);
 
         if ($remainingTokens <= 0) {
             throw ValidationException::withMessages([
@@ -332,6 +332,27 @@ class AiUsageService
     public function shouldEnforceQuota(User $user): bool
     {
         return ! $user->isBackofficeUser();
+    }
+
+    public function shouldApplyQuota(?User $user, array $config): bool
+    {
+        if (! $user || ! ($config['tracked'] ?? false)) {
+            return false;
+        }
+
+        return $this->shouldEnforceQuota($user);
+    }
+
+    public function resetUsage(User $user): void
+    {
+        $user->forceFill([
+            'ai_usage_reset_at' => now(),
+        ])->save();
+    }
+
+    public function quotaUsedTokens(User $user): int
+    {
+        return $this->usedTokens($user, $this->effectiveUsageSince($user));
     }
 
     public function record(
@@ -406,5 +427,20 @@ class AiUsageService
         $imageWeight = str_contains($model, 'image') || str_contains($model, 'flux') ? 1000 : 250;
 
         return max(1, $base + ($count * $imageWeight));
+    }
+
+    private function effectiveUsageSince(?User $user, ?CarbonInterface $since = null): ?CarbonInterface
+    {
+        $resetAt = $user?->ai_usage_reset_at;
+
+        if (! $resetAt) {
+            return $since;
+        }
+
+        if (! $since || $resetAt->greaterThan($since)) {
+            return $resetAt;
+        }
+
+        return $since;
     }
 }

@@ -139,6 +139,7 @@ class AdminAccess
     {
         return match ($role) {
             self::ROLE_OPERATOR => [
+                'ai',
                 'approvals',
                 'catalog',
                 'orders',
@@ -153,6 +154,7 @@ class AdminAccess
                 'reports',
             ],
             self::ROLE_FINANCE => [
+                'ai',
                 'approvals',
                 'orders',
                 'payments',
@@ -169,6 +171,7 @@ class AdminAccess
                 'procurement',
             ],
             self::ROLE_SALES => [
+                'ai',
                 'approvals',
                 'orders',
                 'customers',
@@ -185,6 +188,7 @@ class AdminAccess
                 'reports',
             ],
             self::ROLE_SUPPORT => [
+                'ai',
                 'customers',
                 'content',
                 'forum',

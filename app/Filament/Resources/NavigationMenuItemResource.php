@@ -30,7 +30,7 @@ class NavigationMenuItemResource extends Resource
 
     protected static ?string $model = NavigationMenuItem::class;
     protected static string $permissionArea = 'content';
-    protected static ?string $navigationLabel = '前台菜单';
+    protected static ?string $navigationLabel = '菜单';
     protected static ?string $modelLabel = '前台菜单';
     protected static ?string $pluralModelLabel = '前台菜单';
     protected static string|\UnitEnum|null $navigationGroup = '内容';

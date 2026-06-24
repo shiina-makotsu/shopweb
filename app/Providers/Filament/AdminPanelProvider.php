@@ -7,11 +7,14 @@ use App\Filament\Widgets\DashboardStats;
 use App\Filament\Widgets\LowStockVariants;
 use App\Filament\Widgets\PendingPaymentOrders;
 use App\Filament\Widgets\SalesRangeStats;
+use App\Filament\Widgets\SystemLoadChart;
+use App\Filament\Widgets\SystemLoadStats;
 use App\Filament\Pages\BackupPage;
 use App\Filament\Pages\AdminSearchPage;
 use App\Filament\Pages\CacheManagementPage;
 use App\Filament\Pages\CurrencySettingsPage;
 use App\Filament\Pages\Dashboard;
+use App\Filament\Pages\GuideAiSettingsPage;
 use App\Filament\Pages\HomeContentPage;
 use App\Filament\Pages\MailSettingsPage;
 use App\Filament\Pages\NotFoundContentPage;
@@ -23,7 +26,11 @@ use App\Filament\Pages\StoreInfoPage;
 use App\Filament\Pages\SupportAiSettingsPage;
 use App\Filament\Pages\SystemInfoPage;
 use App\Filament\Pages\UserAiPage;
+use App\Models\Order;
 use App\Models\SiteSetting;
+use App\Models\SupportChatMessage;
+use App\Models\SupportChatSession;
+use App\Support\AdminMenuRegistry;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -43,6 +50,7 @@ use Illuminate\Foundation\Http\Middleware\PreventRequestsDuringMaintenance;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 use Throwable;
@@ -66,19 +74,7 @@ class AdminPanelProvider extends PanelProvider
             ->collapsedSidebarWidth('4.5rem')
             ->sidebarCollapsibleOnDesktop()
             ->collapsibleNavigationGroups(true)
-            ->navigationGroups([
-                NavigationGroup::make('商品')->icon(Heroicon::OutlinedShoppingBag)->collapsible(true)->collapsed(),
-                NavigationGroup::make('目录')->icon(Heroicon::OutlinedSquares2x2)->collapsible(true)->collapsed(),
-                NavigationGroup::make('交易')->icon(Heroicon::OutlinedShoppingCart)->collapsible(true)->collapsed(),
-                NavigationGroup::make('仓库')->icon(Heroicon::OutlinedArchiveBox)->collapsible(true)->collapsed(),
-                NavigationGroup::make('财务')->icon(Heroicon::OutlinedBanknotes)->collapsible(true)->collapsed(),
-                NavigationGroup::make('用户')->icon(Heroicon::OutlinedUsers)->collapsible(true)->collapsed(),
-                NavigationGroup::make('客服')->icon(Heroicon::OutlinedLifebuoy)->collapsible(true)->collapsed(),
-                NavigationGroup::make('内容')->icon(Heroicon::OutlinedDocumentText)->collapsible(true)->collapsed(),
-                NavigationGroup::make('论坛')->icon(Heroicon::OutlinedChatBubbleLeftRight)->collapsible(true)->collapsed(),
-                NavigationGroup::make('报告')->icon(Heroicon::OutlinedChartBarSquare)->collapsible(true)->collapsed(),
-                NavigationGroup::make('系统')->icon(Heroicon::OutlinedCog6Tooth)->collapsible(true)->collapsed(),
-            ])
+            ->navigationGroups(app(AdminMenuRegistry::class)->navigationGroups())
             ->colors([
                 'primary' => Color::Blue,
                 'gray' => Color::Slate,
@@ -90,6 +86,7 @@ class AdminPanelProvider extends PanelProvider
                 BackupPage::class,
                 CacheManagementPage::class,
                 CurrencySettingsPage::class,
+                GuideAiSettingsPage::class,
                 HomeContentPage::class,
                 MailSettingsPage::class,
                 NotFoundContentPage::class,
@@ -103,21 +100,129 @@ class AdminPanelProvider extends PanelProvider
                 UserAiPage::class,
             ])
             ->widgets([
-                DashboardStats::class,
-                SalesRangeStats::class,
-                DailySalesChart::class,
+                SystemLoadStats::class,
+                SystemLoadChart::class,
                 PendingPaymentOrders::class,
                 LowStockVariants::class,
                 AccountWidget::class,
             ])
             ->renderHook(
                 PanelsRenderHook::HEAD_END,
-                fn (): HtmlString => new HtmlString($this->adminThemeStyle().<<<'HTML'
+                fn (): HtmlString => new HtmlString(
+                    str_replace(
+                        ['__SHOPWEB_ADMIN_GROUP_BADGES__', '__SHOPWEB_ADMIN_MENU_CONFIG__'],
+                        [
+                            json_encode($this->adminNavigationGroupBadges(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}',
+                            json_encode(app(AdminMenuRegistry::class)->browserConfig(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{"groups":[],"items":[]}',
+                        ],
+                        $this->adminThemeStyle().<<<'HTML'
                     <script>
                         (() => {
                             const resetVersion = '2026-06-10-admin-sidebar-warehouse-v1';
                             const resetKey = 'shopweb:admin-sidebar-reset-version';
-                            const defaultCollapsedGroups = ['商品', '目录', '交易', '仓库', '用户', '内容', '论坛', '报告', '系统'];
+                            const adminMenuConfig = __SHOPWEB_ADMIN_MENU_CONFIG__;
+                            const defaultCollapsedGroups = (adminMenuConfig.groups || []).map((group) => group.label).filter(Boolean);
+                            const groupBadges = __SHOPWEB_ADMIN_GROUP_BADGES__;
+
+                            const normalizeUrl = (url) => {
+                                try {
+                                    return new URL(url, window.location.origin).pathname.replace(/\/+$/, '') || '/';
+                                } catch (error) {
+                                    return String(url || '').split('?')[0].replace(/\/+$/, '') || '/';
+                                }
+                            };
+
+                            const findSidebarGroup = (label) => document.querySelector(`.fi-sidebar-group[data-group-label="${CSS.escape(label)}"]`);
+
+                            const findSidebarItem = (url, label) => {
+                                const path = normalizeUrl(url);
+                                const links = Array.from(document.querySelectorAll('.fi-sidebar a[href]'));
+
+                                return links.find((link) => normalizeUrl(link.href) === path)
+                                    || links.find((link) => label && link.textContent.trim().includes(label));
+                            };
+
+                            const syncAdminMenuOrder = () => {
+                                const sidebar = document.querySelector('.fi-sidebar');
+
+                                if (! sidebar) {
+                                    return;
+                                }
+
+                                const groups = adminMenuConfig.groups || [];
+                                const items = adminMenuConfig.items || [];
+                                const groupContainer = document.querySelector('.fi-sidebar-nav-groups, .fi-sidebar-nav, nav.fi-sidebar-nav');
+
+                                if (groupContainer) {
+                                    groups.forEach((group) => {
+                                        const node = findSidebarGroup(group.label);
+
+                                        if (node) {
+                                            groupContainer.appendChild(node);
+                                        }
+                                    });
+                                }
+
+                                items.forEach((item) => {
+                                    const link = findSidebarItem(item.url, item.label);
+                                    const targetGroup = item.group ? findSidebarGroup(item.group) : null;
+
+                                    if (! link || ! targetGroup) {
+                                        return;
+                                    }
+
+                                    const listItem = link.closest('li, .fi-sidebar-item');
+                                    const list = targetGroup.querySelector('ul, .fi-sidebar-group-items, .fi-sidebar-nav-items');
+
+                                    if (list && listItem && ! list.contains(listItem)) {
+                                        list.appendChild(listItem);
+                                    }
+                                });
+                            };
+
+                            const syncNavigationGroupBadges = () => {
+                                Object.entries(groupBadges).forEach(([label, count]) => {
+                                    const selector = `.fi-sidebar-group[data-group-label="${CSS.escape(label)}"]`;
+                                    const group = document.querySelector(selector);
+
+                                    if (! group) {
+                                        return;
+                                    }
+
+                                    const button = group.querySelector('.fi-sidebar-group-btn');
+
+                                    if (! button) {
+                                        return;
+                                    }
+
+                                    let badge = button.querySelector('[data-shopweb-group-badge]');
+
+                                    if (! count) {
+                                        badge?.remove();
+
+                                        return;
+                                    }
+
+                                    if (! badge) {
+                                        badge = document.createElement('span');
+                                        badge.dataset.shopwebGroupBadge = 'true';
+                                        badge.className = 'shopweb-admin-group-badge';
+                                        button.insertBefore(badge, button.querySelector('.fi-sidebar-group-collapse-btn'));
+                                    }
+
+                                    badge.textContent = count > 99 ? '99+' : String(count);
+                                    badge.setAttribute('aria-label', `${label}待处理 ${badge.textContent}`);
+                                });
+                            };
+
+                            syncAdminMenuOrder();
+                            syncNavigationGroupBadges();
+                            document.addEventListener('DOMContentLoaded', syncNavigationGroupBadges);
+                            document.addEventListener('DOMContentLoaded', syncAdminMenuOrder);
+                            document.addEventListener('livewire:navigated', syncNavigationGroupBadges);
+                            document.addEventListener('livewire:navigated', syncAdminMenuOrder);
+                            document.addEventListener('livewire:update', syncNavigationGroupBadges);
+                            document.addEventListener('livewire:update', syncAdminMenuOrder);
 
                             try {
                                 if (window.innerWidth >= 1024 && localStorage.getItem(resetKey) !== resetVersion) {
@@ -541,7 +646,9 @@ class AdminPanelProvider extends PanelProvider
                             document.addEventListener('livewire:navigated', enhanceMarkdownEditors);
                         })();
                     </script>
-                    HTML),
+                    HTML,
+                    ),
+                ),
             )
             ->renderHook(
                 PanelsRenderHook::GLOBAL_SEARCH_AFTER,
@@ -599,8 +706,84 @@ class AdminPanelProvider extends PanelProvider
                     --shop-admin-accent: {$accent};
                     --wp-admin-canvas: {$canvas};
                 }
+
+                .shopweb-admin-group-badge {
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    min-width: 1.25rem;
+                    height: 1.25rem;
+                    margin-inline-start: auto;
+                    margin-inline-end: .25rem;
+                    border-radius: 999px;
+                    background: #dc2626;
+                    color: #fff;
+                    font-size: .6875rem;
+                    font-weight: 700;
+                    line-height: 1;
+                    box-shadow: 0 0 0 2px color-mix(in srgb, var(--wp-admin-canvas), #fff 35%);
+                }
+
+                .dark .shopweb-admin-group-badge {
+                    box-shadow: 0 0 0 2px #111827;
+                }
             </style>
             HTML;
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    private function adminNavigationGroupBadges(): array
+    {
+        return [
+            '交易' => $this->pendingAdminOrderCount(),
+            '客服' => $this->pendingAdminSupportCount(),
+        ];
+    }
+
+    private function pendingAdminOrderCount(): int
+    {
+        try {
+            if (! Schema::hasTable('orders')) {
+                return 0;
+            }
+
+            return Order::query()
+                ->where('payment_status', Order::PAYMENT_SUBMITTED)
+                ->where('status', '!=', Order::STATUS_CANCELLED)
+                ->count();
+        } catch (Throwable) {
+            return 0;
+        }
+    }
+
+    private function pendingAdminSupportCount(): int
+    {
+        try {
+            if (! Schema::hasTable('support_chat_sessions') || ! Schema::hasTable('support_chat_messages')) {
+                return 0;
+            }
+
+            $customerSessions = SupportChatSession::query()
+                ->whereNotNull('user_id')
+                ->whereHas('messages', fn (Builder $query): Builder => $query
+                    ->whereIn('sender_type', [SupportChatMessage::SENDER_CUSTOMER, SupportChatMessage::SENDER_GUEST])
+                    ->whereNull('read_at'))
+                ->count();
+
+            $guestSessions = SupportChatSession::query()
+                ->whereNull('user_id')
+                ->whereNotNull('guest_id')
+                ->whereHas('messages', fn (Builder $query): Builder => $query
+                    ->whereIn('sender_type', [SupportChatMessage::SENDER_CUSTOMER, SupportChatMessage::SENDER_GUEST])
+                    ->whereNull('read_at'))
+                ->count();
+
+            return $customerSessions + $guestSessions;
+        } catch (Throwable) {
+            return 0;
+        }
     }
 
     private function adminBrandName(): string

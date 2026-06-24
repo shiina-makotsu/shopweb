@@ -4,6 +4,8 @@ namespace App\Filament\Pages;
 
 use App\Models\SiteSetting;
 use App\Support\AdminAccess;
+use App\Models\AiWorkflow;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -19,7 +21,7 @@ class SupportAiSettingsPage extends Page implements HasSchemas
     use \Filament\Schemas\Concerns\InteractsWithSchemas;
 
     protected static ?string $navigationLabel = '客服 AI 设置';
-    protected static string|\UnitEnum|null $navigationGroup = '客服';
+    protected static string|\UnitEnum|null $navigationGroup = 'AI';
     protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedCpuChip;
     protected static ?int $navigationSort = 40;
     protected static ?string $slug = 'support-ai-settings';
@@ -37,6 +39,7 @@ class SupportAiSettingsPage extends Page implements HasSchemas
             'support_ai_model',
             'support_ai_idle_minutes',
             'support_ai_system_prompt',
+            'support_ai_workflow_slug',
         ]));
     }
 
@@ -78,6 +81,17 @@ class SupportAiSettingsPage extends Page implements HasSchemas
                             ->label('客服 AI 模型标识')
                             ->helperText('例如 gpt-4.1-mini、deepseek-chat 或其他兼容模型名。')
                             ->maxLength(255),
+                        Select::make('support_ai_workflow_slug')
+                            ->label('客服 AI 工作流')
+                            ->helperText('选择后可由工作流串联搜索、排序、回复等多个模型；留空时使用上方单模型配置。')
+                            ->options(fn (): array => AiWorkflow::query()
+                                ->where('is_active', true)
+                                ->orderBy('sort_order')
+                                ->orderBy('name')
+                                ->pluck('name', 'slug')
+                                ->all())
+                            ->searchable()
+                            ->preload(),
                         Textarea::make('support_ai_system_prompt')
                             ->label('客服 AI 预设内容')
                             ->helperText('用于长时间没有客服接待时，对客户进行安抚或基础引导。')

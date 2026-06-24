@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Models\CouponRedemption;
+use App\Models\AnalyticsEvent;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\ProductVariant;
@@ -12,6 +13,108 @@ use Illuminate\Support\Facades\DB;
 
 class ReportMetrics
 {
+    /**
+     * @return array<string, string|int>
+     */
+    public function conversionFunnel(): array
+    {
+        $events = fn (string $event): int => $this->eventCount($event);
+
+        return [
+            '总访问量' => $events(AnalyticsEvent::PAGE_VIEW),
+            '商品曝光' => $events(AnalyticsEvent::PRODUCT_IMPRESSION),
+            '商品详情访问' => $events(AnalyticsEvent::PRODUCT_VIEW),
+            '加购次数' => $events(AnalyticsEvent::ADD_TO_CART),
+            '立即购买' => $events(AnalyticsEvent::BUY_NOW),
+            '进入结算' => $events(AnalyticsEvent::CHECKOUT_VIEW),
+            '创建订单' => Order::query()->count(),
+            '已确认付款' => Order::query()->where('payment_status', Order::PAYMENT_CONFIRMED)->count(),
+        ];
+    }
+
+    /**
+     * @return Collection<int, array{product:string,status:string,impressions:int,views:int,adds:int,buy_now:int,orders:int,paid_orders:int,view_rate:string,cart_rate:string,order_rate:string}>
+     */
+    public function productConversions(int $limit = 20): Collection
+    {
+        $events = DB::table('analytics_events')
+            ->select([
+                'product_id',
+                DB::raw("sum(case when event = '".AnalyticsEvent::PRODUCT_IMPRESSION."' then 1 else 0 end) as impressions"),
+                DB::raw("sum(case when event = '".AnalyticsEvent::PRODUCT_VIEW."' then 1 else 0 end) as views"),
+                DB::raw("sum(case when event = '".AnalyticsEvent::ADD_TO_CART."' then 1 else 0 end) as adds"),
+                DB::raw("sum(case when event = '".AnalyticsEvent::BUY_NOW."' then 1 else 0 end) as buy_now"),
+                DB::raw("sum(case when event = '".AnalyticsEvent::ORDER_CREATED."' then 1 else 0 end) as order_events"),
+            ])
+            ->whereNotNull('product_id')
+            ->groupBy('product_id');
+
+        $paidOrders = DB::table('order_items')
+            ->join('orders', 'orders.id', '=', 'order_items.order_id')
+            ->where('orders.payment_status', Order::PAYMENT_CONFIRMED)
+            ->select([
+                'order_items.product_id',
+                DB::raw('count(distinct orders.id) as paid_order_count'),
+            ])
+            ->groupBy('order_items.product_id');
+
+        return DB::table('products')
+            ->leftJoinSub($events, 'events', 'products.id', '=', 'events.product_id')
+            ->leftJoinSub($paidOrders, 'paid_orders', 'products.id', '=', 'paid_orders.product_id')
+            ->select([
+                'products.title',
+                'products.status',
+                DB::raw('coalesce(events.impressions, 0) as impressions'),
+                DB::raw('coalesce(events.views, 0) as views'),
+                DB::raw('coalesce(events.adds, 0) as adds'),
+                DB::raw('coalesce(events.buy_now, 0) as buy_now'),
+                DB::raw('coalesce(events.order_events, 0) as order_events'),
+                DB::raw('coalesce(paid_orders.paid_order_count, 0) as paid_order_count'),
+            ])
+            ->orderByDesc(DB::raw('coalesce(events.impressions, 0) + coalesce(events.views, 0) + coalesce(events.adds, 0) + coalesce(events.order_events, 0)'))
+            ->limit($limit)
+            ->get()
+            ->map(fn ($row): array => [
+                'product' => $row->title,
+                'status' => Product::statusOptions()[$row->status] ?? (string) $row->status,
+                'impressions' => (int) $row->impressions,
+                'views' => (int) $row->views,
+                'adds' => (int) $row->adds,
+                'buy_now' => (int) $row->buy_now,
+                'orders' => (int) $row->order_events,
+                'paid_orders' => (int) $row->paid_order_count,
+                'view_rate' => $this->percent((int) $row->views, (int) $row->impressions),
+                'cart_rate' => $this->percent((int) $row->adds + (int) $row->buy_now, max(1, (int) $row->views)),
+                'order_rate' => $this->percent((int) $row->order_events, max(1, (int) $row->views)),
+            ]);
+    }
+
+    /**
+     * @return Collection<int, array{source:string,impressions:int,views:int,adds:int,orders:int}>
+     */
+    public function trafficSources(int $limit = 12): Collection
+    {
+        return DB::table('analytics_events')
+            ->select([
+                DB::raw("coalesce(nullif(source, ''), '未标记') as source_name"),
+                DB::raw("sum(case when event = '".AnalyticsEvent::PRODUCT_IMPRESSION."' then 1 else 0 end) as impressions"),
+                DB::raw("sum(case when event = '".AnalyticsEvent::PRODUCT_VIEW."' then 1 else 0 end) as views"),
+                DB::raw("sum(case when event = '".AnalyticsEvent::ADD_TO_CART."' then 1 else 0 end) as adds"),
+                DB::raw("sum(case when event = '".AnalyticsEvent::ORDER_CREATED."' then 1 else 0 end) as orders"),
+            ])
+            ->groupBy(DB::raw("coalesce(nullif(source, ''), '未标记')"))
+            ->orderByDesc(DB::raw('count(*)'))
+            ->limit($limit)
+            ->get()
+            ->map(fn ($row): array => [
+                'source' => $row->source_name,
+                'impressions' => (int) $row->impressions,
+                'views' => (int) $row->views,
+                'adds' => (int) $row->adds,
+                'orders' => (int) $row->orders,
+            ]);
+    }
+
     /**
      * @return array<string, string|int>
      */
@@ -203,5 +306,19 @@ class ReportMetrics
                 'option' => $row->label,
                 'votes' => (int) $row->vote_count,
             ]);
+    }
+
+    private function eventCount(string $event): int
+    {
+        return (int) DB::table('analytics_events')->where('event', $event)->count();
+    }
+
+    private function percent(int $value, int $base): string
+    {
+        if ($base <= 0) {
+            return '0%';
+        }
+
+        return rtrim(rtrim(number_format(($value / $base) * 100, 1), '0'), '.').'%';
     }
 }

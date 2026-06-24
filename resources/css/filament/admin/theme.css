@@ -515,6 +515,18 @@
     stroke-width: 2;
 }
 
+.shop-system-load-line-memory {
+    opacity: 0.82;
+    stroke: #f59e0b;
+    stroke-width: 2;
+}
+
+.shop-system-load-line-rpm {
+    opacity: 0.82;
+    stroke: #22c55e;
+    stroke-width: 2;
+}
+
 .shop-daily-sales-empty {
     align-items: center;
     color: var(--wp-admin-muted);
@@ -557,6 +569,14 @@
 
 .shop-daily-sales-legend-secondary {
     background: var(--shop-admin-pink-strong);
+}
+
+.shop-system-load-legend-memory {
+    background: #f59e0b;
+}
+
+.shop-system-load-legend-rpm {
+    background: #22c55e;
 }
 
 .fi-ta-table thead {

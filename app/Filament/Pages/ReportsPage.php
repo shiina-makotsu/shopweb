@@ -4,6 +4,8 @@ namespace App\Filament\Pages;
 
 use App\Support\ReportMetrics;
 use App\Support\AdminAccess;
+use App\Support\DashboardSalesRange;
+use App\Support\Money;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 
@@ -34,9 +36,41 @@ class ReportsPage extends Page
         return app(ReportMetrics::class)->salesSummary();
     }
 
+    public function salesTrend(): array
+    {
+        $range = app(DashboardSalesRange::class);
+        $daily = $range->daily();
+        $summary = $range->summary();
+
+        return [
+            'daily' => $daily,
+            'summary' => $summary,
+            'chart' => app(\App\Filament\Widgets\DailySalesChart::class)->publicBuildChartForReports($daily),
+            'hasData' => $summary['total_cents'] > 0 || $summary['order_count'] > 0,
+            'totalSales' => Money::format($summary['total_cents']),
+            'averageOrder' => Money::format($summary['average_order_cents']),
+            'bestDaySales' => Money::format($summary['best_day_cents']),
+        ];
+    }
+
     public function lowStockVariants()
     {
         return app(ReportMetrics::class)->lowStockVariants();
+    }
+
+    public function conversionFunnel(): array
+    {
+        return app(ReportMetrics::class)->conversionFunnel();
+    }
+
+    public function productConversions()
+    {
+        return app(ReportMetrics::class)->productConversions();
+    }
+
+    public function trafficSources()
+    {
+        return app(ReportMetrics::class)->trafficSources();
     }
 
     public function topCustomers()

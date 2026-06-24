@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Order;
 use App\Models\SiteSetting;
+use App\Services\AlertBotService;
 use App\Services\OrderService;
 use App\Services\WalletService;
 use App\Support\OrderPrivacy;
@@ -84,6 +85,13 @@ class OrderController extends Controller
             : $order->payment_proof_path;
 
         $orders->markPaymentSubmitted($order, $path, $data['payment_text_proof'] ?? null);
+        app(AlertBotService::class)->notify('ShopWeb P3 订单待确认收款', '用户已提交付款信息，订单等待后台确认收款。', [
+            'order_id' => $order->id,
+            'order_number' => $order->order_number,
+            'user_id' => $order->user_id,
+            'total_cents' => $order->total_cents,
+            'payment_method' => $order->payment_method,
+        ], 'P3');
 
         return back()->with('payment_success', true);
     }

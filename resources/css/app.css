@@ -361,6 +361,231 @@ code {
     animation: shop-cart-fly 680ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
 }
 
+.shop-guide-pet {
+    position: fixed;
+    right: 1rem;
+    bottom: 5.25rem;
+    z-index: 55;
+    display: grid;
+    justify-items: end;
+    gap: 0.5rem;
+    max-width: min(22rem, calc(100vw - 2rem));
+}
+
+.shop-guide-pet.shop-guide-pet-left {
+    right: auto;
+    left: 1rem;
+    justify-items: start;
+}
+
+.shop-guide-pet-toggle {
+    display: inline-flex;
+    width: 3.25rem;
+    height: 3.25rem;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--shop-primary), #fff 35%);
+    border-radius: 999px;
+    background: #fff;
+    color: #075985;
+    box-shadow: 0 14px 30px rgb(15 23 42 / 20%);
+    font-size: 0.875rem;
+    font-weight: 700;
+}
+
+.shop-guide-pet-toggle img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.shop-guide-pet-bubble,
+.shop-guide-pet-panel {
+    border: 1px solid #cbd5e1;
+    border-radius: 0.75rem;
+    background: #fff;
+    color: #0f172a;
+    box-shadow: 0 18px 36px rgb(15 23 42 / 20%);
+}
+
+.shop-guide-pet-bubble {
+    max-width: 17rem;
+    padding: 0.625rem 0.75rem;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+}
+
+.shop-guide-pet-panel {
+    width: min(22rem, calc(100vw - 2rem));
+    overflow: hidden;
+}
+
+.shop-guide-pet-panel-header {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    border-bottom: 1px solid #e2e8f0;
+    background: #f8fafc;
+    padding: 0.75rem;
+}
+
+.shop-guide-pet-title {
+    font-weight: 700;
+}
+
+.shop-guide-pet-subtitle {
+    margin-top: 0.125rem;
+    color: #64748b;
+    font-size: 0.75rem;
+}
+
+.shop-guide-pet-panel-header button {
+    color: #64748b;
+    font-size: 1.125rem;
+    line-height: 1;
+}
+
+.shop-guide-pet-messages {
+    display: grid;
+    gap: 0.5rem;
+    max-height: 16rem;
+    overflow-y: auto;
+    padding: 0.75rem;
+    font-size: 0.8125rem;
+}
+
+.shop-guide-message {
+    max-width: 88%;
+    border-radius: 0.75rem;
+    padding: 0.5rem 0.625rem;
+    line-height: 1.55;
+}
+
+.shop-guide-message-assistant {
+    justify-self: start;
+    background: #f1f5f9;
+    color: #0f172a;
+}
+
+.shop-guide-message-user {
+    justify-self: end;
+    background: color-mix(in srgb, var(--shop-primary), #fff 14%);
+    color: #fff;
+}
+
+.shop-guide-pet-form {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 0.375rem;
+    border-top: 1px solid #e2e8f0;
+    padding: 0.625rem;
+}
+
+.shop-guide-pet-form input {
+    min-width: 0;
+    border: 1px solid #cbd5e1;
+    border-radius: 999px;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8125rem;
+}
+
+.shop-guide-pet-form button {
+    border: 1px solid #cbd5e1;
+    border-radius: 999px;
+    background: #fff;
+    padding: 0.5rem 0.75rem;
+    color: #0f172a;
+    font-size: 0.8125rem;
+}
+
+.shop-guide-pet-form button[type="submit"] {
+    border-color: var(--shop-primary);
+    background: var(--shop-primary);
+    color: #fff;
+}
+
+.shop-mode-dark .shop-guide-pet-toggle,
+.shop-mode-dark .shop-guide-pet-bubble,
+.shop-mode-dark .shop-guide-pet-panel {
+    border-color: var(--shop-dark-border);
+    background: var(--shop-dark-surface);
+    color: var(--shop-dark-text);
+}
+
+.shop-mode-dark .shop-guide-pet-panel-header {
+    border-color: var(--shop-dark-border);
+    background: var(--shop-dark-surface-soft);
+}
+
+.shop-mode-dark .shop-guide-pet-subtitle {
+    color: var(--shop-dark-muted);
+}
+
+.shop-mode-dark .shop-guide-message-assistant {
+    background: var(--shop-dark-surface-soft);
+    color: var(--shop-dark-text);
+}
+
+.shop-mode-dark .shop-guide-pet-form {
+    border-color: var(--shop-dark-border);
+}
+
+.shop-mode-dark .shop-guide-pet-form button:not([type="submit"]) {
+    border-color: var(--shop-dark-border);
+    background: var(--shop-dark-surface-soft);
+    color: var(--shop-dark-text);
+}
+
+@media (prefers-color-scheme: dark) {
+    .shop-mode-auto .shop-guide-pet-toggle,
+    .shop-mode-auto .shop-guide-pet-bubble,
+    .shop-mode-auto .shop-guide-pet-panel {
+        border-color: var(--shop-dark-border);
+        background: var(--shop-dark-surface);
+        color: var(--shop-dark-text);
+    }
+
+    .shop-mode-auto .shop-guide-pet-panel-header {
+        border-color: var(--shop-dark-border);
+        background: var(--shop-dark-surface-soft);
+    }
+
+    .shop-mode-auto .shop-guide-pet-subtitle {
+        color: var(--shop-dark-muted);
+    }
+
+    .shop-mode-auto .shop-guide-message-assistant {
+        background: var(--shop-dark-surface-soft);
+        color: var(--shop-dark-text);
+    }
+
+    .shop-mode-auto .shop-guide-pet-form {
+        border-color: var(--shop-dark-border);
+    }
+
+    .shop-mode-auto .shop-guide-pet-form button:not([type="submit"]) {
+        border-color: var(--shop-dark-border);
+        background: var(--shop-dark-surface-soft);
+        color: var(--shop-dark-text);
+    }
+}
+
+@media (max-width: 640px) {
+    .shop-guide-pet {
+        bottom: 4.5rem;
+    }
+
+    .shop-guide-pet-panel {
+        width: min(20rem, calc(100vw - 1rem));
+    }
+
+    .shop-guide-pet-messages {
+        max-height: 13rem;
+    }
+}
+
 @keyframes shop-cart-fly {
     0% {
         opacity: 1;

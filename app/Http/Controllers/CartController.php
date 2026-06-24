@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\ProductVariant;
+use App\Models\AnalyticsEvent;
+use App\Services\AnalyticsTracker;
 use App\Services\CartService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -11,8 +13,10 @@ use Illuminate\View\View;
 
 class CartController extends Controller
 {
-    public function show(CartService $cart): View
+    public function show(Request $request, CartService $cart, AnalyticsTracker $analytics): View
     {
+        $analytics->track($request, AnalyticsEvent::PAGE_VIEW, ['source' => 'cart']);
+
         return view('cart.show', [
             'items' => $cart->items(),
             'subtotalCents' => $cart->subtotalCents(),
@@ -20,12 +24,13 @@ class CartController extends Controller
         ]);
     }
 
-    public function store(Request $request, CartService $cart): RedirectResponse|JsonResponse
+    public function store(Request $request, CartService $cart, AnalyticsTracker $analytics): RedirectResponse|JsonResponse
     {
         $data = $this->validatedCartItem($request);
         $variant = $this->findPurchasableVariant((int) $data['variant_id']);
 
         $cart->add($variant, (int) $data['quantity']);
+        $analytics->trackVariant($request, AnalyticsEvent::ADD_TO_CART, $variant, (int) $data['quantity'], 'cart_add');
 
         if ($request->expectsJson()) {
             return response()->json([
@@ -38,12 +43,13 @@ class CartController extends Controller
         return redirect()->route('cart.show')->with('status', '已加入购物车。');
     }
 
-    public function buyNow(Request $request, CartService $cart): RedirectResponse
+    public function buyNow(Request $request, CartService $cart, AnalyticsTracker $analytics): RedirectResponse
     {
         $data = $this->validatedCartItem($request);
         $variant = $this->findPurchasableVariant((int) $data['variant_id']);
 
         $cart->replace($variant, (int) $data['quantity']);
+        $analytics->trackVariant($request, AnalyticsEvent::BUY_NOW, $variant, (int) $data['quantity'], 'buy_now');
 
         return redirect()->route('checkout.create');
     }

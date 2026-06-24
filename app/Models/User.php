@@ -43,6 +43,7 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
         'can_view_tracking_numbers',
         'support_email_notifications_enabled',
         'ai_quota_k',
+        'ai_usage_reset_at',
         'wallet_balance_cents',
         'ai_endpoint',
         'ai_api_key',
@@ -70,6 +71,7 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
             'support_email_notifications_enabled' => 'boolean',
             'birthday' => 'date',
             'has_diagnosis_certificate' => 'boolean',
+            'ai_usage_reset_at' => 'datetime',
             'wallet_balance_cents' => 'integer',
         ];
     }
