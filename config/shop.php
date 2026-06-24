@@ -28,6 +28,16 @@ return [
         'timeout_seconds' => (int) env('SHOP_ALERT_BOT_TIMEOUT', 5),
         'cooldown_seconds' => (int) env('SHOP_ALERT_BOT_COOLDOWN', 300),
     ],
+    'server_monitor' => [
+        'enabled' => (bool) env('SHOP_SERVER_MONITOR_ENABLED', true),
+        'cpu_percent_warning' => (float) env('SHOP_SERVER_CPU_WARNING', 90),
+        'memory_percent_warning' => (float) env('SHOP_SERVER_MEMORY_WARNING', 90),
+        'disk_percent_warning' => (float) env('SHOP_SERVER_DISK_WARNING', 90),
+        'db_ms_warning' => (float) env('SHOP_SERVER_DB_MS_WARNING', 1500),
+        'redis_ms_warning' => (float) env('SHOP_SERVER_REDIS_MS_WARNING', 1000),
+        'request_ms_warning' => (float) env('SHOP_SERVER_REQUEST_MS_WARNING', 3000),
+        'rpm_warning' => (int) env('SHOP_SERVER_RPM_WARNING', 600),
+    ],
     'redis_deployment' => [
         'recommended_topology' => env('SHOP_REDIS_TOPOLOGY', '3-master-3-replica-sentinel'),
         'maxmemory_policy' => env('SHOP_REDIS_MAXMEMORY_POLICY', 'allkeys-lfu'),

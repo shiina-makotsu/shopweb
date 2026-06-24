@@ -10,6 +10,10 @@ use RuntimeException;
 
 class LocalAiModelService
 {
+    public function __construct(private readonly LocalAiResourceGuard $resourceGuard)
+    {
+    }
+
     /**
      * @return array<int, string>
      */
@@ -124,6 +128,8 @@ class LocalAiModelService
      */
     public function generateImage(array $data, array $payload, array $references = []): array
     {
+        $this->resourceGuard->assertCanRun('image');
+
         $model = $this->requireModel((string) ($data['model'] ?? ''), 'image');
         $startedAt = microtime(true);
         $response = $this->sendToRunner('/image/generate', [
@@ -148,6 +154,8 @@ class LocalAiModelService
      */
     public function chat(array $data, array $payload): array
     {
+        $this->resourceGuard->assertCanRun('chat');
+
         $model = $this->requireModel((string) ($data['model'] ?? ''), 'chat');
         $startedAt = microtime(true);
         $response = $this->sendToRunner('/chat', [

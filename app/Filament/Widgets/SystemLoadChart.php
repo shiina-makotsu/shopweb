@@ -9,6 +9,8 @@ class SystemLoadChart extends Widget
 {
     protected static bool $isLazy = false;
 
+    protected ?string $pollingInterval = '15s';
+
     protected string $view = 'filament.widgets.system-load-chart';
 
     protected int | string | array $columnSpan = 'full';
@@ -40,6 +42,8 @@ class SystemLoadChart extends Widget
             (float) ($row['db_ms'] ?? 0),
             (float) ($row['redis_ms'] ?? 0),
             (float) ($row['php_memory_percent'] ?? 0),
+            (float) ($row['server_memory_used_percent'] ?? 0),
+            (float) ($row['server_cpu_percent'] ?? 0),
             (float) ($row['requests_per_minute'] ?? 0),
         ), $samples ?: [[]]));
 
@@ -60,6 +64,8 @@ class SystemLoadChart extends Widget
             'db_points' => $points('db_ms'),
             'redis_points' => $points('redis_ms'),
             'memory_points' => $points('php_memory_percent'),
+            'server_memory_points' => $points('server_memory_used_percent'),
+            'cpu_points' => $points('server_cpu_percent'),
             'rpm_points' => $points('requests_per_minute'),
             'y_labels' => collect(range(0, 4))
                 ->map(fn (int $step): string => (string) round(($max / 4) * (4 - $step), 1))

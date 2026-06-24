@@ -4,7 +4,11 @@ namespace App\Providers\Filament;
 
 use App\Filament\Widgets\DailySalesChart;
 use App\Filament\Widgets\DashboardStats;
+use App\Filament\Widgets\ActionRequiredList;
+use App\Filament\Widgets\AiChannelHealthWidget;
+use App\Filament\Widgets\LocalAiResourceWidget;
 use App\Filament\Widgets\LowStockVariants;
+use App\Filament\Widgets\OperationsHealthStats;
 use App\Filament\Widgets\PendingPaymentOrders;
 use App\Filament\Widgets\SalesRangeStats;
 use App\Filament\Widgets\SystemLoadChart;
@@ -101,7 +105,11 @@ class AdminPanelProvider extends PanelProvider
             ])
             ->widgets([
                 SystemLoadStats::class,
+                OperationsHealthStats::class,
                 SystemLoadChart::class,
+                AiChannelHealthWidget::class,
+                LocalAiResourceWidget::class,
+                ActionRequiredList::class,
                 PendingPaymentOrders::class,
                 LowStockVariants::class,
                 AccountWidget::class,

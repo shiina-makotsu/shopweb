@@ -8,6 +8,7 @@
         dropTarget: null,
         pointerDragging: false,
         saved: false,
+        dirtyPlacements: {},
         scrollTimer: null,
         currentTrees() {
             return this.activeTab === 'admin' ? this.adminTrees : this.frontendTrees;
@@ -275,7 +276,7 @@
                 this.dragged = null;
                 this.clearDropHint();
                 this.stopAutoScroll();
-                this.saveTree(placement);
+                this.markDirty(placement);
 
                 return;
             }
@@ -296,7 +297,7 @@
             this.dragged = null;
             this.clearDropHint();
             this.stopAutoScroll();
-            this.saveTree(placement);
+            this.markDirty(placement);
         },
         dropOnItem(placement, targetId) {
             if (! this.dragged || this.dragged.tab !== this.activeTab || this.dragged.placement !== placement || this.dragged.id === targetId) {
@@ -330,7 +331,7 @@
             this.dragged = null;
             this.clearDropHint();
             this.stopAutoScroll();
-            this.saveTree(placement);
+            this.markDirty(placement);
         },
         findItem(items, id) {
             for (const item of items) {
@@ -372,6 +373,17 @@
         },
         saveTree(placement) {
             this.currentSave()(placement, this.serialize(this.currentTrees()[placement].items));
+            this.dirtyPlacements[this.dirtyKey(placement)] = false;
+        },
+        markDirty(placement) {
+            this.saved = false;
+            this.dirtyPlacements[this.dirtyKey(placement)] = true;
+        },
+        isDirty(placement) {
+            return !! this.dirtyPlacements[this.dirtyKey(placement)];
+        },
+        dirtyKey(placement) {
+            return `${this.activeTab}:${placement}`;
         },
     }));
 </script>
@@ -428,12 +440,17 @@
                 <div class="mb-3 flex items-center justify-between gap-3">
                     <h3 class="text-sm font-semibold text-gray-900" x-text="tree.label"></h3>
                     <button
-                        class="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-100"
+                        class="rounded-md border px-3 py-1.5 text-xs font-medium"
+                        x-bind:class="isDirty(placement) ? 'border-blue-500 bg-blue-600 text-white hover:bg-blue-700' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-100'"
                         type="button"
                         x-on:click="saveTree(placement)"
                     >
-                        保存排序
+                        <span x-text="isDirty(placement) ? '保存排序 *' : '保存排序'"></span>
                     </button>
+                </div>
+
+                <div x-show="isDirty(placement)" x-cloak class="mb-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                    排序已调整，点击“保存排序”后才会写入数据库。
                 </div>
 
                 <ol
