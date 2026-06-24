@@ -37,6 +37,7 @@ class AdminMenuRegistry
     public function defaultGroups(): array
     {
         return [
+            ['label' => '主页', 'icon' => Heroicon::OutlinedHome, 'sort' => 0],
             ['label' => '审批', 'icon' => Heroicon::OutlinedClipboardDocumentCheck, 'sort' => 5],
             ['label' => '商品', 'icon' => Heroicon::OutlinedShoppingBag, 'sort' => 10],
             ['label' => '目录', 'icon' => Heroicon::OutlinedSquares2x2, 'sort' => 20],
@@ -127,7 +128,7 @@ class AdminMenuRegistry
                     continue;
                 }
 
-                $groupLabel = $this->stringValue($class::getNavigationGroup()) ?: '系统';
+                $groupLabel = $this->groupLabelFor($class);
                 $group = AdminMenuItem::query()->firstOrCreate(
                     ['item_key' => $this->groupKey($groupLabel)],
                     [
@@ -138,18 +139,24 @@ class AdminMenuRegistry
                     ],
                 );
 
-                AdminMenuItem::query()->firstOrCreate(
-                    ['item_key' => $this->classKey($class)],
-                    [
+                $item = AdminMenuItem::query()->firstOrNew(['item_key' => $this->classKey($class)]);
+                $item->forceFill([
+                    'parent_id' => $item->exists ? ($item->parent_id ?: $group->getKey()) : $group->getKey(),
+                    'type' => AdminMenuItem::TYPE_ITEM,
+                    'label' => $this->stringValue($class::getNavigationLabel()) ?: class_basename($class),
+                    'source_class' => $class,
+                    'url' => $this->urlFor($class),
+                    'sort_order' => $item->exists ? $item->sort_order : (int) ($class::getNavigationSort() ?? 0),
+                    'is_active' => true,
+                ])->save();
+
+                if ($class === Dashboard::class && $item->parent_id !== $group->getKey()) {
+                    $item->forceFill([
                         'parent_id' => $group->getKey(),
-                        'type' => AdminMenuItem::TYPE_ITEM,
-                        'label' => $this->stringValue($class::getNavigationLabel()) ?: class_basename($class),
-                        'source_class' => $class,
-                        'url' => $this->urlFor($class),
-                        'sort_order' => (int) ($class::getNavigationSort() ?? 0),
+                        'sort_order' => (int) ($class::getNavigationSort() ?? -100),
                         'is_active' => true,
-                    ],
-                );
+                    ])->save();
+                }
 
                 $this->moveAiItemToAiGroup($class, $group);
             }
@@ -280,6 +287,10 @@ class AdminMenuRegistry
 
     private function shouldRegister(string $class): bool
     {
+        if ($class === Dashboard::class) {
+            return true;
+        }
+
         try {
             return ! method_exists($class, 'shouldRegisterNavigation') || $class::shouldRegisterNavigation();
         } catch (Throwable) {
@@ -303,6 +314,15 @@ class AdminMenuRegistry
         }
 
         return is_string($value) && $value !== '' ? $value : null;
+    }
+
+    private function groupLabelFor(string $class): string
+    {
+        if ($class === Dashboard::class) {
+            return '主页';
+        }
+
+        return $this->stringValue($class::getNavigationGroup()) ?: '系统';
     }
 
     private function moveAiItemToAiGroup(string $class, AdminMenuItem $group): void
