@@ -509,10 +509,7 @@
     color: var(--wp-admin-muted);
     font-size: 0.8125rem;
     font-weight: 600;
-    left: 0.75rem;
-    position: absolute;
-    top: 0.5rem;
-    z-index: 2;
+    margin: 0 0 0.35rem 0.25rem;
 }
 
 .dark .shop-chart-panel-title {
@@ -528,6 +525,72 @@
     min-width: 220px;
     max-width: 260px;
     transform: translateZ(0);
+}
+
+.shop-system-load-filter {
+    align-items: end;
+    display: grid;
+    gap: 0.75rem;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin-bottom: 1rem;
+}
+
+.shop-system-load-filter label {
+    display: grid;
+    gap: 0.35rem;
+}
+
+.shop-system-load-filter span {
+    color: var(--wp-admin-muted);
+    font-size: 0.8125rem;
+    font-weight: 600;
+}
+
+.shop-system-load-filter input,
+.shop-system-load-filter select {
+    border: 1px solid var(--wp-admin-border);
+    border-radius: 8px;
+    background: #fff;
+    color: var(--wp-admin-text);
+    font-size: 0.875rem;
+    min-height: 2.5rem;
+    padding: 0.45rem 0.65rem;
+}
+
+.shop-system-load-filter-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.shop-system-load-filter-actions button {
+    border: 1px solid var(--wp-admin-border);
+    border-radius: 8px;
+    background: #fff;
+    color: var(--wp-admin-text);
+    cursor: pointer;
+    font-size: 0.875rem;
+    min-height: 2.5rem;
+    padding: 0.45rem 0.75rem;
+}
+
+.shop-system-load-filter-actions button[type="submit"] {
+    border-color: var(--wp-admin-blue);
+    background: var(--wp-admin-blue);
+    color: #fff;
+}
+
+.dark .shop-system-load-filter input,
+.dark .shop-system-load-filter select,
+.dark .shop-system-load-filter-actions button {
+    background: #0f172a;
+    border-color: #334155;
+    color: #e5eef7;
+}
+
+.dark .shop-system-load-filter-actions button[type="submit"] {
+    background: #2563eb;
+    border-color: #60a5fa;
+    color: #fff;
 }
 
 .shop-daily-sales-svg {
@@ -2131,6 +2194,14 @@
 }
 
 @media (max-width: 768px) {
+    .shop-system-load-filter {
+        grid-template-columns: 1fr;
+    }
+
+    .shop-system-load-filter-actions {
+        flex-wrap: wrap;
+    }
+
     .shop-daily-sales-summary {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }

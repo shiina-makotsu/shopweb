@@ -3,7 +3,9 @@
 namespace App\Filament\Widgets;
 
 use App\Services\SystemLoadMetrics;
+use Carbon\CarbonInterface;
 use Filament\Widgets\Widget;
+use Illuminate\Support\Carbon;
 
 class SystemLoadChart extends Widget
 {
@@ -15,44 +17,78 @@ class SystemLoadChart extends Widget
 
     protected int | string | array $columnSpan = 'full';
 
+    public ?string $rangeStart = null;
+
+    public ?string $rangeEnd = null;
+
+    public int $visiblePointInterval = 1;
+
     protected function getViewData(): array
     {
         $metrics = app(SystemLoadMetrics::class);
         $metrics->record();
-        $samples = $metrics->timeline(1440);
+
+        $rangeEnd = $this->parseRangeDate($this->rangeEnd)?->second(0) ?? now()->second(0);
+        $rangeStart = $this->parseRangeDate($this->rangeStart)?->second(0) ?? $rangeEnd->copy()->subHours(24)->addMinute();
+
+        if ($rangeStart->greaterThan($rangeEnd)) {
+            [$rangeStart, $rangeEnd] = [$rangeEnd, $rangeStart];
+        }
+
+        $interval = $this->normalizedVisiblePointInterval();
+        $samples = $metrics->timelineBetween($rangeStart, $rangeEnd);
 
         return [
-            'samples' => $samples,
-            'charts' => $this->splitCharts($samples),
+            'charts' => $this->splitCharts($samples, $interval),
+            'rangeStart' => $rangeStart->format('Y-m-d\TH:i'),
+            'rangeEnd' => $rangeEnd->format('Y-m-d\TH:i'),
+            'visiblePointInterval' => $interval,
+            'visiblePointIntervalOptions' => [1, 5, 10, 15, 30, 60],
         ];
+    }
+
+    public function applyFilters(): void
+    {
+        $this->visiblePointInterval = $this->normalizedVisiblePointInterval();
+    }
+
+    public function resetFilters(): void
+    {
+        $this->rangeStart = null;
+        $this->rangeEnd = null;
+        $this->visiblePointInterval = 1;
     }
 
     /**
      * @param  array<int, array<string, mixed>>  $samples
      * @return array<int, array{title:string,chart:array}>
      */
-    private function splitCharts(array $samples): array
+    private function splitCharts(array $samples, int $visiblePointInterval): array
     {
         if (count($samples) <= 720) {
             return [[
-                'title' => '最近负载',
-                'chart' => $this->chart($samples),
+                'title' => '负载走势',
+                'chart' => $this->chart($samples, $visiblePointInterval),
             ]];
         }
 
         return [
             [
                 'title' => '前 12 小时负载',
-                'chart' => $this->chart(array_slice($samples, 0, -720)),
+                'chart' => $this->chart(array_slice($samples, 0, 720), $visiblePointInterval),
             ],
             [
                 'title' => '后 12 小时负载',
-                'chart' => $this->chart(array_slice($samples, -720)),
+                'chart' => $this->chart(array_slice($samples, 720), $visiblePointInterval),
             ],
         ];
     }
 
-    private function chart(array $samples): array
+    /**
+     * @param  array<int, array<string, mixed>>  $samples
+     * @return array<string, mixed>
+     */
+    private function chart(array $samples, int $visiblePointInterval = 1): array
     {
         $width = 1000;
         $height = 260;
@@ -89,9 +125,10 @@ class SystemLoadChart extends Widget
             ->values()
             ->map(function (array $row, int $index) use ($left, $top, $plotWidth, $plotHeight, $count, $max): array {
                 $x = round($left + (($plotWidth / $count) * $index), 2);
-                $valueY = static fn (float|int $value) => round($top + ($plotHeight - (((float) $value / $max) * $plotHeight)), 2);
+                $valueY = static fn (float | int | null $value): float => round($top + ($plotHeight - (((float) $value / $max) * $plotHeight)), 2);
 
                 return [
+                    'index' => $index,
                     'x' => $x,
                     'time' => (string) ($row['time'] ?? ''),
                     'db_ms' => $row['db_ms'] ?? 0,
@@ -119,56 +156,18 @@ class SystemLoadChart extends Widget
             ['name' => '请求/分钟', 'color' => '#22c55e', 'points' => $points('requests_per_minute'), 'width' => 2],
         ];
 
-        $markers = collect($samplePoints)
+        $markerPoints = collect($samplePoints)
+            ->filter(fn (array $point): bool => $point['index'] === 0 || $point['index'] === count($samplePoints) - 1 || $point['index'] % $visiblePointInterval === 0)
+            ->values();
+
+        $markers = $markerPoints
             ->flatMap(fn (array $point): array => [
-                [
-                    'x' => $point['x'],
-                    'y' => $point['db_y'],
-                    'title' => $point['time'],
-                    'line_1' => 'MySQL ms',
-                    'line_2' => 'MySQL：'.$point['db_ms'].' ms',
-                    'color' => '#3b82f6',
-                ],
-                [
-                    'x' => $point['x'],
-                    'y' => $point['redis_y'],
-                    'title' => $point['time'],
-                    'line_1' => 'Redis ms',
-                    'line_2' => 'Redis：'.$point['redis_ms'].' ms',
-                    'color' => '#ec4899',
-                ],
-                [
-                    'x' => $point['x'],
-                    'y' => $point['memory_y'],
-                    'title' => $point['time'],
-                    'line_1' => 'PHP 内存 %',
-                    'line_2' => 'PHP 内存：'.$point['php_memory_percent'].'%',
-                    'color' => '#8b5cf6',
-                ],
-                [
-                    'x' => $point['x'],
-                    'y' => $point['server_memory_y'],
-                    'title' => $point['time'],
-                    'line_1' => '服务器内存 %',
-                    'line_2' => '服务器内存：'.$point['server_memory_used_percent'].'%',
-                    'color' => '#f59e0b',
-                ],
-                [
-                    'x' => $point['x'],
-                    'y' => $point['cpu_y'],
-                    'title' => $point['time'],
-                    'line_1' => '服务器 CPU %',
-                    'line_2' => '服务器 CPU：'.$point['server_cpu_percent'].'%',
-                    'color' => '#ef4444',
-                ],
-                [
-                    'x' => $point['x'],
-                    'y' => $point['rpm_y'],
-                    'title' => $point['time'],
-                    'line_1' => '请求/分钟',
-                    'line_2' => '请求/分钟：'.$point['requests_per_minute'],
-                    'color' => '#22c55e',
-                ],
+                $this->marker($point, 'db_y', 'MySQL ms', 'MySQL：'.$point['db_ms'].' ms', '#3b82f6'),
+                $this->marker($point, 'redis_y', 'Redis ms', 'Redis：'.$point['redis_ms'].' ms', '#ec4899'),
+                $this->marker($point, 'memory_y', 'PHP 内存 %', 'PHP 内存：'.$point['php_memory_percent'].'%', '#8b5cf6'),
+                $this->marker($point, 'server_memory_y', '服务器内存 %', '服务器内存：'.$point['server_memory_used_percent'].'%', '#f59e0b'),
+                $this->marker($point, 'cpu_y', '服务器 CPU %', '服务器 CPU：'.$point['server_cpu_percent'].'%', '#ef4444'),
+                $this->marker($point, 'rpm_y', '请求/分钟', '请求/分钟：'.$point['requests_per_minute'], '#22c55e'),
             ])
             ->all();
 
@@ -180,7 +179,7 @@ class SystemLoadChart extends Widget
                 ->all(),
             'x_labels' => collect($samples)
                 ->values()
-                ->filter(fn (array $row, int $index): bool => $index === 0 || $index === count($samples) - 1 || $index % 12 === 0)
+                ->filter(fn (array $row, int $index): bool => $index === 0 || $index === count($samples) - 1 || $index % 60 === 0)
                 ->map(fn (array $row, int $index): array => [
                     'label' => (string) ($row['time'] ?? ''),
                     'x' => round($left + (($plotWidth / $count) * $index), 2),
@@ -189,5 +188,41 @@ class SystemLoadChart extends Widget
                 ->all(),
             'has_data' => count($samples) > 1,
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $point
+     * @return array<string, mixed>
+     */
+    private function marker(array $point, string $yKey, string $name, string $value, string $color): array
+    {
+        return [
+            'x' => $point['x'],
+            'y' => $point[$yKey],
+            'title' => $point['time'],
+            'line_1' => $name,
+            'line_2' => $value,
+            'color' => $color,
+        ];
+    }
+
+    private function normalizedVisiblePointInterval(): int
+    {
+        $interval = (int) $this->visiblePointInterval;
+
+        return in_array($interval, [1, 5, 10, 15, 30, 60], true) ? $interval : 1;
+    }
+
+    private function parseRangeDate(?string $value): ?CarbonInterface
+    {
+        if (! filled($value)) {
+            return null;
+        }
+
+        try {
+            return Carbon::parse($value);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 }

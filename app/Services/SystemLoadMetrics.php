@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Str;
+use Carbon\CarbonInterface;
 use Throwable;
 
 class SystemLoadMetrics
@@ -78,6 +79,35 @@ class SystemLoadMetrics
     public function timeline(int $limit = 60): array
     {
         $limit = max(5, $limit);
+        $samples = $this->rawTimeline(1440);
+
+        return $this->denseTimeline($samples, $limit);
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public function timelineBetween(CarbonInterface $start, CarbonInterface $end): array
+    {
+        $start = $start->copy()->second(0);
+        $end = $end->copy()->second(0);
+
+        if ($start->greaterThan($end)) {
+            [$start, $end] = [$end, $start];
+        }
+
+        $limit = max(1, $start->diffInMinutes($end) + 1);
+        $samples = $this->rawTimeline(max(1440, $limit));
+
+        return $this->denseTimelineBetween($samples, $start, $end);
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function rawTimeline(int $limit = 60): array
+    {
+        $limit = max(5, $limit);
         $samples = Cache::get('shop:system-load:samples', []);
 
         return array_slice(is_array($samples) ? $samples : [], -$limit);
@@ -86,7 +116,7 @@ class SystemLoadMetrics
     public function record(): array
     {
         $snapshot = $this->snapshot();
-        $samples = $this->timeline(1440);
+        $samples = $this->rawTimeline(1440);
         $minuteKey = now()->format('Y-m-d H:i');
         $snapshot['minute_key'] = $minuteKey;
 
@@ -104,6 +134,123 @@ class SystemLoadMetrics
         $this->alertIfAbnormal($snapshot);
 
         return $snapshot;
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $samples
+     * @return array<int, array<string, mixed>>
+     */
+    private function denseTimeline(array $samples, int $limit): array
+    {
+        $end = now()->copy()->second(0);
+        $start = $end->copy()->subMinutes($limit - 1);
+
+        return $this->denseTimelineBetween($samples, $start, $end);
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $samples
+     * @return array<int, array<string, mixed>>
+     */
+    private function denseTimelineBetween(array $samples, CarbonInterface $start, CarbonInterface $end): array
+    {
+        $start = $start->copy()->second(0);
+        $end = $end->copy()->second(0);
+        $limit = max(1, $start->diffInMinutes($end) + 1);
+        $byMinute = [];
+
+        foreach ($samples as $sample) {
+            if (! is_array($sample)) {
+                continue;
+            }
+
+            $minuteKey = $this->sampleMinuteKey($sample);
+
+            if ($minuteKey === null) {
+                continue;
+            }
+
+            $byMinute[$minuteKey] = array_merge($sample, [
+                'minute_key' => $minuteKey,
+                'sampled' => true,
+            ]);
+        }
+
+        ksort($byMinute);
+
+        $dense = [];
+        $lastSample = null;
+
+        for ($index = 0; $index < $limit; $index++) {
+            $minute = $start->copy()->addMinutes($index);
+            $minuteKey = $minute->format('Y-m-d H:i');
+
+            if (isset($byMinute[$minuteKey])) {
+                $lastSample = $this->normalizeTimelineSample($byMinute[$minuteKey], $minute, true);
+                $dense[] = $lastSample;
+
+                continue;
+            }
+
+            $dense[] = $lastSample
+                ? $this->normalizeTimelineSample($lastSample, $minute, false)
+                : $this->emptyTimelineSample($minute);
+        }
+
+        return $dense;
+    }
+
+    /**
+     * @param  array<string, mixed>  $sample
+     */
+    private function sampleMinuteKey(array $sample): ?string
+    {
+        $minuteKey = $sample['minute_key'] ?? null;
+
+        if (is_string($minuteKey) && preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/', $minuteKey)) {
+            return $minuteKey;
+        }
+
+        $timestamp = $sample['timestamp'] ?? null;
+
+        if (is_numeric($timestamp)) {
+            return now()->setTimestamp((int) $timestamp)->format('Y-m-d H:i');
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $sample
+     * @return array<string, mixed>
+     */
+    private function normalizeTimelineSample(array $sample, CarbonInterface $minute, bool $sampled): array
+    {
+        return array_merge($sample, [
+            'time' => $minute->format('H:i'),
+            'timestamp' => $minute->getTimestamp(),
+            'minute_key' => $minute->format('Y-m-d H:i'),
+            'sampled' => $sampled,
+        ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function emptyTimelineSample(CarbonInterface $minute): array
+    {
+        return [
+            'time' => $minute->format('H:i'),
+            'timestamp' => $minute->getTimestamp(),
+            'minute_key' => $minute->format('Y-m-d H:i'),
+            'sampled' => false,
+            'db_ms' => 0,
+            'redis_ms' => 0,
+            'php_memory_percent' => 0,
+            'server_memory_used_percent' => 0,
+            'server_cpu_percent' => 0,
+            'requests_per_minute' => 0,
+        ];
     }
 
     /**
