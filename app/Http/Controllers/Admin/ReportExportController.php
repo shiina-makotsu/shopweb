@@ -20,11 +20,13 @@ class ReportExportController extends Controller
         return $this->download('report-product-sales.csv', [
             '商品',
             'SKU',
+            '完成订单',
             '销售数量',
             '销售金额',
         ], $metrics->productSales(500)->map(fn (array $row): array => [
             $row['product'],
             $row['sku'],
+            $row['orders'],
             $row['quantity'],
             $row['total'],
         ])->all());

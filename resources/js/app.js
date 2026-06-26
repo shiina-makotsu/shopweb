@@ -121,6 +121,21 @@ const setupFloatingCart = () => {
 
 setupFloatingCart();
 
+const setupRegistrationOnboarding = () => {
+    const onboarding = document.querySelector('[data-registration-onboarding]');
+    const close = document.querySelector('[data-registration-onboarding-close]');
+
+    if (!onboarding || !close) {
+        return;
+    }
+
+    close.addEventListener('click', () => {
+        onboarding.remove();
+    });
+};
+
+setupRegistrationOnboarding();
+
 const setupGuidePet = () => {
     const root = document.querySelector('[data-guide-pet]');
 

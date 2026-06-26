@@ -18,6 +18,7 @@ use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\KeyValue;
 use Filament\Forms\Components\Placeholder;
@@ -34,6 +35,8 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\Filter;
+use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -190,12 +193,17 @@ class ProductResource extends Resource
                                 TextInput::make('stock')
                                     ->label('库存')
                                     ->numeric()
-                                    ->required()
+                                    ->required(fn (Get $get): bool => $get('../../status') !== Product::STATUS_PRESALE)
                                     ->default(0)
+                                    ->visible(fn (Get $get): bool => $get('../../status') !== Product::STATUS_PRESALE)
                                     ->helperText(fn (Get $get): string => $get('../../fulfillment_type') === Product::FULFILLMENT_ONLINE
                                         ? '线上交付前台按不限库存处理。'
                                         : '物流/当面交付会按库存限制下单。'),
-                                TextInput::make('low_stock_threshold')->label('低库存阈值')->numeric()->default(5),
+                                TextInput::make('low_stock_threshold')
+                                    ->label('低库存阈值')
+                                    ->numeric()
+                                    ->default(5)
+                                    ->visible(fn (Get $get): bool => $get('../../status') !== Product::STATUS_PRESALE),
                                 Toggle::make('is_active')->label('启用')->default(true),
                             ])
                             ->columns(1)
@@ -663,7 +671,7 @@ HTML);
     public static function table(Table $table): Table
     {
         return $table
-            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with('variants'))
+            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with(['variants', 'tags']))
             ->columns([
                 TextColumn::make('title')
                     ->label('标题')
@@ -672,6 +680,11 @@ HTML);
                     ->searchable(query: fn (Builder $query, string $search): Builder => RegexSearch::where($query, ['title'], $search))
                     ->sortable(),
                 TextColumn::make('category.name')->label('分类')->sortable(),
+                TextColumn::make('tags.name')
+                    ->label('标签')
+                    ->badge()
+                    ->separator(',')
+                    ->toggleable(),
                 TextColumn::make('manufacturer.name')->label('制造商')->toggleable(),
                 TextColumn::make('status')->label('状态')->formatStateUsing(fn (?string $state): string => Product::statusOptions()[$state] ?? (string) $state)->badge(),
                 IconColumn::make('is_featured')->label('推荐')->boolean(),
@@ -685,6 +698,38 @@ HTML);
                 TextColumn::make('updated_at')->label('更新')->dateTime()->sortable(),
             ])
             ->defaultSort('updated_at', 'desc')
+            ->filters([
+                SelectFilter::make('category_id')
+                    ->label('分类')
+                    ->relationship('category', 'name')
+                    ->searchable()
+                    ->preload(),
+                SelectFilter::make('status')
+                    ->label('状态')
+                    ->options(fn (): array => Product::statusOptions()),
+                SelectFilter::make('tags')
+                    ->label('标签')
+                    ->relationship('tags', 'name')
+                    ->multiple()
+                    ->searchable()
+                    ->preload(),
+                SelectFilter::make('manufacturer_id')
+                    ->label('制造商')
+                    ->relationship('manufacturer', 'name')
+                    ->searchable()
+                    ->preload(),
+                Filter::make('updated_at')
+                    ->label('更新时间')
+                    ->schema([
+                        DatePicker::make('from')->label('开始日期'),
+                        DatePicker::make('until')->label('结束日期'),
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        return $query
+                            ->when($data['from'] ?? null, fn (Builder $query, string $date): Builder => $query->whereDate('updated_at', '>=', $date))
+                            ->when($data['until'] ?? null, fn (Builder $query, string $date): Builder => $query->whereDate('updated_at', '<=', $date));
+                    }),
+            ])
             ->recordUrl(null)
             ->recordActions([
                 EditAction::make()

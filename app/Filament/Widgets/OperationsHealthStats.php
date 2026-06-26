@@ -95,11 +95,29 @@ class OperationsHealthStats extends StatsOverviewWidget
                 ->count(),
             'paid_orders_today' => Order::query()
                 ->where('payment_status', Order::PAYMENT_CONFIRMED)
-                ->whereDate('paid_at', today())
+                ->where('status', Order::STATUS_FULFILLED)
+                ->where(function ($query): void {
+                    $query
+                        ->whereDate('fulfilled_at', today())
+                        ->orWhere(function ($query): void {
+                            $query
+                                ->whereNull('fulfilled_at')
+                                ->whereDate('paid_at', today());
+                        });
+                })
                 ->count(),
             'paid_amount_today' => (int) Order::query()
                 ->where('payment_status', Order::PAYMENT_CONFIRMED)
-                ->whereDate('paid_at', today())
+                ->where('status', Order::STATUS_FULFILLED)
+                ->where(function ($query): void {
+                    $query
+                        ->whereDate('fulfilled_at', today())
+                        ->orWhere(function ($query): void {
+                            $query
+                                ->whereNull('fulfilled_at')
+                                ->whereDate('paid_at', today());
+                        });
+                })
                 ->sum('total_cents'),
         ];
     }

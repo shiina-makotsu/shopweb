@@ -463,6 +463,73 @@
     width: 100%;
 }
 
+.shop-chart-tabs {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.shop-chart-tab-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.shop-chart-tab-button {
+    border: 1px solid var(--wp-admin-border);
+    border-radius: 999px;
+    background: #fff;
+    color: var(--wp-admin-text);
+    cursor: pointer;
+    font-size: 0.8125rem;
+    line-height: 1.2;
+    padding: 0.4rem 0.8rem;
+}
+
+.shop-chart-tab-button:hover,
+.shop-chart-tab-button.is-active {
+    border-color: var(--wp-admin-blue);
+    background: color-mix(in srgb, var(--wp-admin-blue), #fff 90%);
+    color: var(--wp-admin-blue-dark);
+}
+
+.dark .shop-chart-tab-button {
+    background: #0f172a;
+    border-color: #334155;
+    color: #cbd5e1;
+}
+
+.dark .shop-chart-tab-button:hover,
+.dark .shop-chart-tab-button.is-active {
+    background: #172033;
+    border-color: #60a5fa;
+    color: #bfdbfe;
+}
+
+.shop-chart-panel-title {
+    color: var(--wp-admin-muted);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    left: 0.75rem;
+    position: absolute;
+    top: 0.5rem;
+    z-index: 2;
+}
+
+.dark .shop-chart-panel-title {
+    color: #cbd5e1;
+}
+
+.shop-chart-floating-tooltip {
+    position: absolute;
+    left: 0;
+    top: 0;
+    z-index: 20;
+    pointer-events: auto;
+    min-width: 220px;
+    max-width: 260px;
+    transform: translateZ(0);
+}
+
 .shop-daily-sales-svg {
     display: block;
     height: 280px;
@@ -513,6 +580,16 @@
     opacity: 0.75;
     stroke: var(--shop-admin-pink-strong);
     stroke-width: 2;
+}
+
+.shop-daily-sales-line-tertiary {
+    opacity: 0.82;
+    stroke: #22c55e;
+    stroke-width: 2;
+}
+
+.shop-daily-sales-y-label-right {
+    text-anchor: end;
 }
 
 .shop-system-load-line-memory {
@@ -571,12 +648,85 @@
     background: var(--shop-admin-pink-strong);
 }
 
+.shop-daily-sales-legend-tertiary {
+    background: #22c55e;
+}
+
 .shop-system-load-legend-memory {
     background: #f59e0b;
 }
 
 .shop-system-load-legend-rpm {
     background: #22c55e;
+}
+
+.shop-chart-data-marker {
+    pointer-events: all;
+}
+
+.shop-chart-hit-target {
+    fill: none;
+    pointer-events: stroke;
+    stroke: transparent;
+    stroke-width: 12;
+}
+
+.shop-chart-point-dot,
+.shop-chart-point-ring {
+    opacity: 0 !important;
+    pointer-events: none;
+    transition: opacity 150ms ease, transform 150ms ease;
+    transform-origin: center;
+}
+
+.shop-chart-data-marker.is-active .shop-chart-point-dot,
+.shop-chart-data-marker.is-active .shop-chart-point-ring {
+    opacity: 1 !important;
+}
+
+.shop-chart-data-marker.is-active .shop-chart-point-ring {
+    transform: scale(1.01);
+}
+
+.shop-chart-tooltip-card {
+    border: 1px solid rgb(148 163 184 / 24%);
+    border-radius: 12px;
+    background: rgb(255 255 255 / 96%);
+    box-shadow: 0 12px 28px rgb(15 23 42 / 12%);
+    color: var(--wp-admin-text);
+    font-size: 12px;
+    line-height: 1.45;
+    padding: 0.75rem 0.875rem;
+}
+
+.dark .shop-chart-tooltip-card {
+    background: rgb(15 23 42 / 96%);
+    border-color: rgb(148 163 184 / 22%);
+    color: #e5eef7;
+}
+
+.shop-chart-tooltip-title {
+    color: var(--wp-admin-text);
+    font-weight: 600;
+    margin: 0 0 0.35rem;
+}
+
+.dark .shop-chart-tooltip-title {
+    color: #fff;
+}
+
+.shop-chart-tooltip-line {
+    margin: 0;
+}
+
+.shop-chart-hover-point:hover .shop-chart-tooltip,
+.shop-chart-hover-point:focus-within .shop-chart-tooltip {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.shop-chart-hover-point.is-active .shop-chart-point-dot {
+    opacity: 1;
 }
 
 .fi-ta-table thead {

@@ -467,7 +467,8 @@ it('keeps empty support sessions out of admin reception queues and polls new mes
         ->assertOk()
         ->assertSee('客服会话')
         ->assertSee('未读会话')
-        ->assertSee('最新会话');
+        ->assertSee('接待中会话')
+        ->assertSee('已结束会话');
 
     app(\App\Services\SupportChatService::class)->reply($emptySession->fresh(), $admin, '已收到 0。');
 
@@ -480,10 +481,11 @@ it('keeps empty support sessions out of admin reception queues and polls new mes
     expect($response->json('html'))->toContain('已收到 0。');
 });
 
-it('splits admin support chat pagination into unread and latest tabs', function (): void {
+it('splits admin support chat pagination into unread active and ended tabs', function (): void {
     $admin = User::factory()->create(['role' => 'support']);
     $user = User::factory()->create(['role' => 'customer', 'name' => '未读客户']);
-    $readUser = User::factory()->create(['role' => 'customer', 'name' => '已读客户']);
+    $activeUser = User::factory()->create(['role' => 'customer', 'name' => '接待中客户']);
+    $endedUser = User::factory()->create(['role' => 'customer', 'name' => '已结束客户']);
 
     $unreadSession = SupportChatSession::query()->create([
         'user_id' => $user->id,
@@ -496,16 +498,35 @@ it('splits admin support chat pagination into unread and latest tabs', function 
         'body' => '还没有被客服读取。',
     ]);
 
-    $readSession = SupportChatSession::query()->create([
-        'user_id' => $readUser->id,
+    $activeSession = SupportChatSession::query()->create([
+        'user_id' => $activeUser->id,
         'status' => SupportChatSession::STATUS_ACTIVE,
         'assigned_admin_id' => $admin->id,
         'last_message_at' => now()->subMinute(),
     ]);
-    $readSession->messages()->create([
-        'sender_user_id' => $readUser->id,
+    $activeSession->messages()->create([
+        'sender_user_id' => $activeUser->id,
         'sender_type' => SupportChatMessage::SENDER_CUSTOMER,
         'body' => '已经读取的会话。',
+        'read_at' => now(),
+    ]);
+    $activeSession->messages()->create([
+        'sender_user_id' => $admin->id,
+        'sender_type' => SupportChatMessage::SENDER_ADMIN,
+        'body' => '客服已经回复。',
+    ]);
+
+    $endedSession = SupportChatSession::query()->create([
+        'user_id' => $endedUser->id,
+        'status' => SupportChatSession::STATUS_CLOSED,
+        'assigned_admin_id' => $admin->id,
+        'last_message_at' => now()->subMinutes(2),
+        'ended_at' => now()->subMinute(),
+    ]);
+    $endedSession->messages()->create([
+        'sender_user_id' => $endedUser->id,
+        'sender_type' => SupportChatMessage::SENDER_CUSTOMER,
+        'body' => '客户关闭的会话。',
         'read_at' => now(),
     ]);
 
@@ -513,15 +534,25 @@ it('splits admin support chat pagination into unread and latest tabs', function 
         ->get('/admin/support-chat-sessions')
         ->assertOk()
         ->assertSee('未读会话')
-        ->assertSee('最新会话')
+        ->assertSee('接待中会话')
+        ->assertSee('已结束会话')
         ->assertSee('未读客户')
-        ->assertDontSee('已读客户');
+        ->assertDontSee('接待中客户')
+        ->assertDontSee('已结束客户');
 
     $this->actingAs($admin)
-        ->get('/admin/support-chat-sessions?tab=latest')
+        ->get('/admin/support-chat-sessions?tab=active')
         ->assertOk()
-        ->assertSee('未读客户')
-        ->assertSee('已读客户');
+        ->assertSee('接待中客户')
+        ->assertDontSee('未读客户')
+        ->assertDontSee('已结束客户');
+
+    $this->actingAs($admin)
+        ->get('/admin/support-chat-sessions?tab=ended')
+        ->assertOk()
+        ->assertSee('已结束客户')
+        ->assertDontSee('未读客户')
+        ->assertDontSee('接待中客户');
 });
 
 it('ignores ended support sessions when showing frontend unread badges', function (): void {
@@ -863,6 +894,37 @@ it('browses forum sections before posting and supports search sorting and locked
             'body' => '锁帖后不能回复。',
         ])
         ->assertForbidden();
+});
+
+it('marks forum sections unread until the viewer enters the section', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+    $author = User::factory()->create(['role' => 'customer']);
+    $section = ForumSection::query()->create([
+        'name' => 'Unread Section',
+        'slug' => 'unread-section',
+        'is_active' => true,
+    ]);
+
+    $section->threads()->create([
+        'user_id' => $author->id,
+        'title' => 'Unread thread',
+        'slug' => 'unread-thread',
+        'body' => 'Body',
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('forum.index'))
+        ->assertOk()
+        ->assertSee('aria-label="有未读帖子"', false);
+
+    $this->actingAs($user)
+        ->get(route('forum.sections.show', $section))
+        ->assertOk();
+
+    $this->actingAs($user)
+        ->get(route('forum.index'))
+        ->assertOk()
+        ->assertDontSee('aria-label="有未读帖子"', false);
 });
 
 it('adds support ai comfort messages when an open chat waits too long', function (): void {

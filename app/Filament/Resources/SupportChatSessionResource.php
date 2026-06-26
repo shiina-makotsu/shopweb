@@ -104,7 +104,6 @@ class SupportChatSessionResource extends Resource
                 TextColumn::make('user.name')
                     ->label('客户')
                     ->searchable(query: fn (Builder $query, string $search): Builder => $query->whereHas('user', fn (Builder $userQuery) => RegexSearch::where($userQuery, ['name', 'email', 'public_id'], $search))),
-                TextColumn::make('guest_id')->label('游客')->searchable()->toggleable(),
                 TextColumn::make('order.order_number')->label('订单号')->searchable()->toggleable(),
                 TextColumn::make('assignedAdmin.name')->label('客服')->toggleable(),
                 TextColumn::make('status')
@@ -312,8 +311,9 @@ class SupportChatSessionResource extends Resource
     {
         return SupportChatSession::query()
             ->whereNotNull('user_id')
+            ->whereNotIn('status', [SupportChatSession::STATUS_ENDED, SupportChatSession::STATUS_CLOSED])
             ->whereHas('messages', fn (Builder $query): Builder => $query
-                ->whereIn('sender_type', [SupportChatMessage::SENDER_CUSTOMER, SupportChatMessage::SENDER_GUEST])
+                ->where('sender_type', SupportChatMessage::SENDER_CUSTOMER)
                 ->whereNull('read_at'));
     }
 }

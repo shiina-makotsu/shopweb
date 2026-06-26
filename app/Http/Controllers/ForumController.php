@@ -4,12 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Models\ForumComment;
 use App\Models\ForumSection;
+use App\Models\ForumSectionRead;
 use App\Models\ForumThread;
 use App\Models\MediaAsset;
 use App\Services\ForumActivityLogger;
 use App\Support\ForumThreadTemplate;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
@@ -25,15 +27,39 @@ class ForumController extends Controller
             ->paginate(12)
             ->withQueryString();
 
+        $sections = ForumSection::query()
+            ->active()
+            ->with('moderators')
+            ->when($request->user(), fn ($query) => $query->with([
+                'reads' => fn ($readQuery) => $readQuery->where('user_id', $request->user()->id),
+            ]))
+            ->withCount(['threads' => fn ($query) => $query->visible()])
+            ->select('forum_sections.*')
+            ->selectSub(
+                ForumThread::query()
+                    ->visible()
+                    ->selectRaw('max(coalesce(last_replied_at, updated_at, created_at))')
+                    ->whereColumn('forum_threads.forum_section_id', 'forum_sections.id'),
+                'last_thread_activity_at',
+            )
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->paginate(6, ['*'], 'sections_page')
+            ->withQueryString();
+
+        if ($request->user()) {
+            $sections->getCollection()->each(function (ForumSection $section): void {
+                $activityAt = $section->last_thread_activity_at
+                    ? Carbon::parse($section->last_thread_activity_at)
+                    : $section->updated_at;
+                $readAt = $section->reads->first()?->read_at;
+
+                $section->setAttribute('has_unread_threads', $activityAt !== null && ($readAt === null || $activityAt->gt($readAt)));
+            });
+        }
+
         return view('forum.index', [
-            'sections' => ForumSection::query()
-                ->active()
-                ->with('moderators')
-                ->withCount(['threads' => fn ($query) => $query->visible()])
-                ->orderBy('sort_order')
-                ->orderBy('name')
-                ->paginate(6, ['*'], 'sections_page')
-                ->withQueryString(),
+            'sections' => $sections,
             'threads' => $threads,
             'sort' => $sort,
             'search' => $search,
@@ -44,6 +70,16 @@ class ForumController extends Controller
     public function section(Request $request, ForumSection $section): View
     {
         abort_unless($section->is_active, 404);
+
+        if ($request->user()) {
+            ForumSectionRead::query()->updateOrCreate(
+                [
+                    'forum_section_id' => $section->id,
+                    'user_id' => $request->user()->id,
+                ],
+                ['read_at' => now()],
+            );
+        }
 
         $sort = $this->sortFrom($request);
         $search = trim((string) $request->query('q', ''));

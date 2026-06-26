@@ -110,8 +110,8 @@ svg {
 }
 
 .shop-mode-dark :is(header, footer, aside, section, article, dialog, .bg-white),
-.shop-mode-dark :is(.bg-slate-50, .bg-slate-100, .bg-gray-50, .bg-gray-100),
-.shop-mode-dark :is(.bg-blue-50, .bg-emerald-50, .bg-pink-50, .bg-amber-50, .bg-red-50),
+.shop-mode-dark :is(.bg-slate-50, .bg-slate-100, .bg-slate-200, .bg-slate-300, .bg-gray-50, .bg-gray-100, .bg-gray-200),
+.shop-mode-dark :is(.bg-blue-50, .bg-emerald-50, .bg-pink-50, .bg-amber-50, .bg-red-50, .bg-violet-50),
 .shop-mode-dark [data-floating-cart-panel],
 .shop-mode-dark [data-registration-onboarding] > div,
 .shop-mode-dark .shop-cart-toast {
@@ -119,7 +119,7 @@ svg {
     color: var(--shop-dark-text) !important;
 }
 
-.shop-mode-dark :is(.bg-slate-50, .bg-slate-100, .bg-gray-50, .bg-blue-50, .bg-emerald-50, .bg-pink-50, .bg-amber-50, .bg-red-50) {
+.shop-mode-dark :is(.bg-slate-50, .bg-slate-100, .bg-slate-200, .bg-slate-300, .bg-gray-50, .bg-gray-100, .bg-gray-200, .bg-blue-50, .bg-emerald-50, .bg-pink-50, .bg-amber-50, .bg-red-50, .bg-violet-50) {
     background-color: var(--shop-dark-surface-soft) !important;
 }
 
@@ -172,8 +172,8 @@ svg {
 
 @media (prefers-color-scheme: dark) {
     .shop-mode-auto :is(header, footer, aside, section, article, dialog, .bg-white),
-    .shop-mode-auto :is(.bg-slate-50, .bg-slate-100, .bg-gray-50, .bg-gray-100),
-    .shop-mode-auto :is(.bg-blue-50, .bg-emerald-50, .bg-pink-50, .bg-amber-50, .bg-red-50),
+    .shop-mode-auto :is(.bg-slate-50, .bg-slate-100, .bg-slate-200, .bg-slate-300, .bg-gray-50, .bg-gray-100, .bg-gray-200),
+    .shop-mode-auto :is(.bg-blue-50, .bg-emerald-50, .bg-pink-50, .bg-amber-50, .bg-red-50, .bg-violet-50),
     .shop-mode-auto [data-floating-cart-panel],
     .shop-mode-auto [data-registration-onboarding] > div,
     .shop-mode-auto .shop-cart-toast {
@@ -181,7 +181,7 @@ svg {
         color: var(--shop-dark-text) !important;
     }
 
-    .shop-mode-auto :is(.bg-slate-50, .bg-slate-100, .bg-gray-50, .bg-blue-50, .bg-emerald-50, .bg-pink-50, .bg-amber-50, .bg-red-50) {
+    .shop-mode-auto :is(.bg-slate-50, .bg-slate-100, .bg-slate-200, .bg-slate-300, .bg-gray-50, .bg-gray-100, .bg-gray-200, .bg-blue-50, .bg-emerald-50, .bg-pink-50, .bg-amber-50, .bg-red-50, .bg-violet-50) {
         background-color: var(--shop-dark-surface-soft) !important;
     }
 
@@ -226,6 +226,15 @@ button {
 button,
 a {
     text-underline-offset: 2px;
+}
+
+.shop-notice-badge,
+:is(.rounded-full.bg-red-600, .rounded-full.bg-red-500) {
+    background-color: #ff0000 !important;
+}
+
+.shop-system-load-hover-point:hover foreignObject {
+    opacity: 1;
 }
 
 table {

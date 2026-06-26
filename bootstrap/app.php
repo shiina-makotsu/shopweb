@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\EnsureInstalled;
 use App\Http\Middleware\ProtectAgainstRequestAvalanche;
+use App\Http\Middleware\TrackPageVisits;
 use App\Http\Middleware\UseRelativeUrls;
 use Illuminate\Foundation\Application;
 use Illuminate\Console\Scheduling\Schedule;
@@ -50,6 +51,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->append(UseRelativeUrls::class);
         $middleware->append(ProtectAgainstRequestAvalanche::class);
+        $middleware->append(TrackPageVisits::class);
 
         $middleware->web(append: [
             EnsureInstalled::class,

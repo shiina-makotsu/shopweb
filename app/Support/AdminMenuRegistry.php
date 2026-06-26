@@ -183,7 +183,6 @@ class AdminMenuRegistry
      */
     public function tree(): array
     {
-        $this->syncDefaults();
 
         return [
             'admin' => [
@@ -209,7 +208,6 @@ class AdminMenuRegistry
         $groups = collect($this->defaultGroups())->keyBy('label');
 
         if ($this->tableReady()) {
-            $this->syncDefaults();
 
             $configured = AdminMenuItem::query()
                 ->where('type', AdminMenuItem::TYPE_GROUP)
@@ -244,7 +242,6 @@ class AdminMenuRegistry
             return ['groups' => [], 'items' => []];
         }
 
-        $this->syncDefaults();
 
         $groups = AdminMenuItem::query()
             ->where('type', AdminMenuItem::TYPE_GROUP)

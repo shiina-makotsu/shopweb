@@ -27,12 +27,30 @@ class DashboardStats extends StatsOverviewWidget
 
         $todaySales = Order::query()
             ->where('payment_status', Order::PAYMENT_CONFIRMED)
-            ->whereBetween('paid_at', [$todayStart, $todayEnd])
+            ->where('status', Order::STATUS_FULFILLED)
+            ->where(function ($query) use ($todayStart, $todayEnd): void {
+                $query
+                    ->whereBetween('fulfilled_at', [$todayStart, $todayEnd])
+                    ->orWhere(function ($query) use ($todayStart, $todayEnd): void {
+                        $query
+                            ->whereNull('fulfilled_at')
+                            ->whereBetween('paid_at', [$todayStart, $todayEnd]);
+                    });
+            })
             ->sum('total_cents');
 
         $monthSales = Order::query()
             ->where('payment_status', Order::PAYMENT_CONFIRMED)
-            ->whereBetween('paid_at', [$monthStart, $monthEnd])
+            ->where('status', Order::STATUS_FULFILLED)
+            ->where(function ($query) use ($monthStart, $monthEnd): void {
+                $query
+                    ->whereBetween('fulfilled_at', [$monthStart, $monthEnd])
+                    ->orWhere(function ($query) use ($monthStart, $monthEnd): void {
+                        $query
+                            ->whereNull('fulfilled_at')
+                            ->whereBetween('paid_at', [$monthStart, $monthEnd]);
+                    });
+            })
             ->sum('total_cents');
 
         $pendingPayments = Order::query()

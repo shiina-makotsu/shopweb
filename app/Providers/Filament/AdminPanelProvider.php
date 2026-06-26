@@ -13,6 +13,7 @@ use App\Filament\Widgets\PendingPaymentOrders;
 use App\Filament\Widgets\SalesRangeStats;
 use App\Filament\Widgets\SystemLoadChart;
 use App\Filament\Widgets\SystemLoadStats;
+use App\Filament\Widgets\VisitSourceOverview;
 use App\Filament\Pages\BackupPage;
 use App\Filament\Pages\AdminSearchPage;
 use App\Filament\Pages\CacheManagementPage;
@@ -107,6 +108,7 @@ class AdminPanelProvider extends PanelProvider
                 SystemLoadStats::class,
                 OperationsHealthStats::class,
                 SystemLoadChart::class,
+                VisitSourceOverview::class,
                 AiChannelHealthWidget::class,
                 LocalAiResourceWidget::class,
                 ActionRequiredList::class,
@@ -775,16 +777,18 @@ class AdminPanelProvider extends PanelProvider
 
             $customerSessions = SupportChatSession::query()
                 ->whereNotNull('user_id')
+                ->whereNotIn('status', [SupportChatSession::STATUS_ENDED, SupportChatSession::STATUS_CLOSED])
                 ->whereHas('messages', fn (Builder $query): Builder => $query
-                    ->whereIn('sender_type', [SupportChatMessage::SENDER_CUSTOMER, SupportChatMessage::SENDER_GUEST])
+                    ->where('sender_type', SupportChatMessage::SENDER_CUSTOMER)
                     ->whereNull('read_at'))
                 ->count();
 
             $guestSessions = SupportChatSession::query()
                 ->whereNull('user_id')
                 ->whereNotNull('guest_id')
+                ->whereNotIn('status', [SupportChatSession::STATUS_ENDED, SupportChatSession::STATUS_CLOSED])
                 ->whereHas('messages', fn (Builder $query): Builder => $query
-                    ->whereIn('sender_type', [SupportChatMessage::SENDER_CUSTOMER, SupportChatMessage::SENDER_GUEST])
+                    ->where('sender_type', SupportChatMessage::SENDER_GUEST)
                     ->whereNull('read_at'))
                 ->count();
 

@@ -30,6 +30,6 @@ class Text
 
     private static function looksMojibake(string $text): bool
     {
-        return (bool) preg_match('/[鐢娆棣鍟瀹閽鎼鍏璐璁鐧娉锛歿馃]|鈫|鈥/u', $text);
+        return (bool) preg_match('/[^\x00-\x7F]/u', $text);
     }
 }

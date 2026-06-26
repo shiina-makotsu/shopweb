@@ -2629,6 +2629,53 @@ it('calculates checkout shipping from warehouse province rates and product extra
         ->and($order->items()->where('warehouse_id', $warehouse->id)->count())->toBe(2);
 });
 
+it('charges shipping for presale logistics products without requiring stock', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+    $category = Category::query()->create(['name' => '预售邮费', 'slug' => 'presale-shipping', 'is_active' => true]);
+    $warehouse = Warehouse::query()->create(['name' => '预售默认仓', 'country' => '中国', 'street' => '预售仓占位', 'is_active' => true]);
+
+    WarehouseShippingRate::query()->create([
+        'warehouse_id' => $warehouse->id,
+        'name' => '默认邮费',
+        'fee_cents' => 1500,
+        'is_default' => true,
+        'is_active' => true,
+    ]);
+
+    $product = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => '物流预售商品',
+        'slug' => 'logistics-presale-product',
+        'status' => Product::STATUS_PRESALE,
+        'fulfillment_type' => Product::FULFILLMENT_LOGISTICS,
+        'shipping_extra_fee_cents' => 300,
+    ]);
+    $variant = ProductVariant::query()->create([
+        'product_id' => $product->id,
+        'sku' => 'PRESALE-SHIP-1',
+        'price_cents' => 6000,
+        'stock' => 0,
+        'low_stock_threshold' => 5,
+        'is_active' => true,
+    ]);
+
+    $this->post(route('cart.items.store'), ['variant_id' => $variant->id, 'quantity' => 2]);
+
+    $this->actingAs($user)->post(route('checkout.store'), [
+        'contact_name' => '预售收件人',
+        'contact_phone' => '13800000000',
+        'contact_email' => 'presale-ship@example.com',
+        'shipping_province' => '北京',
+        'shipping_address' => '中国 北京市 朝阳区 预售路 1 号',
+    ])->assertRedirect();
+
+    $order = Order::query()->where('user_id', $user->id)->firstOrFail();
+
+    expect($order->shipping_fee_cents)->toBe(2100)
+        ->and($order->total_cents)->toBe(14100)
+        ->and($order->items()->first()->warehouse_id)->toBe($warehouse->id);
+});
+
 it('warns and charges per warehouse when an order must ship from multiple warehouses', function (): void {
     $user = User::factory()->create(['role' => 'customer']);
     $category = Category::query()->create(['name' => '多仓', 'slug' => 'multi-warehouse', 'is_active' => true]);

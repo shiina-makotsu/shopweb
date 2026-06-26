@@ -40,17 +40,27 @@ class ReportsPage extends Page
     {
         $range = app(DashboardSalesRange::class);
         $daily = $range->daily();
+        $last24h = $range->hourlyMinutes();
         $summary = $range->summary();
+        $chartBuilder = app(\App\Filament\Widgets\DailySalesChart::class);
 
         return [
             'daily' => $daily,
+            'last24h' => $last24h,
             'summary' => $summary,
-            'chart' => app(\App\Filament\Widgets\DailySalesChart::class)->publicBuildChartForReports($daily),
+            'chart' => $chartBuilder->publicBuildChartForReports($daily),
+            'chart24h' => $chartBuilder->publicBuildMinuteChartForReports($last24h),
             'hasData' => $summary['total_cents'] > 0 || $summary['order_count'] > 0,
             'totalSales' => Money::format($summary['total_cents']),
+            'paidSales' => Money::format($summary['paid_cents']),
             'averageOrder' => Money::format($summary['average_order_cents']),
             'bestDaySales' => Money::format($summary['best_day_cents']),
         ];
+    }
+
+    public function visitTrend(string $range = '24h'): array
+    {
+        return app(ReportMetrics::class)->visitTrend($range);
     }
 
     public function lowStockVariants()

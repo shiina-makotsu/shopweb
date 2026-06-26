@@ -86,11 +86,21 @@ class SystemLoadMetrics
     public function record(): array
     {
         $snapshot = $this->snapshot();
-        $samples = $this->timeline(120);
-        $samples[] = $snapshot;
-        $samples = array_slice($samples, -120);
+        $samples = $this->timeline(1440);
+        $minuteKey = now()->format('Y-m-d H:i');
+        $snapshot['minute_key'] = $minuteKey;
 
-        Cache::put('shop:system-load:samples', $samples, 900);
+        $lastKey = is_array(end($samples)) ? (end($samples)['minute_key'] ?? null) : null;
+
+        if ($lastKey === $minuteKey && $samples !== []) {
+            $samples[array_key_last($samples)] = $snapshot;
+        } else {
+            $samples[] = $snapshot;
+        }
+
+        $samples = array_slice($samples, -1440);
+
+        Cache::put('shop:system-load:samples', $samples, 90000);
         $this->alertIfAbnormal($snapshot);
 
         return $snapshot;

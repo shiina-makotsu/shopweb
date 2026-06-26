@@ -12,6 +12,8 @@ use Throwable;
 
 class AnalyticsTracker
 {
+    public const REQUEST_PAGE_VIEW_TRACKED = 'shopweb.analytics.page_view_tracked';
+
     public function track(Request $request, string $event, array $data = []): void
     {
         if (! $this->isReady()) {
@@ -27,14 +29,23 @@ class AnalyticsTracker
                 'product_variant_id' => $data['product_variant_id'] ?? null,
                 'order_id' => $data['order_id'] ?? null,
                 'source' => $data['source'] ?? null,
+                'surface' => $data['surface'] ?? $this->surface($request),
+                'visitor_type' => $this->visitorType($request),
+                'device_type' => $data['device_type'] ?? $this->deviceType($request),
                 'path' => mb_substr($request->path(), 0, 1024),
                 'referrer' => mb_substr((string) $request->headers->get('referer'), 0, 1024) ?: null,
                 'ip_hash' => hash('sha256', (string) $request->ip()),
+                'ip_region' => $this->ipRegion($request),
+                'ip_country' => $this->ipCountry($request),
                 'user_agent' => mb_substr((string) $request->userAgent(), 0, 512) ?: null,
                 'quantity' => $data['quantity'] ?? null,
                 'amount_cents' => $data['amount_cents'] ?? null,
                 'metadata' => $data['metadata'] ?? null,
             ]);
+
+            if ($event === AnalyticsEvent::PAGE_VIEW) {
+                $request->attributes->set(self::REQUEST_PAGE_VIEW_TRACKED, true);
+            }
         } catch (Throwable) {
             // Analytics should never block shopping, login, or checkout.
         }
@@ -115,5 +126,107 @@ class AnalyticsTracker
         } catch (Throwable) {
             return false;
         }
+    }
+
+    private function surface(Request $request): string
+    {
+        return $request->is('admin') || $request->is('admin/*') ? 'admin' : 'frontend';
+    }
+
+    private function visitorType(Request $request): string
+    {
+        $user = $request->user();
+
+        if (! $user) {
+            return 'guest';
+        }
+
+        return $user->isBackofficeUser() ? 'staff' : 'customer';
+    }
+
+    private function deviceType(Request $request): string
+    {
+        $agent = strtolower((string) $request->userAgent());
+
+        if ($agent === '') {
+            return 'unknown';
+        }
+
+        if (str_contains($agent, 'ipad') || str_contains($agent, 'tablet')) {
+            return 'tablet';
+        }
+
+        if (str_contains($agent, 'mobile') || str_contains($agent, 'iphone') || str_contains($agent, 'android')) {
+            return 'mobile';
+        }
+
+        return 'desktop';
+    }
+
+    private function ipRegion(Request $request): string
+    {
+        $country = $this->ipCountry($request);
+        $region = $this->headerValue($request, [
+            'cf-ipcountry-region',
+            'x-vercel-ip-country-region',
+            'x-appengine-region',
+            'x-region',
+            'x-real-region',
+        ]);
+        $city = $this->headerValue($request, [
+            'cf-ipcity',
+            'x-vercel-ip-city',
+            'x-appengine-city',
+            'x-city',
+            'x-real-city',
+        ]);
+
+        if ($this->isPrivateIp((string) $request->ip())) {
+            return '本地/内网';
+        }
+
+        $parts = array_values(array_filter([$country, $region, $city], fn (?string $value): bool => filled($value)));
+
+        return $parts === [] ? '未知地区' : mb_substr(implode(' / ', array_unique($parts)), 0, 120);
+    }
+
+    private function ipCountry(Request $request): ?string
+    {
+        if ($this->isPrivateIp((string) $request->ip())) {
+            return '本地/内网';
+        }
+
+        return $this->headerValue($request, [
+            'cf-ipcountry',
+            'x-vercel-ip-country',
+            'x-appengine-country',
+            'x-country',
+            'x-real-country',
+        ]);
+    }
+
+    /**
+     * @param  array<int, string>  $headers
+     */
+    private function headerValue(Request $request, array $headers): ?string
+    {
+        foreach ($headers as $header) {
+            $value = trim((string) $request->headers->get($header, ''));
+
+            if ($value !== '' && ! in_array(strtolower($value), ['xx', 'unknown', 'null'], true)) {
+                return mb_substr($value, 0, 120);
+            }
+        }
+
+        return null;
+    }
+
+    private function isPrivateIp(string $ip): bool
+    {
+        if ($ip === '' || $ip === '127.0.0.1' || $ip === '::1') {
+            return true;
+        }
+
+        return filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false;
     }
 }

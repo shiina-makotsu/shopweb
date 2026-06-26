@@ -17,6 +17,7 @@ use App\Support\RegexSearch;
 use App\Support\Url;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
+use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
@@ -28,6 +29,8 @@ use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\Filter;
+use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -117,7 +120,7 @@ class OrderResource extends Resource
                     ->helperText('保存后会重新记录线上交付发送时间；用户仍需主动点击确认收货，订单才会完成。')
                     ->columnSpanFull(),
                 TextInput::make('digital_delivery_code')
-                    ->label('兑换码/序列号')
+                    ->label('兑换码 / 序列号')
                     ->maxLength(255),
                 Placeholder::make('digital_delivery_state')
                     ->label('交付状态')
@@ -150,7 +153,7 @@ class OrderResource extends Resource
                 TextInput::make('shipping_street')->label('收货街道')->maxLength(255),
                 TextInput::make('shipping_detail')->label('详细地址')->maxLength(255)->columnSpanFull(),
                 Textarea::make('shipping_address')->label('收货地址汇总')->rows(3)->columnSpanFull(),
-                Textarea::make('shipment_notice')->label('多仓发货提醒')->disabled()->rows(3)->columnSpanFull(),
+                Textarea::make('shipment_notice')->label('多件发货提醒')->disabled()->rows(3)->columnSpanFull(),
                 Select::make('shipping_carrier_id')->label('物流承运商')->relationship('shippingCarrier', 'name')->searchable()->preload(),
                 TextInput::make('tracking_number')->label('物流单号')->maxLength(255),
                 TextInput::make('tracking_url')->label('物流查询链接')->maxLength(500)->columnSpanFull(),
@@ -237,7 +240,7 @@ class OrderResource extends Resource
             $discountLabel = $discount > 0 ? e(Money::format($discount)) : '-';
             $coupon = filled($item->coupon_code) ? '<span style="color:#64748b;">'.e($item->coupon_code).'</span>' : '';
             $incoming = $item->incomingProduct
-                ? '<div style="margin-top:4px;color:#0369a1;">进货商品：'.e($item->incomingProduct->title).'</div>'
+                ? '<div style="margin-top:4px;color:#0369a1;">进货商品：' . e($item->incomingProduct->title) . '</div>'
                 : '';
 
             return <<<HTML
@@ -462,6 +465,27 @@ class OrderResource extends Resource
                 TextColumn::make('created_at')->label('创建')->dateTime()->sortable(),
             ])
             ->defaultSort('created_at', 'desc')
+            ->filters([
+                SelectFilter::make('user_id')
+                    ->label('用户')
+                    ->relationship('user', 'name')
+                    ->searchable()
+                    ->preload(),
+                SelectFilter::make('status')
+                    ->label('订单状态')
+                    ->options(fn (): array => app(OrderStatusPresenter::class)->options()),
+                Filter::make('created_at')
+                    ->label('创建日期')
+                    ->schema([
+                        DatePicker::make('from')->label('开始日期'),
+                        DatePicker::make('until')->label('结束日期'),
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        return $query
+                            ->when($data['from'] ?? null, fn (Builder $query, string $date): Builder => $query->whereDate('created_at', '>=', $date))
+                            ->when($data['until'] ?? null, fn (Builder $query, string $date): Builder => $query->whereDate('created_at', '<=', $date));
+                    }),
+            ])
             ->recordUrl(null)
             ->recordActions([
                 EditAction::make(),
@@ -481,11 +505,11 @@ class OrderResource extends Resource
                             ->label('线上交付内容')
                             ->rows(4)
                             ->helperText('线上交付商品可填写图片说明、兑换码使用说明等。'),
-                        TextInput::make('digital_delivery_code')->label('兑换码/序列号')->maxLength(255),
+                        TextInput::make('digital_delivery_code')->label('兑换码 / 序列号')->maxLength(255),
                         FileUpload::make('digital_delivery_attachments')
                             ->label('线上交付附件')
                             ->disk('digital_deliveries')
-                            ->directory(fn (Order $record): string => $record->order_number)
+                            ->directory(fn (?Order $record): string => $record?->order_number ?: 'orders')
                             ->multiple()
                             ->maxSize(20480)
                             ->preserveFilenames()
@@ -523,7 +547,7 @@ class OrderResource extends Resource
                     ->color('warning')
                     ->form([
                         Textarea::make('admin_note')
-                            ->label('退回/拒收说明')
+                            ->label('退回 / 拒收说明')
                             ->required()
                             ->rows(3),
                     ])
@@ -555,7 +579,6 @@ class OrderResource extends Resource
                     ->action(fn (Order $record, array $data) => app(OrderService::class)->cancel($record, auth()->user(), $data['admin_note'] ?? null)),
             ]);
     }
-
     public static function canDelete(Model $record): bool
     {
         return false;

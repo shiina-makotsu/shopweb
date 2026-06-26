@@ -44,7 +44,10 @@ class ShippingQuoteService
         }
 
         $stockMatrix = $this->stockMatrix($shippingItems);
-        $singleWarehouse = $warehouses->first(fn (Warehouse $warehouse): bool => $this->warehouseCoversAllItems($warehouse, $shippingItems, $stockMatrix));
+        $singleWarehouse = $warehouses
+            ->filter(fn (Warehouse $warehouse): bool => $this->warehouseCoversAllItems($warehouse, $shippingItems, $stockMatrix))
+            ->sortByDesc(fn (Warehouse $warehouse): int => $this->warehouseHasActiveRate($warehouse, $province) ? 1 : 0)
+            ->first();
 
         if ($singleWarehouse) {
             return $this->buildQuote($province, [
@@ -156,6 +159,13 @@ class ShippingQuoteService
         }
 
         return (int) ($rates->firstWhere('is_default', true)?->fee_cents ?? 0);
+    }
+
+    private function warehouseHasActiveRate(Warehouse $warehouse, ?string $province): bool
+    {
+        return $warehouse->shippingRates
+            ->where('is_active', true)
+            ->contains(fn ($rate): bool => (bool) $rate->is_default || $rate->matchesProvince($province));
     }
 
     /**

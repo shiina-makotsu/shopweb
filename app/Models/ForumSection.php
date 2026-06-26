@@ -36,6 +36,16 @@ class ForumSection extends Model
         return $this->hasMany(ForumThread::class);
     }
 
+    public function reads(): HasMany
+    {
+        return $this->hasMany(ForumSectionRead::class);
+    }
+
+    public function latestActivityAt()
+    {
+        return $this->last_thread_activity_at ?? $this->updated_at ?? $this->created_at;
+    }
+
     public function moderators(): BelongsToMany
     {
         return $this->belongsToMany(User::class, 'forum_moderators')->withTimestamps();

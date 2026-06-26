@@ -79,8 +79,6 @@ class ListNavigationMenuItems extends ListRecords
             return;
         }
 
-        app(AdminMenuRegistry::class)->syncDefaults();
-
         DB::transaction(function () use ($items): void {
             $this->persistAdminMenuItems($items);
         });

@@ -19,7 +19,10 @@
         </div>
         <div class="grid gap-4 bg-slate-50 p-4 md:grid-cols-3">
             @forelse($sections as $section)
-                <a class="block rounded-sm border border-slate-200 bg-white px-4 py-4 shadow-sm hover:border-blue-200 hover:bg-blue-50" href="{{ route('forum.sections.show', $section) }}">
+                <a class="relative block rounded-sm border border-slate-200 bg-white px-4 py-4 shadow-sm hover:border-blue-200 hover:bg-blue-50" href="{{ route('forum.sections.show', $section) }}">
+                    @if($section->has_unread_threads ?? false)
+                        <span class="shop-notice-badge absolute right-2 top-2 h-2.5 w-2.5 rounded-full" aria-label="有未读帖子"></span>
+                    @endif
                     <div class="flex items-start justify-between gap-4">
                         <div>
                             <h2 class="font-semibold text-slate-900">{{ $section->name }}</h2>

@@ -20,34 +20,44 @@ class DailySalesChart extends Widget
      */
     protected function getViewData(): array
     {
-        $daily = app(DashboardSalesRange::class)->daily();
-        $summary = app(DashboardSalesRange::class)->summary();
+        $range = app(DashboardSalesRange::class);
+        $daily = $range->daily();
+        $summary = $range->summary();
+        $last24h = $range->hourlyMinutes();
 
         return [
             'daily' => $daily,
+            'last24h' => $last24h,
             'summary' => $summary,
             'chart' => $this->buildChart($daily),
+            'chart24h' => $this->buildChart($last24h, 'minute'),
             'hasData' => $summary['total_cents'] > 0 || $summary['order_count'] > 0,
             'totalSales' => Money::format($summary['total_cents']),
+            'paidSales' => Money::format($summary['paid_cents']),
             'averageOrder' => Money::format($summary['average_order_cents']),
             'bestDaySales' => Money::format($summary['best_day_cents']),
         ];
     }
 
     /**
-     * @param  Collection<int, array{date: string, label: string, sales_cents: int, order_count: int}>  $daily
-     * @return array{sales_points: string, order_points: string, baseline_points: string, y_labels: array<int, string>, x_labels: array<int, array{label: string, x: float}>}
+     * @param  Collection<int, array{date: string, label: string, sales_cents: int, paid_cents: int, order_count: int, created_order_count: int, completed_order_count: int, paid_order_count: int}>  $daily
+     * @return array{paid_points: string, created_order_points: string, completed_order_points: string, baseline_points: string, money_y_labels: array<int, string>, count_y_labels: array<int, string>, x_labels: array<int, array{label: string, x: float}>, sample_points: array<int, array{x: float, paid_y: float, created_y: float, completed_y: float, label: string, paid_cents: int, created_order_count: int, completed_order_count: int}>}
      */
     public function publicBuildChartForReports(Collection $daily): array
     {
         return $this->buildChart($daily);
     }
 
+    public function publicBuildMinuteChartForReports(Collection $rows): array
+    {
+        return $this->buildChart($rows, 'minute');
+    }
+
     /**
-     * @param  Collection<int, array{date: string, label: string, sales_cents: int, order_count: int}>  $daily
-     * @return array{sales_points: string, order_points: string, baseline_points: string, y_labels: array<int, string>, x_labels: array<int, array{label: string, x: float}>}
+     * @param  Collection<int, array{date: string, label: string, sales_cents: int, paid_cents: int, order_count: int, created_order_count: int, completed_order_count: int, paid_order_count: int}>  $daily
+     * @return array{paid_points: string, created_order_points: string, completed_order_points: string, baseline_points: string, money_y_labels: array<int, string>, count_y_labels: array<int, string>, x_labels: array<int, array{label: string, x: float}>, sample_points: array<int, array{x: float, paid_y: float, created_y: float, completed_y: float, label: string, paid_cents: int, created_order_count: int, completed_order_count: int}>}
      */
-    private function buildChart(Collection $daily): array
+    private function buildChart(Collection $daily, string $granularity = 'day'): array
     {
         $width = 1000;
         $height = 260;
@@ -58,10 +68,13 @@ class DailySalesChart extends Widget
         $plotWidth = $width - $left - $right;
         $plotHeight = $height - $top - $bottom;
 
-        $rawMaxSales = (int) $daily->max('sales_cents');
-        $hasSales = $rawMaxSales > 0;
-        $maxSales = max(1, $rawMaxSales);
-        $maxOrders = max(1, (int) $daily->max('order_count'));
+        $rawMaxPaid = (int) $daily->max('paid_cents');
+        $hasPaid = $rawMaxPaid > 0;
+        $maxPaid = max(1, $rawMaxPaid);
+        $maxOrders = max(1, (int) max(
+            $daily->max('created_order_count'),
+            $daily->max('completed_order_count'),
+        ));
         $count = max(1, $daily->count() - 1);
 
         $point = function (int $index, int $value, int $max) use ($left, $top, $plotWidth, $plotHeight, $count): string {
@@ -71,14 +84,19 @@ class DailySalesChart extends Widget
             return round($x, 2).','.round($y, 2);
         };
 
-        $salesPoints = $daily
+        $paidPoints = $daily
             ->values()
-            ->map(fn (array $row, int $index): string => $point($index, $row['sales_cents'], $maxSales))
+            ->map(fn (array $row, int $index): string => $point($index, $row['paid_cents'], $maxPaid))
             ->implode(' ');
 
-        $orderPoints = $daily
+        $createdOrderPoints = $daily
             ->values()
-            ->map(fn (array $row, int $index): string => $point($index, $row['order_count'], $maxOrders))
+            ->map(fn (array $row, int $index): string => $point($index, $row['created_order_count'], $maxOrders))
+            ->implode(' ');
+
+        $completedOrderPoints = $daily
+            ->values()
+            ->map(fn (array $row, int $index): string => $point($index, $row['completed_order_count'], $maxOrders))
             ->implode(' ');
 
         $baselineY = $top + $plotHeight;
@@ -86,15 +104,21 @@ class DailySalesChart extends Widget
             ->map(fn (int $index): string => round($left + (($plotWidth / $count) * $index), 2).','.round($baselineY, 2))
             ->implode(' ');
 
-        $yLabels = $hasSales
+        $moneyYLabels = $hasPaid
             ? collect(range(0, 4))
-                ->map(fn (int $step): string => Money::format((int) round(($maxSales / 4) * (4 - $step))))
+                ->map(fn (int $step): string => Money::format((int) round(($maxPaid / 4) * (4 - $step))))
                 ->all()
             : array_fill(0, 5, Money::format(0));
 
+        $countYLabels = collect(range(0, 4))
+            ->map(fn (int $step): string => (string) (int) round(($maxOrders / 4) * (4 - $step)))
+            ->all();
+
+        $labelEvery = $granularity === 'minute' ? 120 : 7;
+
         $xLabels = $daily
             ->values()
-            ->filter(fn (array $row, int $index): bool => $index === 0 || $index === $daily->count() - 1 || $index % 7 === 0)
+            ->filter(fn (array $row, int $index): bool => $index === 0 || $index === $daily->count() - 1 || $index % $labelEvery === 0)
             ->map(fn (array $row, int $index): array => [
                 'label' => $row['label'],
                 'x' => round($left + (($plotWidth / $count) * $index), 2),
@@ -102,12 +126,36 @@ class DailySalesChart extends Widget
             ->values()
             ->all();
 
+        $samplePoints = $daily
+            ->values()
+            ->map(function (array $row, int $index) use ($left, $top, $plotWidth, $plotHeight, $count, $maxPaid, $maxOrders): array {
+                $x = round($left + (($plotWidth / $count) * $index), 2);
+                $y = static fn (int $value, int $max): float => round($top + ($plotHeight - (($value / max(1, $max)) * $plotHeight)), 2);
+
+                return [
+                    'x' => $x,
+                    'paid_y' => $y((int) ($row['paid_cents'] ?? 0), $maxPaid),
+                    'created_y' => $y((int) ($row['created_order_count'] ?? 0), $maxOrders),
+                    'completed_y' => $y((int) ($row['completed_order_count'] ?? 0), $maxOrders),
+                    'label' => $row['label'],
+                    'paid_cents' => (int) ($row['paid_cents'] ?? 0),
+                    'sales_cents' => (int) ($row['sales_cents'] ?? 0),
+                    'paid_order_count' => (int) ($row['paid_order_count'] ?? 0),
+                    'created_order_count' => (int) ($row['created_order_count'] ?? 0),
+                    'completed_order_count' => (int) ($row['completed_order_count'] ?? 0),
+                ];
+            })
+            ->all();
+
         return [
-            'sales_points' => $salesPoints,
-            'order_points' => $orderPoints,
+            'paid_points' => $paidPoints,
+            'created_order_points' => $createdOrderPoints,
+            'completed_order_points' => $completedOrderPoints,
             'baseline_points' => $baselinePoints,
-            'y_labels' => $yLabels,
+            'money_y_labels' => $moneyYLabels,
+            'count_y_labels' => $countYLabels,
             'x_labels' => $xLabels,
+            'sample_points' => $samplePoints,
         ];
     }
 }

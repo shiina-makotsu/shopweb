@@ -215,7 +215,7 @@
                             </button>
 
                             <label class="w-24 shrink-0 text-[11px] font-medium text-zinc-400 sm:w-32 sm:text-xs">
-                                推理
+                                推理模式
                                 <select class="mt-1 h-8 w-full rounded-2xl border border-zinc-200 bg-white px-2 text-sm font-medium text-zinc-900 sm:h-9 sm:px-3" name="reasoning_mode" data-chat-reasoning>
                                     <option value="low">低</option>
                                     <option value="medium">中</option>

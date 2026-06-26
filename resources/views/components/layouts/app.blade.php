@@ -659,10 +659,5 @@
             </div>
         @endif
     @endauth
-    <script>
-        document.querySelector('[data-registration-onboarding-close]')?.addEventListener('click', () => {
-            document.querySelector('[data-registration-onboarding]')?.remove();
-        });
-    </script>
 </body>
 </html>
