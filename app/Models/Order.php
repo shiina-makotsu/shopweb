@@ -186,6 +186,21 @@ class Order extends Model
             || ! empty($this->digital_delivery_attachment_paths);
     }
 
+    public function hasOnlineDeliveryItems(): bool
+    {
+        $this->loadMissing('items.product', 'items.incomingProduct');
+
+        return $this->items->contains(function (OrderItem $item): bool {
+            $product = $item->incomingProduct ?: $item->product;
+
+            if ($product instanceof Product) {
+                return in_array($product->fulfillment_type, [Product::FULFILLMENT_ONLINE, Product::FULFILLMENT_CONTACT_LEGACY], true);
+            }
+
+            return ! $this->requires_shipping;
+        });
+    }
+
     public function isWalletRecharge(): bool
     {
         return (bool) $this->is_wallet_recharge || (int) $this->wallet_recharge_cents > 0;

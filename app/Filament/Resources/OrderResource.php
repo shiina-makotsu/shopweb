@@ -304,16 +304,30 @@ class OrderResource extends Resource
         $trackingUrl = e($record->tracking_url ?: '-');
         $trackingNumberValue = e($record->tracking_number ?: '');
         $trackingUrlValue = e($record->tracking_url ?: '');
-        $address = e($record->shipping_address ?: trim(implode(' ', array_filter([
+        $country = '中国';
+        $regionLine = trim(implode(' ', array_filter([
             $record->shipping_province,
             $record->shipping_city,
             $record->shipping_district,
             $record->shipping_street,
             $record->shipping_detail,
-        ]))) ?: '-');
+        ], fn ($value): bool => filled($value))));
+
+        if ($regionLine === '') {
+            $regionLine = preg_replace('/^(中国|中國)\s*/u', '', (string) $record->shipping_address) ?: (string) $record->shipping_address;
+        }
+
+        $displayAddress = $regionLine !== '' ? trim($country.' '.$regionLine) : (string) $record->shipping_address;
+        $address = e($displayAddress !== '' ? $displayAddress : '-');
         $contactName = e($record->contact_name ?: '-');
         $contactPhone = e($record->contact_phone ?: '-');
         $contactEmail = e($record->contact_email ?: '-');
+        $copyAddress = e(implode("\n", array_filter([
+            $record->contact_name,
+            $record->contact_phone,
+            $country,
+            $regionLine,
+        ], fn ($value): bool => filled($value))));
         $customerNote = nl2br(e($record->customer_note ?: '-'));
         $digitalContent = nl2br(e($record->digital_delivery_content ?: '-'));
         $digitalCode = e($record->digital_delivery_code ?: '-');
@@ -329,7 +343,7 @@ class OrderResource extends Resource
 
         return new HtmlString(<<<HTML
             <div class="shopweb-order-submenu" data-shopweb-order-submenu>
-                <div class="shopweb-order-quick-panel" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;padding:14px 18px 14px 28px;background:#f8fafc;border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;border-left:3px solid #94a3b8;color:#0f172a;font-size:13px;line-height:1.6;">
+                <div class="shopweb-order-quick-panel" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;padding:14px 18px 14px 28px;background:#f8fafc;border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;border-left:3px solid #94a3b8;color:#0f172a;font-size:13px;line-height:1.6;overflow:hidden;">
                     <div style="display:grid;grid-template-columns:92px minmax(0,1fr);gap:6px 10px;">
                         <strong style="color:#475569;">购买商品</strong>
                         <div style="word-break:break-word;">{$items}</div>
@@ -346,7 +360,9 @@ class OrderResource extends Resource
                         <strong style="color:#475569;">邮箱</strong>
                         <div style="word-break:break-all;">{$contactEmail}</div>
                         <strong style="color:#475569;">收货地址</strong>
-                        <div style="word-break:break-word;">{$address}</div>
+                        <div style="word-break:break-word;overflow-wrap:anywhere;white-space:normal;min-width:0;">{$address}</div>
+                        <span></span>
+                        <button type="button" data-copy-shipping-address="{$copyAddress}" onclick="event.stopPropagation();const text=this.dataset.copyShippingAddress||'';const done=()=>{this.textContent='已复制';setTimeout(()=>this.textContent='复制收货信息',1200);};if(navigator.clipboard){navigator.clipboard.writeText(text).then(done).catch(()=>{});}else{const area=document.createElement('textarea');area.value=text;area.style.position='fixed';area.style.opacity='0';document.body.appendChild(area);area.select();document.execCommand('copy');area.remove();done();}" style="justify-self:start;border:1px solid #94a3b8;border-radius:6px;background:#fff;padding:5px 10px;color:#0f172a;cursor:pointer;">复制收货信息</button>
                     </div>
                     <div>
                         <form method="POST" action="{$action}" data-shopweb-row-form style="display:grid;grid-template-columns:82px minmax(0,1fr);gap:8px 10px;" onclick="event.stopPropagation();">
@@ -362,8 +378,9 @@ class OrderResource extends Resource
                             <input name="tracking_url" aria-label="物流链接" value="{$trackingUrlValue}" placeholder="-" style="min-height:32px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;padding:4px 8px;color:#0f172a;" />
                             <strong style="color:#475569;">备注</strong>
                             <input name="admin_note" aria-label="备注" value="后台列表更新物流信息" style="min-height:32px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;padding:4px 8px;color:#0f172a;" />
-                            <span></span>
-                            <button type="submit" style="justify-self:start;border:1px solid #94a3b8;border-radius:6px;background:#fff;padding:6px 12px;color:#0f172a;cursor:pointer;">更新物流</button>
+                            <div style="grid-column:1 / -1;display:flex;justify-content:flex-end;">
+                                <button type="submit" style="border:1px solid #94a3b8;border-radius:6px;background:#fff;padding:6px 12px;color:#0f172a;cursor:pointer;">更新物流</button>
+                            </div>
                         </form>
                     </div>
                     <div style="grid-column:1 / -1;display:grid;grid-template-columns:92px minmax(0,1fr);gap:6px 10px;border-top:1px solid #e2e8f0;padding-top:10px;">
@@ -498,14 +515,19 @@ class OrderResource extends Resource
                     ->label('发货')
                     ->color('info')
                     ->form([
-                        Select::make('shipping_carrier_id')->label('物流承运商')->relationship('shippingCarrier', 'name')->searchable()->preload(),
-                        TextInput::make('tracking_number')->label('物流单号')->maxLength(255),
-                        TextInput::make('tracking_url')->label('物流查询链接')->maxLength(500),
+                        Select::make('shipping_carrier_id')->label('物流承运商')->relationship('shippingCarrier', 'name')->searchable()->preload()
+                            ->hidden(fn (Order $record): bool => ! $record->requires_shipping),
+                        TextInput::make('tracking_number')->label('物流单号')->maxLength(255)
+                            ->hidden(fn (Order $record): bool => ! $record->requires_shipping),
+                        TextInput::make('tracking_url')->label('物流查询链接')->maxLength(500)
+                            ->hidden(fn (Order $record): bool => ! $record->requires_shipping),
                         Textarea::make('digital_delivery_content')
                             ->label('线上交付内容')
                             ->rows(4)
-                            ->helperText('线上交付商品可填写图片说明、兑换码使用说明等。'),
-                        TextInput::make('digital_delivery_code')->label('兑换码 / 序列号')->maxLength(255),
+                            ->helperText('线上交付商品可填写图片说明、兑换码使用说明等。')
+                            ->hidden(fn (Order $record): bool => ! $record->hasOnlineDeliveryItems()),
+                        TextInput::make('digital_delivery_code')->label('兑换码 / 序列号')->maxLength(255)
+                            ->hidden(fn (Order $record): bool => ! $record->hasOnlineDeliveryItems()),
                         FileUpload::make('digital_delivery_attachments')
                             ->label('线上交付附件')
                             ->disk('digital_deliveries')
@@ -513,7 +535,8 @@ class OrderResource extends Resource
                             ->multiple()
                             ->maxSize(20480)
                             ->preserveFilenames()
-                            ->helperText('可上传图片或文件。用户下载附件只会记录查看时间，仍需主动确认收货。'),
+                            ->helperText('可上传图片或文件。用户下载附件只会记录查看时间，仍需主动确认收货。')
+                            ->hidden(fn (Order $record): bool => ! $record->hasOnlineDeliveryItems()),
                     ])
                     ->visible(fn (Order $record): bool => in_array($record->status, [Order::STATUS_PAID, Order::STATUS_PENDING_SHIPMENT, Order::STATUS_INCOMING], true))
                     ->action(fn (Order $record, array $data) => app(OrderService::class)->ship($record, $data, auth()->user())),

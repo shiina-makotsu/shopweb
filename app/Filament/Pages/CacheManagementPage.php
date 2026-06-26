@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Services\SystemCacheManager;
+use App\Services\SystemUpdateService;
 use App\Support\AdminAccess;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
@@ -18,6 +19,7 @@ class CacheManagementPage extends Page
     protected string $view = 'filament.pages.cache-management';
 
     public ?string $lastResult = null;
+    public ?string $rollbackCommit = null;
 
     public function getTitle(): string
     {
@@ -58,6 +60,35 @@ class CacheManagementPage extends Page
     }
 
     /**
+     * @return array<string, string>
+     */
+    public function rollbackOptions(): array
+    {
+        return collect(app(SystemUpdateService::class)->recentVersions())
+            ->mapWithKeys(fn (array $version): array => [$version['hash'] => $version['label']])
+            ->all();
+    }
+
+    public function pullUpdates(): void
+    {
+        $this->finishUpdate(app(SystemUpdateService::class)->pullAndBuild());
+    }
+
+    public function rollback(): void
+    {
+        if (! filled($this->rollbackCommit)) {
+            Notification::make()
+                ->title('请先选择要回滚的版本。')
+                ->warning()
+                ->send();
+
+            return;
+        }
+
+        $this->finishUpdate(app(SystemUpdateService::class)->rollbackTo($this->rollbackCommit));
+    }
+
+    /**
      * @param  array<int, string>  $lines
      */
     private function finish(string $title, array $lines): void
@@ -68,5 +99,24 @@ class CacheManagementPage extends Page
             ->title($title)
             ->success()
             ->send();
+    }
+
+    /**
+     * @param  array{status: string, title: string, lines: array<int, string>}  $result
+     */
+    private function finishUpdate(array $result): void
+    {
+        $this->lastResult = implode("\n\n", $result['lines']);
+
+        $notification = Notification::make()->title($result['title']);
+
+        match ($result['status']) {
+            'success' => $notification->success(),
+            'warning' => $notification->warning(),
+            'info' => $notification->info(),
+            default => $notification->danger(),
+        };
+
+        $notification->send();
     }
 }

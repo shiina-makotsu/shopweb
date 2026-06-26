@@ -197,6 +197,7 @@ php artisan serve
 - 生产环境 Web 根目录必须指向 `public`。
 - 首次部署可访问 `/install` 完成安装向导。
 - 已安装站点默认会在启动/首次请求时检查未执行迁移并自动补齐，可通过 `SHOP_AUTO_MIGRATE_ON_BOOT=false` 关闭；手动自查可运行 `php artisan shop:database-health`。
+- 后台“系统 / 缓存管理”提供手动代码更新与回滚：更新会先 `git fetch` 比对上游分支，有更新才执行 `git pull --ff-only`，随后自动执行 `npm run build` 重构前端资源；回滚可选择最近 Git 提交并重构资源。两者都会要求工作区保持干净，避免覆盖生产临时改动。
 - 生产环境建议在发布后显式执行 `php artisan migrate --force` 和 `php artisan shop:cache-prewarm`，再清理并重建配置、路由和视图缓存。
 - 建议使用 MySQL/MariaDB，并配置稳定的队列、缓存和文件存储策略。
 - 高访问量场景建议启用 Redis 缓存、队列和限流；如需要高可用，可按 `config/database.php` 的 Sentinel 配置启用三主三从/哨兵部署，并配合告警 Bot 和 [docs/runbooks.md](docs/runbooks.md) 的预案处理故障。

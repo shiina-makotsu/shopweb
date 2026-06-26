@@ -785,6 +785,124 @@ it('moves linked presale orders to pending shipment when an incoming product bec
         ->and($order->items()->first()->status)->toBe(Order::STATUS_AWAITING_RECEIPT);
 });
 
+it('ships logistics orders when only a tracking number is filled', function (): void {
+    Mail::fake();
+
+    $user = User::factory()->create(['role' => 'customer']);
+    $admin = User::factory()->create(['role' => 'admin']);
+    $category = Category::query()->create(['name' => 'Logistics', 'slug' => 'logistics', 'is_active' => true]);
+    $product = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => 'Logistics Product',
+        'slug' => 'logistics-product',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_LOGISTICS,
+    ]);
+    $variant = ProductVariant::query()->create([
+        'product_id' => $product->id,
+        'sku' => 'LOG-1',
+        'price_cents' => 1000,
+        'stock' => 5,
+        'is_active' => true,
+    ]);
+    $order = Order::query()->create([
+        'user_id' => $user->id,
+        'order_number' => 'LOG-SHIP-ONLY-TRACKING',
+        'status' => Order::STATUS_PENDING_SHIPMENT,
+        'payment_status' => Order::PAYMENT_CONFIRMED,
+        'subtotal_cents' => 1000,
+        'total_cents' => 1000,
+        'contact_name' => 'A',
+        'contact_phone' => '1',
+        'requires_shipping' => true,
+    ]);
+    OrderItem::query()->create([
+        'order_id' => $order->id,
+        'product_id' => $product->id,
+        'product_variant_id' => $variant->id,
+        'product_title' => $product->title,
+        'product_status' => $product->status,
+        'variant_sku' => $variant->sku,
+        'unit_price_cents' => 1000,
+        'quantity' => 1,
+        'line_total_cents' => 1000,
+        'status' => Order::STATUS_PENDING_SHIPMENT,
+    ]);
+
+    app(OrderService::class)->ship($order->fresh(), [
+        'tracking_number' => 'ONLY-TRACK-1',
+        'digital_delivery_content' => 'should be ignored for logistics',
+    ], $admin);
+
+    $order->refresh();
+
+    expect($order->status)->toBe(Order::STATUS_AWAITING_RECEIPT)
+        ->and($order->tracking_number)->toBe('ONLY-TRACK-1')
+        ->and($order->shipping_carrier_id)->toBeNull()
+        ->and($order->digital_delivery_content)->toBeNull()
+        ->and($order->items()->first()->status)->toBe(Order::STATUS_AWAITING_RECEIPT);
+});
+
+it('uses online delivery fields only for online delivery orders', function (): void {
+    Mail::fake();
+
+    $user = User::factory()->create(['role' => 'customer']);
+    $admin = User::factory()->create(['role' => 'admin']);
+    $category = Category::query()->create(['name' => 'Online', 'slug' => 'online', 'is_active' => true]);
+    $product = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => 'Online Product',
+        'slug' => 'online-product',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_ONLINE,
+    ]);
+    $variant = ProductVariant::query()->create([
+        'product_id' => $product->id,
+        'sku' => 'ONLINE-1',
+        'price_cents' => 1000,
+        'stock' => 0,
+        'is_active' => true,
+    ]);
+    $order = Order::query()->create([
+        'user_id' => $user->id,
+        'order_number' => 'ONLINE-SHIP-1',
+        'status' => Order::STATUS_PAID,
+        'payment_status' => Order::PAYMENT_CONFIRMED,
+        'subtotal_cents' => 1000,
+        'total_cents' => 1000,
+        'contact_name' => 'A',
+        'contact_phone' => '1',
+        'requires_shipping' => false,
+    ]);
+    OrderItem::query()->create([
+        'order_id' => $order->id,
+        'product_id' => $product->id,
+        'product_variant_id' => $variant->id,
+        'product_title' => $product->title,
+        'product_status' => $product->status,
+        'variant_sku' => $variant->sku,
+        'unit_price_cents' => 1000,
+        'quantity' => 1,
+        'line_total_cents' => 1000,
+        'status' => Order::STATUS_PAID,
+    ]);
+
+    app(OrderService::class)->ship($order->fresh(), [
+        'tracking_number' => 'should-not-be-used',
+        'digital_delivery_content' => 'Download from account center.',
+        'digital_delivery_code' => 'CODE-1',
+    ], $admin);
+
+    $order->refresh();
+
+    expect($order->status)->toBe(Order::STATUS_AWAITING_RECEIPT)
+        ->and($order->tracking_number)->toBeNull()
+        ->and($order->digital_delivery_content)->toBe('Download from account center.')
+        ->and($order->digital_delivery_code)->toBe('CODE-1')
+        ->and($order->digital_delivery_sent_at)->not->toBeNull()
+        ->and($order->items()->first()->status)->toBe(Order::STATUS_AWAITING_RECEIPT);
+});
+
 it('lets customers create support tickets and admins view them in backoffice', function (): void {
     $user = User::factory()->create(['role' => 'customer']);
     $admin = User::factory()->create(['role' => 'admin']);

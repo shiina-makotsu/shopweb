@@ -325,11 +325,15 @@ class OrderService
 
     public function ship(Order $order, array $data, ?User $actor = null): void
     {
-        if (! $order->requires_shipping && $this->hasDigitalDeliveryData($data)) {
+        if (! $order->requires_shipping && $order->hasOnlineDeliveryItems()) {
             $this->shipDigital($order, $data, $actor);
 
             return;
         }
+
+        $data = collect($data)
+            ->only(['shipping_carrier_id', 'tracking_number', 'tracking_url'])
+            ->all();
 
         $carrier = isset($data['shipping_carrier_id'])
             ? ShippingCarrier::query()->find($data['shipping_carrier_id'])

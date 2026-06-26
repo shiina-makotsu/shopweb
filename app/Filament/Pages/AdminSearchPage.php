@@ -144,7 +144,7 @@ class AdminSearchPage extends Page
             ['group' => '系统', 'label' => '商店信息设置', 'keywords' => 'Logo 联系方式 商店信息 外观 语言', 'url' => StoreInfoPage::getUrl()],
             ['group' => '系统', 'label' => '站点设置', 'keywords' => '订单隐私 桌宠 音乐 外观 语言', 'url' => SiteSettingResource::getUrl()],
             ['group' => '系统', 'label' => '邮件设置', 'keywords' => 'SMTP 发货邮件 通知', 'url' => MailSettingsPage::getUrl()],
-            ['group' => '系统', 'label' => '缓存管理', 'keywords' => '缓存 config route view optimize clear', 'url' => CacheManagementPage::getUrl()],
+            ['group' => '系统', 'label' => '缓存管理', 'keywords' => '缓存 config route view optimize clear git 更新 拉取 pull 回滚 rollback 构建 build', 'url' => CacheManagementPage::getUrl()],
             ['group' => '系统', 'label' => '备份', 'keywords' => '数据库 上传文件 备份', 'url' => BackupPage::getUrl()],
             ['group' => '系统', 'label' => '系统信息', 'keywords' => 'PHP 扩展 权限 环境', 'url' => SystemInfoPage::getUrl()],
             ['group' => '系统', 'label' => '后台操作日志', 'keywords' => '后台日志 操作记录 审计', 'url' => AdminActivityLogResource::getUrl()],
