@@ -9,13 +9,14 @@ use App\Models\ProductBrowsingHistory;
 use App\Models\ProductIntentVote;
 use App\Models\ProductTag;
 use App\Services\AnalyticsTracker;
+use App\Services\StorefrontCache;
 use App\Support\RegexSearch;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class ProductController extends Controller
 {
-    public function index(Request $request, AnalyticsTracker $analytics): View
+    public function index(Request $request, AnalyticsTracker $analytics, StorefrontCache $cache): View
     {
         $analytics->track($request, AnalyticsEvent::PAGE_VIEW, ['source' => 'products_index']);
         $category = null;
@@ -63,7 +64,7 @@ class ProductController extends Controller
 
         return view('products.index', [
             'products' => $products,
-            'categories' => Category::query()->active()->orderBy('sort_order')->get(),
+            'categories' => $cache->categories(),
             'currentCategory' => $category,
             'currentStatus' => $status,
             'featuredOnly' => $request->boolean('featured'),
@@ -72,7 +73,7 @@ class ProductController extends Controller
         ]);
     }
 
-    public function tag(Request $request, ProductTag $tag, AnalyticsTracker $analytics): View
+    public function tag(Request $request, ProductTag $tag, AnalyticsTracker $analytics, StorefrontCache $cache): View
     {
         abort_unless($tag->is_active, 404);
         $analytics->track($request, AnalyticsEvent::PAGE_VIEW, ['source' => 'tag']);
@@ -93,7 +94,7 @@ class ProductController extends Controller
 
         return view('products.index', [
             'products' => $products,
-            'categories' => Category::query()->active()->orderBy('sort_order')->get(),
+            'categories' => $cache->categories(),
             'currentCategory' => null,
             'currentTag' => $tag,
             'keyword' => trim($request->string('q')->toString()),

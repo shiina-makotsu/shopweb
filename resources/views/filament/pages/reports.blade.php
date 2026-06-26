@@ -83,6 +83,10 @@
                 <x-report-table title="商品转化排行" :rows="$this->productConversions()" :columns="$productConversionColumns" />
             </div>
 
+            <div class="xl:col-span-2">
+                <x-report-table title="今日访问用户" :rows="$this->todayVisitors()" :columns="['visitor' => '访问者', 'type' => '类型', 'visits' => '访问次数', 'pages' => '访问页面数', 'region' => '来源地区', 'last_seen' => '最后访问']" />
+            </div>
+
             <x-report-table title="入口来源表现" :rows="$this->trafficSources()" :columns="['source' => '来源', 'impressions' => '曝光', 'views' => '详情访问', 'adds' => '加购', 'orders' => '订单']" />
             <x-report-table title="低库存 SKU" :rows="$this->lowStockVariants()" :columns="['sku' => 'SKU', 'product' => '商品', 'stock' => '库存', 'threshold' => '阈值']" />
             <x-report-table title="客户排行" :rows="$this->topCustomers()" :columns="['name' => '用户昵称', 'email' => '邮箱', 'orders' => '订单数', 'total' => '累计金额']" />

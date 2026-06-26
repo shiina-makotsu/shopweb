@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Support\MediaPath;
+use App\Services\StorefrontCache;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -160,5 +161,15 @@ class ProductVariant extends Model
     public function hasActiveDiscount(): bool
     {
         return $this->effectivePriceCents() < (int) $this->price_cents;
+    }
+
+    protected static function booted(): void
+    {
+        static::saved(function (): void {
+            app(StorefrontCache::class)->clear();
+        });
+        static::deleted(function (): void {
+            app(StorefrontCache::class)->clear();
+        });
     }
 }

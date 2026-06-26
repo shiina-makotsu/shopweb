@@ -14,6 +14,7 @@ use App\Models\SupportChatSession;
 use App\Services\AdminLoginLogger;
 use App\Services\CartService;
 use App\Services\DatabaseMigrationHealth;
+use App\Services\StorefrontCache;
 use App\Support\RelativeUrlRewriter;
 use Filament\Actions\CreateAction;
 use Illuminate\Auth\Events\Failed;
@@ -29,6 +30,12 @@ use Throwable;
 
 class AppServiceProvider extends ServiceProvider
 {
+    private ?bool $canReadSettingsCache = null;
+
+    private ?SiteSetting $sharedSiteSettings = null;
+
+    private ?array $sharedStorefrontViewData = null;
+
     public function register(): void
     {
         //
@@ -55,40 +62,103 @@ class AppServiceProvider extends ServiceProvider
             app(RelativeUrlRewriter::class)->rewriteResponse($event->response, $event->request);
         });
 
+        foreach ([SiteSetting::class, Category::class, Page::class, NavigationMenuItem::class] as $model) {
+            $model::saved(function (): void {
+                app(StorefrontCache::class)->clear();
+            });
+            $model::deleted(function (): void {
+                app(StorefrontCache::class)->clear();
+            });
+        }
+
         View::composer('*', function ($view): void {
             if (! $this->canReadSettings()) {
                 return;
             }
 
-            $view->with('siteSettings', SiteSetting::query()->first());
+            $siteSettings = $this->sharedSiteSettings();
 
             if (request()->is('admin*', 'livewire*')) {
+                $view->with('siteSettings', $siteSettings);
+
                 return;
             }
 
-            $cartItems = app(CartService::class)->items();
-
-            $view->with([
-                'storeCategories' => Category::query()->active()->orderBy('sort_order')->orderBy('name')->get(),
-                'storePages' => Page::query()->published()->menuable()->orderBy('sort_order')->orderBy('title')->limit(8)->get(),
-                'storeMenuItems' => $this->navigationMenuItems(NavigationMenuItem::PLACEMENT_TOP_NAV),
-                'storeTopNavItems' => $this->navigationMenuItems(NavigationMenuItem::PLACEMENT_TOP_NAV),
-                'storeHomeInfoMenuItems' => $this->navigationMenuItems(NavigationMenuItem::PLACEMENT_HOME_INFO),
-                'cartItemCount' => $cartItems->sum('quantity'),
-                'cartSubtotalCents' => $cartItems->sum('line_total_cents'),
-                'unreadAnnouncementCount' => auth()->check()
-                    ? Announcement::query()->published()->whereDoesntHave('reads', fn ($query) => $query->where('user_id', auth()->id()))->count()
-                    : 0,
-                'privateUnreadMessageCount' => $this->privateUnreadMessageCount(),
-                'supportUnreadMessageCount' => $this->supportUnreadMessageCount(),
-                'pendingPaymentOrderCount' => $this->pendingPaymentOrderCount(),
-                'awaitingReceiptOrderCount' => $this->awaitingReceiptOrderCount(),
-                'userOrderNoticeCount' => $this->pendingPaymentOrderCount() + $this->awaitingReceiptOrderCount(),
-                'popupAnnouncement' => auth()->check()
-                    ? Announcement::query()->published()->where('popup_when_unread', true)->whereDoesntHave('reads', fn ($query) => $query->where('user_id', auth()->id()))->orderByDesc('is_pinned')->latest('published_at')->first()
-                    : null,
-            ]);
+            $view->with($this->sharedStorefrontViewData());
         });
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function sharedStorefrontViewData(): array
+    {
+        if ($this->sharedStorefrontViewData !== null) {
+            return $this->sharedStorefrontViewData;
+        }
+
+        $storefrontCache = app(StorefrontCache::class);
+        $cartItems = app(CartService::class)->items();
+        $pendingPaymentOrderCount = $this->pendingPaymentOrderCount();
+        $awaitingReceiptOrderCount = $this->awaitingReceiptOrderCount();
+
+        return $this->sharedStorefrontViewData = [
+            'siteSettings' => $this->sharedSiteSettings(),
+            'storeCategories' => $storefrontCache->categories(),
+            'storePages' => $storefrontCache->pages(),
+            'storeMenuItems' => $storefrontCache->menuItems(NavigationMenuItem::PLACEMENT_TOP_NAV),
+            'storeTopNavItems' => $storefrontCache->menuItems(NavigationMenuItem::PLACEMENT_TOP_NAV),
+            'storeHomeInfoMenuItems' => $storefrontCache->menuItems(NavigationMenuItem::PLACEMENT_HOME_INFO),
+            'cartItemCount' => $cartItems->sum('quantity'),
+            'cartSubtotalCents' => $cartItems->sum('line_total_cents'),
+            'unreadAnnouncementCount' => $this->unreadAnnouncementCount(),
+            'privateUnreadMessageCount' => $this->privateUnreadMessageCount(),
+            'supportUnreadMessageCount' => $this->supportUnreadMessageCount(),
+            'pendingPaymentOrderCount' => $pendingPaymentOrderCount,
+            'awaitingReceiptOrderCount' => $awaitingReceiptOrderCount,
+            'userOrderNoticeCount' => $pendingPaymentOrderCount + $awaitingReceiptOrderCount,
+            'popupAnnouncement' => $this->popupAnnouncement(),
+        ];
+    }
+
+    private function sharedSiteSettings(): ?SiteSetting
+    {
+        return $this->sharedSiteSettings ??= app(StorefrontCache::class)->settings();
+    }
+
+    private function unreadAnnouncementCount(): int
+    {
+        try {
+            if (! auth()->check() || ! \Schema::hasTable('announcements')) {
+                return 0;
+            }
+
+            return Announcement::query()
+                ->published()
+                ->whereDoesntHave('reads', fn ($query) => $query->where('user_id', auth()->id()))
+                ->count();
+        } catch (Throwable) {
+            return 0;
+        }
+    }
+
+    private function popupAnnouncement(): ?Announcement
+    {
+        try {
+            if (! auth()->check() || ! \Schema::hasTable('announcements')) {
+                return null;
+            }
+
+            return Announcement::query()
+                ->published()
+                ->where('popup_when_unread', true)
+                ->whereDoesntHave('reads', fn ($query) => $query->where('user_id', auth()->id()))
+                ->orderByDesc('is_pinned')
+                ->latest('published_at')
+                ->first();
+        } catch (Throwable) {
+            return null;
+        }
     }
 
     private function privateUnreadMessageCount(): int
@@ -195,10 +265,14 @@ class AppServiceProvider extends ServiceProvider
 
     private function canReadSettings(): bool
     {
+        if ($this->canReadSettingsCache !== null) {
+            return $this->canReadSettingsCache;
+        }
+
         try {
-            return file_exists(storage_path('app/install.lock')) && \Schema::hasTable('site_settings');
+            return $this->canReadSettingsCache = file_exists(storage_path('app/install.lock')) && \Schema::hasTable('site_settings');
         } catch (Throwable) {
-            return false;
+            return $this->canReadSettingsCache = false;
         }
     }
 

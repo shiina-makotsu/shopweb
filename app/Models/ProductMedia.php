@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Support\MediaPath;
+use App\Services\StorefrontCache;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -45,6 +46,13 @@ class ProductMedia extends Model
     {
         static::saving(function (ProductMedia $media): void {
             $media->media_kind = $media->media_kind ?: (str_starts_with((string) $media->mime_type, 'video/') ? self::KIND_VIDEO : self::KIND_IMAGE);
+        });
+
+        static::saved(function (): void {
+            app(StorefrontCache::class)->clear();
+        });
+        static::deleted(function (): void {
+            app(StorefrontCache::class)->clear();
         });
     }
 }

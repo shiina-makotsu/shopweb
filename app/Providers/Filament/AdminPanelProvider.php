@@ -35,6 +35,7 @@ use App\Models\Order;
 use App\Models\SiteSetting;
 use App\Models\SupportChatMessage;
 use App\Models\SupportChatSession;
+use App\Services\StorefrontCache;
 use App\Support\AdminMenuRegistry;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
@@ -56,6 +57,7 @@ use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 use Throwable;
@@ -746,10 +748,10 @@ class AdminPanelProvider extends PanelProvider
      */
     private function adminNavigationGroupBadges(): array
     {
-        return [
-            '交易' => $this->pendingAdminOrderCount(),
-            '客服' => $this->pendingAdminSupportCount(),
-        ];
+        return Cache::remember('shop:admin:navigation-group-badges', now()->addSeconds(15), fn (): array => [
+            '???' => $this->pendingAdminOrderCount(),
+            '???' => $this->pendingAdminSupportCount(),
+        ]);
     }
 
     private function pendingAdminOrderCount(): int
@@ -815,15 +817,7 @@ class AdminPanelProvider extends PanelProvider
 
     private function siteSettings(): ?SiteSetting
     {
-        try {
-            if (Schema::hasTable('site_settings')) {
-                return SiteSetting::query()->first();
-            }
-        } catch (Throwable) {
-            return null;
-        }
-
-        return null;
+        return app(StorefrontCache::class)->settings();
     }
 
     private function validColor(?string $color, string $fallback, bool $allowLight = false): string

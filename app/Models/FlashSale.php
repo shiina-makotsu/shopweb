@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\StorefrontCache;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -99,5 +100,15 @@ class FlashSale extends Model
             && $this->starts_at?->isPast()
             && (! $this->ends_at || $this->ends_at->isFuture())
             && $this->availableQuantity() > 0;
+    }
+
+    protected static function booted(): void
+    {
+        static::saved(function (): void {
+            app(StorefrontCache::class)->clear();
+        });
+        static::deleted(function (): void {
+            app(StorefrontCache::class)->clear();
+        });
     }
 }

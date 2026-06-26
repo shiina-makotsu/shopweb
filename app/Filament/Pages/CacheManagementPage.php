@@ -52,6 +52,11 @@ class CacheManagementPage extends Page
         $this->finish('生产缓存已生成', app(SystemCacheManager::class)->optimize());
     }
 
+    public function prewarm(): void
+    {
+        $this->finish('访问缓存已预热', app(SystemCacheManager::class)->prewarm());
+    }
+
     /**
      * @param  array<int, string>  $lines
      */

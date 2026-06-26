@@ -143,6 +143,54 @@ class ReportMetrics
     }
 
     /**
+     * @return Collection<int, array{visitor:string,type:string,visits:int,pages:int,region:string,last_seen:string}>
+     */
+    public function todayVisitors(int $limit = 50): Collection
+    {
+        $start = now()->startOfDay();
+        $end = now()->endOfDay();
+
+        return DB::table('analytics_events')
+            ->leftJoin('users', 'users.id', '=', 'analytics_events.user_id')
+            ->where('analytics_events.event', AnalyticsEvent::PAGE_VIEW)
+            ->whereBetween('analytics_events.created_at', [$start, $end])
+            ->select([
+                'analytics_events.user_id',
+                'analytics_events.ip_hash',
+                'analytics_events.visitor_type',
+                'users.name',
+                'users.email',
+                DB::raw("coalesce(nullif(max(analytics_events.ip_region), ''), nullif(max(analytics_events.ip_country), ''), '未知地区') as region_name"),
+                DB::raw('count(*) as visit_count'),
+                DB::raw('count(distinct analytics_events.path) as page_count'),
+                DB::raw('max(analytics_events.created_at) as last_seen_at'),
+            ])
+            ->groupBy('analytics_events.user_id', 'analytics_events.ip_hash', 'analytics_events.visitor_type', 'users.name', 'users.email')
+            ->orderByDesc('visit_count')
+            ->orderByDesc('last_seen_at')
+            ->limit($limit)
+            ->get()
+            ->map(function ($row): array {
+                $visitorType = (string) ($row->visitor_type ?? 'guest');
+
+                return [
+                    'visitor' => $row->user_id
+                        ? ((string) ($row->name ?: $row->email ?: '用户 #'.$row->user_id))
+                        : '游客 '.mb_substr((string) ($row->ip_hash ?: 'unknown'), 0, 12),
+                    'type' => match ($visitorType) {
+                        'staff' => '后台用户',
+                        'customer' => '前台用户',
+                        default => '游客/IP',
+                    },
+                    'visits' => (int) $row->visit_count,
+                    'pages' => (int) $row->page_count,
+                    'region' => $row->region_name,
+                    'last_seen' => $row->last_seen_at ? Carbon::parse($row->last_seen_at)->format('H:i:s') : '-',
+                ];
+            });
+    }
+
+    /**
      * @return array{series: array<int, array{name:string,color:string,points:string}>, markers: array<int, array<string, mixed>>, y_labels: array<int, string>, x_labels: array<int, array{label:string,x:float}>, has_data: bool}
      */
     public function visitTrend(string $range = '24h', int $limitRegions = 6): array

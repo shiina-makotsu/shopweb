@@ -7,12 +7,15 @@ use App\Models\Order;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Schema;
 use Throwable;
 
 class AnalyticsTracker
 {
     public const REQUEST_PAGE_VIEW_TRACKED = 'shopweb.analytics.page_view_tracked';
+
+    private static ?bool $analyticsTableReady = null;
 
     public function track(Request $request, string $event, array $data = []): void
     {
@@ -21,27 +24,7 @@ class AnalyticsTracker
         }
 
         try {
-            AnalyticsEvent::query()->create([
-                'event' => $event,
-                'user_id' => $request->user()?->id,
-                'session_id' => $request->hasSession() ? $request->session()->getId() : null,
-                'product_id' => $data['product_id'] ?? null,
-                'product_variant_id' => $data['product_variant_id'] ?? null,
-                'order_id' => $data['order_id'] ?? null,
-                'source' => $data['source'] ?? null,
-                'surface' => $data['surface'] ?? $this->surface($request),
-                'visitor_type' => $this->visitorType($request),
-                'device_type' => $data['device_type'] ?? $this->deviceType($request),
-                'path' => mb_substr($request->path(), 0, 1024),
-                'referrer' => mb_substr((string) $request->headers->get('referer'), 0, 1024) ?: null,
-                'ip_hash' => hash('sha256', (string) $request->ip()),
-                'ip_region' => $this->ipRegion($request),
-                'ip_country' => $this->ipCountry($request),
-                'user_agent' => mb_substr((string) $request->userAgent(), 0, 512) ?: null,
-                'quantity' => $data['quantity'] ?? null,
-                'amount_cents' => $data['amount_cents'] ?? null,
-                'metadata' => $data['metadata'] ?? null,
-            ]);
+            AnalyticsEvent::query()->create($this->payload($request, $event, $data));
 
             if ($event === AnalyticsEvent::PAGE_VIEW) {
                 $request->attributes->set(self::REQUEST_PAGE_VIEW_TRACKED, true);
@@ -56,12 +39,19 @@ class AnalyticsTracker
      */
     public function trackProductImpressions(Request $request, iterable $products, string $source): void
     {
+        if (! $this->isReady()) {
+            return;
+        }
+
+        $rows = [];
+        $now = Carbon::now();
+
         foreach ($products as $position => $product) {
             if (! $product instanceof Product) {
                 continue;
             }
 
-            $this->track($request, AnalyticsEvent::PRODUCT_IMPRESSION, [
+            $rows[] = $this->payload($request, AnalyticsEvent::PRODUCT_IMPRESSION, [
                 'product_id' => $product->id,
                 'source' => $source,
                 'metadata' => [
@@ -69,7 +59,17 @@ class AnalyticsTracker
                     'status' => $product->status,
                     'title' => $product->title,
                 ],
-            ]);
+            ], $now, true);
+        }
+
+        if ($rows === []) {
+            return;
+        }
+
+        try {
+            AnalyticsEvent::query()->insert($rows);
+        } catch (Throwable) {
+            // Analytics should never block page rendering.
         }
     }
 
@@ -121,11 +121,57 @@ class AnalyticsTracker
 
     private function isReady(): bool
     {
+        if (self::$analyticsTableReady !== null) {
+            return self::$analyticsTableReady;
+        }
+
         try {
-            return Schema::hasTable('analytics_events');
+            if (Schema::hasTable('analytics_events')) {
+                return self::$analyticsTableReady = true;
+            }
+
+            return false;
         } catch (Throwable) {
             return false;
         }
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function payload(Request $request, string $event, array $data = [], ?Carbon $now = null, bool $encodeMetadata = false): array
+    {
+        $now ??= Carbon::now();
+        $metadata = $data['metadata'] ?? null;
+
+        if ($encodeMetadata && $metadata !== null) {
+            $metadata = json_encode($metadata, JSON_UNESCAPED_UNICODE);
+        }
+
+        return [
+            'event' => $event,
+            'user_id' => $request->user()?->id,
+            'session_id' => $request->hasSession() ? $request->session()->getId() : null,
+            'product_id' => $data['product_id'] ?? null,
+            'product_variant_id' => $data['product_variant_id'] ?? null,
+            'order_id' => $data['order_id'] ?? null,
+            'source' => $data['source'] ?? null,
+            'surface' => $data['surface'] ?? $this->surface($request),
+            'visitor_type' => $this->visitorType($request),
+            'device_type' => $data['device_type'] ?? $this->deviceType($request),
+            'path' => mb_substr($request->path(), 0, 1024),
+            'referrer' => mb_substr((string) $request->headers->get('referer'), 0, 1024) ?: null,
+            'ip_hash' => hash('sha256', (string) $request->ip()),
+            'ip_region' => $this->ipRegion($request),
+            'ip_country' => $this->ipCountry($request),
+            'user_agent' => mb_substr((string) $request->userAgent(), 0, 512) ?: null,
+            'quantity' => $data['quantity'] ?? null,
+            'amount_cents' => $data['amount_cents'] ?? null,
+            'metadata' => $metadata,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ];
     }
 
     private function surface(Request $request): string

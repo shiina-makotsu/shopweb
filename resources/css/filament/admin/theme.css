@@ -675,17 +675,13 @@
 .shop-chart-point-ring {
     opacity: 0 !important;
     pointer-events: none;
-    transition: opacity 150ms ease, transform 150ms ease;
-    transform-origin: center;
+    transition: opacity 150ms ease;
+    transform: none !important;
 }
 
 .shop-chart-data-marker.is-active .shop-chart-point-dot,
 .shop-chart-data-marker.is-active .shop-chart-point-ring {
     opacity: 1 !important;
-}
-
-.shop-chart-data-marker.is-active .shop-chart-point-ring {
-    transform: scale(1.01);
 }
 
 .shop-chart-tooltip-card {

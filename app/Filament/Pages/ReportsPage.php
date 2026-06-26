@@ -83,6 +83,11 @@ class ReportsPage extends Page
         return app(ReportMetrics::class)->trafficSources();
     }
 
+    public function todayVisitors()
+    {
+        return app(ReportMetrics::class)->todayVisitors();
+    }
+
     public function topCustomers()
     {
         return app(ReportMetrics::class)->topCustomers();

@@ -24,6 +24,7 @@ use App\Models\AdminMenuItem;
 use Filament\Navigation\NavigationGroup;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Schema;
@@ -31,6 +32,8 @@ use Throwable;
 
 class AdminMenuRegistry
 {
+    private const CACHE_TAG = 'shop:admin-menu:';
+
     private bool $syncedDefaults = false;
 
     /**
@@ -205,6 +208,24 @@ class AdminMenuRegistry
      */
     public function navigationGroups(): array
     {
+        $cached = Cache::remember(self::CACHE_TAG.'navigation-groups', now()->addMinutes(5), fn (): array => $this->resolveNavigationGroupConfig());
+
+        if (! is_array($cached) || collect($cached)->contains(fn (mixed $group): bool => ! is_array($group))) {
+            Cache::forget(self::CACHE_TAG.'navigation-groups');
+            $cached = $this->resolveNavigationGroupConfig();
+            Cache::put(self::CACHE_TAG.'navigation-groups', $cached, now()->addMinutes(5));
+        }
+
+        return collect($cached)
+            ->map(fn (array $group): NavigationGroup => $this->makeGroup($group['label'], $this->iconForCachedKey($group['icon_key'])))
+            ->all();
+    }
+
+    /**
+     * @return array<int, array{label:string,icon_key:string}>
+     */
+    private function resolveNavigationGroupConfig(): array
+    {
         $groups = collect($this->defaultGroups())->keyBy('label');
 
         if ($this->tableReady()) {
@@ -218,17 +239,20 @@ class AdminMenuRegistry
 
             if ($configured->isNotEmpty()) {
                 return $configured
-                    ->map(fn (AdminMenuItem $item): NavigationGroup => $this->makeGroup(
-                        $item->label,
-                        $groups->get($item->label)['icon'] ?? Heroicon::OutlinedFolder,
-                    ))
+                    ->map(fn (AdminMenuItem $item): array => [
+                        'label' => $item->label,
+                        'icon_key' => $this->iconCacheKey($groups->get($item->label)['icon'] ?? Heroicon::OutlinedFolder),
+                    ])
                     ->all();
             }
         }
 
         return $groups
             ->sortBy('sort')
-            ->map(fn (array $group): NavigationGroup => $this->makeGroup($group['label'], $group['icon']))
+            ->map(fn (array $group): array => [
+                'label' => $group['label'],
+                'icon_key' => $this->iconCacheKey($group['icon']),
+            ])
             ->values()
             ->all();
     }
@@ -237,6 +261,14 @@ class AdminMenuRegistry
      * @return array<string, mixed>
      */
     public function browserConfig(): array
+    {
+        return Cache::remember(self::CACHE_TAG.'browser-config', now()->addMinutes(5), fn (): array => $this->resolveBrowserConfig());
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function resolveBrowserConfig(): array
     {
         if (! $this->tableReady()) {
             return ['groups' => [], 'items' => []];
@@ -268,10 +300,16 @@ class AdminMenuRegistry
                     'group' => $item->parent?->label,
                     'url' => $item->url,
                     'sort' => $item->sort_order,
-                ])
-                ->values()
-                ->all(),
+            ])
+            ->values()
+            ->all(),
         ];
+    }
+
+    public function clearCache(): void
+    {
+        Cache::forget(self::CACHE_TAG.'navigation-groups');
+        Cache::forget(self::CACHE_TAG.'browser-config');
     }
 
     public function tableReady(): bool
@@ -289,6 +327,22 @@ class AdminMenuRegistry
             ->icon($icon)
             ->collapsible(true)
             ->collapsed();
+    }
+
+    private function iconCacheKey(mixed $icon): string
+    {
+        return $icon instanceof \BackedEnum ? (string) $icon->value : (string) $icon;
+    }
+
+    private function iconForCachedKey(string $icon): mixed
+    {
+        foreach (Heroicon::cases() as $case) {
+            if ((string) $case->value === $icon) {
+                return $case;
+            }
+        }
+
+        return $icon !== '' ? $icon : Heroicon::OutlinedFolder;
     }
 
     private function groupKey(string $label): string

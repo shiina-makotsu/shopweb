@@ -32,6 +32,77 @@ it('tracks visit dimensions for guests customers and staff', function (): void {
         ->and(AnalyticsEvent::query()->where('event', AnalyticsEvent::PAGE_VIEW)->where('visitor_type', 'staff')->where('surface', 'frontend')->exists())->toBeTrue();
 });
 
+it('summarizes today visitors by customer staff and guest ip', function (): void {
+    $customer = User::factory()->create(['role' => 'customer', 'name' => '前台访问者']);
+    $staff = User::factory()->create(['role' => 'support', 'name' => '客服访问者']);
+
+    AnalyticsEvent::query()->create([
+        'event' => AnalyticsEvent::PAGE_VIEW,
+        'user_id' => $customer->id,
+        'visitor_type' => 'customer',
+        'surface' => 'frontend',
+        'device_type' => 'desktop',
+        'path' => '/',
+        'ip_region' => 'CN / Guangdong',
+        'created_at' => now()->setTime(9, 0),
+    ]);
+    AnalyticsEvent::query()->create([
+        'event' => AnalyticsEvent::PAGE_VIEW,
+        'user_id' => $customer->id,
+        'visitor_type' => 'customer',
+        'surface' => 'frontend',
+        'device_type' => 'desktop',
+        'path' => '/products',
+        'ip_region' => 'CN / Guangdong',
+        'created_at' => now()->setTime(9, 5),
+    ]);
+    AnalyticsEvent::query()->create([
+        'event' => AnalyticsEvent::PAGE_VIEW,
+        'user_id' => $staff->id,
+        'visitor_type' => 'staff',
+        'surface' => 'admin',
+        'device_type' => 'desktop',
+        'path' => 'admin/reports',
+        'ip_region' => '本地/内网',
+        'created_at' => now()->setTime(10, 0),
+    ]);
+    AnalyticsEvent::query()->create([
+        'event' => AnalyticsEvent::PAGE_VIEW,
+        'visitor_type' => 'guest',
+        'surface' => 'frontend',
+        'device_type' => 'mobile',
+        'path' => '/',
+        'ip_hash' => str_repeat('a', 64),
+        'ip_region' => 'JP / Tokyo',
+        'created_at' => now()->setTime(11, 0),
+    ]);
+
+    $rows = app(ReportMetrics::class)->todayVisitors();
+
+    expect($rows->firstWhere('visitor', '前台访问者'))->toMatchArray([
+        'type' => '前台用户',
+        'visits' => 2,
+        'pages' => 2,
+    ])
+        ->and($rows->firstWhere('visitor', '客服访问者'))->toMatchArray([
+            'type' => '后台用户',
+            'visits' => 1,
+        ])
+        ->and($rows->firstWhere('visitor', '游客 aaaaaaaaaaaa'))->toMatchArray([
+            'type' => '游客/IP',
+            'region' => 'JP / Tokyo',
+        ]);
+
+    $admin = User::factory()->create(['role' => 'admin']);
+
+    $this->actingAs($admin)
+        ->get('/admin/reports')
+        ->assertOk()
+        ->assertSee('今日访问用户')
+        ->assertSee('前台访问者')
+        ->assertSee('游客 aaaaaaaaaaaa');
+});
+
 it('excludes staff product detail visits from customer conversion metrics', function (): void {
     $category = Category::query()->create([
         'name' => 'Analytics',

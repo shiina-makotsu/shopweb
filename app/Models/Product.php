@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Str;
 use App\Support\Money;
+use App\Services\StorefrontCache;
 
 class Product extends Model
 {
@@ -415,6 +416,8 @@ class Product extends Model
         });
 
         static::updated(function (self $product): void {
+            app(StorefrontCache::class)->clear();
+
             if (! $product->wasChanged('status')) {
                 return;
             }
@@ -434,6 +437,9 @@ class Product extends Model
                 ->whereDoesntHave('items', fn ($query) => $query->where('status', Order::STATUS_INCOMING))
                 ->update(['status' => Order::STATUS_PENDING_SHIPMENT]);
         });
+
+        static::created(fn (): mixed => app(StorefrontCache::class)->clear());
+        static::deleted(fn (): mixed => app(StorefrontCache::class)->clear());
     }
 
     private static function uniqueSlug(self $product): string

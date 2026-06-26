@@ -6,7 +6,7 @@
             </span>
             <div>
                 <h2>缓存管理</h2>
-                <p>清理运行缓存，或为生产环境重新生成 Laravel 缓存。</p>
+                <p>清理运行缓存，或为生产环境重新生成 Laravel 缓存并预热访问数据。</p>
             </div>
         </div>
 
@@ -34,6 +34,9 @@
             </button>
             <button type="button" wire:click="clearAll" class="shop-settings-secondary-btn">
                 清理全部缓存
+            </button>
+            <button type="button" wire:click="prewarm" class="shop-settings-secondary-btn">
+                预热访问缓存
             </button>
             <button type="button" wire:click="optimize" class="shop-settings-primary-btn">
                 生成生产缓存

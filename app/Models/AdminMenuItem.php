@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\AdminMenuRegistry;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -42,5 +43,11 @@ class AdminMenuItem extends Model
     public function childrenRecursive(): HasMany
     {
         return $this->children()->with('childrenRecursive');
+    }
+
+    protected static function booted(): void
+    {
+        static::saved(fn (): mixed => app(AdminMenuRegistry::class)->clearCache());
+        static::deleted(fn (): mixed => app(AdminMenuRegistry::class)->clearCache());
     }
 }

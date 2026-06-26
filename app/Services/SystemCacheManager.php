@@ -63,6 +63,17 @@ class SystemCacheManager
     {
         return [
             $this->run('optimize'),
+            $this->run('shop:cache-prewarm'),
+        ];
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function prewarm(): array
+    {
+        return [
+            $this->run('shop:cache-prewarm'),
         ];
     }
 

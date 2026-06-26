@@ -6,21 +6,37 @@ use App\Models\AnalyticsEvent;
 use App\Services\AnalyticsTracker;
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Symfony\Component\HttpFoundation\Response;
 
 class TrackPageVisits
 {
+    private const SHOULD_TRACK_ATTRIBUTE = 'shopweb.analytics.should_track_auto_page_view';
+
     public function handle(Request $request, Closure $next): Response
     {
         $response = $next($request);
 
         if ($this->shouldTrack($request, $response)) {
-            app(AnalyticsTracker::class)->track($request, AnalyticsEvent::PAGE_VIEW, [
-                'source' => $request->is('admin') || $request->is('admin/*') ? 'admin_auto' : 'frontend_auto',
-            ]);
+            $request->attributes->set(self::SHOULD_TRACK_ATTRIBUTE, true);
         }
 
         return $response;
+    }
+
+    public function terminate(Request $request, Response $response): void
+    {
+        if (! $request->attributes->get(self::SHOULD_TRACK_ATTRIBUTE)) {
+            return;
+        }
+
+        if (! Cache::add($this->dedupeKey($request), true, now()->addSeconds(15))) {
+            return;
+        }
+
+        app(AnalyticsTracker::class)->track($request, AnalyticsEvent::PAGE_VIEW, [
+            'source' => $request->is('admin') || $request->is('admin/*') ? 'admin_auto' : 'frontend_auto',
+        ]);
     }
 
     private function shouldTrack(Request $request, Response $response): bool
@@ -59,5 +75,17 @@ class TrackPageVisits
         }
 
         return true;
+    }
+
+    private function dedupeKey(Request $request): string
+    {
+        return 'shop:analytics:auto-page-view:'.sha1(implode('|', [
+            $request->hasSession()
+                ? (string) $request->session()->getId()
+                : (string) ($request->cookies->get(config('session.cookie')) ?: $request->userAgent()),
+            (string) optional($request->user())->getAuthIdentifier(),
+            $request->path(),
+            (string) $request->ip(),
+        ]));
     }
 }
