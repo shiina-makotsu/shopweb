@@ -50,7 +50,7 @@ class SystemUpdateService
      */
     public function pullAndBuild(): array
     {
-        $lines = [];
+        $lines = $this->ensureGitSafeDirectory();
 
         $inside = $this->run(['git', 'rev-parse', '--is-inside-work-tree']);
         if (! $inside['ok'] || trim($inside['output']) !== 'true') {
@@ -156,6 +156,8 @@ class SystemUpdateService
             return $this->result('error', '回滚版本格式不正确。', []);
         }
 
+        $lines = $this->ensureGitSafeDirectory();
+
         $inside = $this->run(['git', 'rev-parse', '--is-inside-work-tree']);
         if (! $inside['ok'] || trim($inside['output']) !== 'true') {
             return $this->result('error', '当前目录不是 Git 仓库。', [$inside['output']]);
@@ -186,6 +188,7 @@ class SystemUpdateService
         $oldHead = trim($head['output']);
         $targetHead = trim($target['output']);
         $lines = [
+            ...$lines,
             '当前版本：'.$oldHead,
             '目标版本：'.$targetHead,
         ];
@@ -237,6 +240,7 @@ class SystemUpdateService
     private function run(array $command, int $timeout = 60): array
     {
         $process = new Process($command, base_path());
+        $process->setEnv($this->processEnvironment($command));
         $process->setTimeout($timeout);
         $process->run();
 
@@ -247,6 +251,101 @@ class SystemUpdateService
             'output' => $output,
             'exit_code' => $process->getExitCode(),
         ];
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function ensureGitSafeDirectory(): array
+    {
+        $existing = $this->runRaw(['git', 'config', '--global', '--get-all', 'safe.directory']);
+        $safeDirectories = collect(explode("\n", trim($existing['output'])))
+            ->map(fn (string $path): string => trim($path))
+            ->filter()
+            ->all();
+
+        $paths = $this->safeDirectoryPaths();
+        $missing = array_values(array_filter(
+            $paths,
+            fn (string $path): bool => ! in_array($path, $safeDirectories, true)
+        ));
+
+        if ($missing === []) {
+            return ['Git 安全目录：已存在 '.implode(' / ', $paths)];
+        }
+
+        $failed = [];
+
+        foreach ($missing as $path) {
+            $safe = $this->runRaw(['git', 'config', '--global', '--add', 'safe.directory', $path]);
+
+            if (! $safe['ok']) {
+                $failed[] = trim($safe['output']);
+            }
+        }
+
+        if ($failed === []) {
+            return ['Git 安全目录：已确认 '.implode(' / ', $paths)];
+        }
+
+        return [
+            'Git 安全目录：无法写入全局配置，已为本次更新命令启用临时 safe.directory。',
+            implode("\n", array_filter($failed)),
+        ];
+    }
+
+    /**
+     * @param  array<int, string>  $command
+     * @return array<string, string>
+     */
+    private function processEnvironment(array $command): array
+    {
+        if (($command[0] ?? null) !== 'git') {
+            return [];
+        }
+
+        $env = [
+            'GIT_CONFIG_COUNT' => (string) count($this->safeDirectoryPaths()),
+        ];
+
+        foreach ($this->safeDirectoryPaths() as $index => $path) {
+            $env['GIT_CONFIG_KEY_'.$index] = 'safe.directory';
+            $env['GIT_CONFIG_VALUE_'.$index] = $path;
+        }
+
+        return $env;
+    }
+
+    /**
+     * @param  array<int, string>  $command
+     * @return array{ok: bool, output: string, exit_code: int|null}
+     */
+    private function runRaw(array $command, int $timeout = 60): array
+    {
+        $process = new Process($command, base_path());
+        $process->setTimeout($timeout);
+        $process->run();
+
+        $output = trim($process->getOutput()."\n".$process->getErrorOutput());
+
+        return [
+            'ok' => $process->isSuccessful(),
+            'output' => $output,
+            'exit_code' => $process->getExitCode(),
+        ];
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function safeDirectoryPaths(): array
+    {
+        return collect([base_path(), realpath(base_path()) ?: null])
+            ->filter(fn (?string $path): bool => filled($path))
+            ->map(fn (string $path): string => str_replace('\\', '/', $path))
+            ->unique()
+            ->values()
+            ->all();
     }
 
     /**
