@@ -185,7 +185,12 @@ class OrderService
                 return;
             }
 
-            $autoResult = $path ? $this->autoCheckPaymentProof($order, $path) : Order::AUTO_CHECK_PENDING;
+            try {
+                $autoResult = $path ? $this->autoCheckPaymentProof($order, $path) : Order::AUTO_CHECK_PENDING;
+            } catch (Throwable $exception) {
+                report($exception);
+                $autoResult = Order::AUTO_CHECK_PENDING;
+            }
 
             $order->update([
                 'payment_proof_path' => $path,
@@ -196,28 +201,36 @@ class OrderService
                 'payment_auto_check_status' => $autoResult,
             ]);
 
-            PaymentVerificationLog::query()->create([
-                'order_id' => $order->id,
-                'user_id' => $order->user_id,
-                'payment_proof_path' => $path,
-                'expected_order_number' => $order->order_number,
-                'detected_order_number' => $autoResult === Order::AUTO_CHECK_PASSED ? $order->order_number : null,
-                'expected_amount_cents' => (int) $order->total_cents,
-                'auto_result' => $autoResult,
-                'metadata' => [
-                    'payment_status' => Order::PAYMENT_SUBMITTED,
-                    'auto_checked_at' => now()->toDateTimeString(),
-                    'checker' => $path ? 'local_v1_placeholder' : 'manual_text_proof',
-                    'payment_text_proof' => $textProof !== '' ? $textProof : null,
-                ],
-            ]);
+            try {
+                PaymentVerificationLog::query()->create([
+                    'order_id' => $order->id,
+                    'user_id' => $order->user_id,
+                    'payment_proof_path' => $path,
+                    'expected_order_number' => $order->order_number,
+                    'detected_order_number' => $autoResult === Order::AUTO_CHECK_PASSED ? $order->order_number : null,
+                    'expected_amount_cents' => (int) $order->total_cents,
+                    'auto_result' => $autoResult,
+                    'metadata' => [
+                        'payment_status' => Order::PAYMENT_SUBMITTED,
+                        'auto_checked_at' => now()->toDateTimeString(),
+                        'checker' => $path ? 'local_v1_placeholder' : 'manual_text_proof',
+                        'payment_text_proof' => $textProof !== '' ? $textProof : null,
+                    ],
+                ]);
+            } catch (Throwable $exception) {
+                report($exception);
+            }
 
-            $this->activity->log('payment_proof_submitted', $order, $order->order_number, [
-                'path' => $path,
-                'payment_text_proof' => $textProof !== '' ? $textProof : null,
-                'payment_status' => Order::PAYMENT_SUBMITTED,
-                'payment_auto_check_status' => $order->payment_auto_check_status,
-            ], $order->user);
+            try {
+                $this->activity->log('payment_proof_submitted', $order, $order->order_number, [
+                    'path' => $path,
+                    'payment_text_proof' => $textProof !== '' ? $textProof : null,
+                    'payment_status' => Order::PAYMENT_SUBMITTED,
+                    'payment_auto_check_status' => $order->payment_auto_check_status,
+                ], $order->user);
+            } catch (Throwable $exception) {
+                report($exception);
+            }
         });
     }
 

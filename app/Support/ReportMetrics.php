@@ -150,13 +150,13 @@ class ReportMetrics
         $start = now()->startOfDay();
         $end = now()->endOfDay();
 
-        return DB::table('analytics_events')
+        $userRows = DB::table('analytics_events')
             ->leftJoin('users', 'users.id', '=', 'analytics_events.user_id')
             ->where('analytics_events.event', AnalyticsEvent::PAGE_VIEW)
             ->whereBetween('analytics_events.created_at', [$start, $end])
+            ->whereNotNull('analytics_events.user_id')
             ->select([
                 'analytics_events.user_id',
-                'analytics_events.ip_hash',
                 'analytics_events.visitor_type',
                 'users.name',
                 'users.email',
@@ -165,7 +165,7 @@ class ReportMetrics
                 DB::raw('count(distinct analytics_events.path) as page_count'),
                 DB::raw('max(analytics_events.created_at) as last_seen_at'),
             ])
-            ->groupBy('analytics_events.user_id', 'analytics_events.ip_hash', 'analytics_events.visitor_type', 'users.name', 'users.email')
+            ->groupBy('analytics_events.user_id', 'analytics_events.visitor_type', 'users.name', 'users.email')
             ->orderByDesc('visit_count')
             ->orderByDesc('last_seen_at')
             ->limit($limit)
@@ -174,9 +174,7 @@ class ReportMetrics
                 $visitorType = (string) ($row->visitor_type ?? 'guest');
 
                 return [
-                    'visitor' => $row->user_id
-                        ? ((string) ($row->name ?: $row->email ?: '用户 #'.$row->user_id))
-                        : '游客 '.mb_substr((string) ($row->ip_hash ?: 'unknown'), 0, 12),
+                    'visitor' => (string) ($row->name ?: $row->email ?: '用户 #'.$row->user_id),
                     'type' => match ($visitorType) {
                         'staff' => '后台用户',
                         'customer' => '前台用户',
@@ -184,10 +182,52 @@ class ReportMetrics
                     },
                     'visits' => (int) $row->visit_count,
                     'pages' => (int) $row->page_count,
-                    'region' => $row->region_name,
+                    'region' => $this->displayRegion((string) $row->region_name),
                     'last_seen' => $row->last_seen_at ? Carbon::parse($row->last_seen_at)->format('H:i:s') : '-',
                 ];
             });
+
+        $guestRows = DB::table('analytics_events')
+            ->where('event', AnalyticsEvent::PAGE_VIEW)
+            ->whereBetween('created_at', [$start, $end])
+            ->whereNull('user_id')
+            ->select([
+                'ip_hash',
+                DB::raw("coalesce(nullif(max(ip_region), ''), nullif(max(ip_country), ''), '未知地区') as region_name"),
+                DB::raw('count(*) as visit_count'),
+                DB::raw('count(distinct path) as page_count'),
+                DB::raw('max(created_at) as last_seen_at'),
+            ])
+            ->groupBy('ip_hash')
+            ->orderByDesc('visit_count')
+            ->orderByDesc('last_seen_at')
+            ->limit(max(50, $limit * 4))
+            ->get()
+            ->map(fn ($row): array => [
+                'visitor' => '游客 '.mb_substr((string) ($row->ip_hash ?: 'unknown'), 0, 12),
+                'type' => '游客/IP',
+                'visits' => (int) $row->visit_count,
+                'pages' => (int) $row->page_count,
+                'region' => $this->displayRegion((string) $row->region_name),
+                'last_seen' => $row->last_seen_at ? Carbon::parse($row->last_seen_at)->format('H:i:s') : '-',
+            ]);
+
+        if ($guestRows->isNotEmpty()) {
+            $userRows->push([
+                'visitor' => '游客',
+                'type' => '游客汇总',
+                'visits' => (int) $guestRows->sum('visits'),
+                'pages' => (int) $guestRows->sum('pages'),
+                'region' => $guestRows->pluck('region')->unique()->count().' 个来源',
+                'last_seen' => (string) ($guestRows->sortByDesc('last_seen')->first()['last_seen'] ?? '-'),
+                'children' => $guestRows->values()->all(),
+            ]);
+        }
+
+        return $userRows
+            ->sortByDesc('visits')
+            ->values()
+            ->take($limit);
     }
 
     /**
@@ -213,6 +253,9 @@ class ReportMetrics
             ->limit($limitRegions)
             ->pluck('region_name')
             ->map(fn ($region): string => (string) $region)
+            ->map(fn (string $region): string => $this->displayRegion($region))
+            ->unique()
+            ->values()
             ->all();
 
         if ($topRegions === []) {
@@ -222,7 +265,10 @@ class ReportMetrics
         $rawEvents = AnalyticsEvent::query()
             ->where('event', AnalyticsEvent::PAGE_VIEW)
             ->whereBetween('created_at', [$start, $end])
-            ->get(['ip_region', 'ip_country', 'created_at']);
+            ->get(['ip_region', 'ip_country', 'created_at'])
+            ->each(function (AnalyticsEvent $event): void {
+                $event->ip_region = $this->displayRegion($event->ip_region ?: ($event->ip_country ?: '未知地区'));
+            });
 
         $events = $rawEvents
             ->groupBy(fn (AnalyticsEvent $event): string => $event->ip_region ?: ($event->ip_country ?: '未知地区'))
@@ -250,7 +296,7 @@ class ReportMetrics
 
                         return (int) ($regionEvents->get($bucket)?->total ?? 0);
                     },
-                    'line' => fn (int $value): string => '访问量：'.$value,
+                    'line' => fn (int $value): string => $region.'：'.$value,
                 ];
             })->all(),
             labelFormat: $labelFormat,
@@ -536,13 +582,14 @@ class ReportMetrics
                 [$x, $y] = $point($index, $value);
                 $points[] = $x.','.$y;
                 $time = $rows->values()->get($index)['time'];
+                $displayLine = $series['name'].'：'.(int) $value;
 
                 $markers[] = [
                     'x' => $x,
                     'y' => $y,
                     'title' => $time->format($labelFormat),
-                    'line_1' => $series['name'],
-                    'line_2' => $series['line']((int) $value),
+                    'line_1' => $displayLine,
+                    'line_2' => '',
                     'color' => $series['color'],
                 ];
             }
@@ -571,5 +618,31 @@ class ReportMetrics
                 ->all(),
             'has_data' => collect($valuesBySeries)->flatten()->sum() > 0,
         ];
+    }
+
+    private function displayRegion(?string $region): string
+    {
+        $region = trim((string) $region);
+
+        if ($region === '') {
+            return '未知地区';
+        }
+
+        $parts = collect(preg_split('/\s*\/\s*/', $region) ?: [])
+            ->map(fn (string $part): string => trim($part))
+            ->filter()
+            ->values();
+
+        if ($parts->isEmpty()) {
+            return '未知地区';
+        }
+
+        $country = strtoupper((string) $parts->first());
+
+        if (in_array($country, ['CN', 'CHN', '中国', '中國'], true)) {
+            return (string) ($parts->last() ?: $parts->get(1) ?: '中国');
+        }
+
+        return $parts->implode(' / ');
     }
 }

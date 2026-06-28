@@ -142,6 +142,11 @@ class Order extends Model
         return $this->hasMany(PaymentVerificationLog::class);
     }
 
+    public function paymentProofFiles(): HasMany
+    {
+        return $this->hasMany(PaymentProofFile::class);
+    }
+
     public function afterSalesRequests(): HasMany
     {
         return $this->hasMany(AfterSalesRequest::class);

@@ -43,6 +43,7 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        $this->ensureRuntimeStoragePaths();
         $this->autoRepairDatabaseSchema();
         $this->configureFilamentActions();
 
@@ -327,6 +328,31 @@ class AppServiceProvider extends ServiceProvider
         } finally {
             flock($lock, LOCK_UN);
             fclose($lock);
+        }
+    }
+
+    private function ensureRuntimeStoragePaths(): void
+    {
+        foreach ([
+            storage_path('app/private'),
+            storage_path('app/private/payment-proofs'),
+            storage_path('app/private/livewire-tmp'),
+            storage_path('app/private/support-attachments'),
+            storage_path('app/private/private-attachments'),
+            storage_path('app/private/digital-deliveries'),
+            storage_path('framework/cache'),
+            storage_path('framework/sessions'),
+            storage_path('framework/views'),
+            storage_path('logs'),
+        ] as $path) {
+            try {
+                File::ensureDirectoryExists($path, 0775, true);
+            } catch (Throwable $exception) {
+                Log::warning('Runtime storage path could not be ensured.', [
+                    'path' => $path,
+                    'error' => $exception->getMessage(),
+                ]);
+            }
         }
     }
 

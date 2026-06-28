@@ -66,14 +66,21 @@
                         });
                     };
 
+                    const mergedLinesFor = (group) => group
+                        .flatMap((item) => Array.from({ length: lines.length }, (_, index) => item.getAttribute(`data-chart-line-${index + 1}`) ?? ''))
+                        .map((value) => value.trim())
+                        .filter(Boolean)
+                        .filter((value, index, values) => values.indexOf(value) === index);
+
                     const setLines = (point) => {
                         const group = groupNearPoint(point);
+                        const values = group.length > 1 ? mergedLinesFor(group) : null;
 
                         title.textContent = point.dataset.chartTitle ?? '';
 
                         lines.forEach((line, index) => {
-                            const value = group.length > 1
-                                ? group.map((item) => item.getAttribute(`data-chart-line-${index + 1}`) ?? '').filter(Boolean).join(' ｜ ')
+                            const value = values
+                                ? (values[index] ?? '')
                                 : point.getAttribute(`data-chart-line-${index + 1}`) ?? '';
 
                             line.textContent = value;

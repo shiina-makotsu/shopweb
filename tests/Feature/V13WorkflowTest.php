@@ -12,10 +12,12 @@ use App\Models\SiteSetting;
 use App\Models\SupportTicket;
 use App\Models\User;
 use App\Services\OrderService;
+use App\Services\PaymentProofStorage;
 use App\Support\OrderPrivacy;
 use App\Support\Url;
 use App\Filament\Resources\OrderResource\Pages\EditOrder;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
@@ -252,6 +254,56 @@ it('shows payment proof images to admins and a payment success state to customer
         ->assertSee('Admin Visible Product');
 });
 
+it('stores payment proof files into an ensured private directory', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+    $order = Order::query()->create([
+        'user_id' => $user->id,
+        'order_number' => 'PAY-STORAGE-1',
+        'status' => Order::STATUS_PENDING_PAYMENT,
+        'payment_status' => Order::PAYMENT_PENDING,
+        'subtotal_cents' => 100,
+        'total_cents' => 100,
+        'contact_name' => 'Storage User',
+        'contact_phone' => '1',
+    ]);
+
+    $root = storage_path('framework/testing/payment-proofs-'.uniqid());
+    Config::set('filesystems.disks.payment_proofs.root', $root);
+
+    $path = app(PaymentProofStorage::class)->store($order, UploadedFile::fake()->image('proof.png'));
+
+    expect($path)->toStartWith('PAY-STORAGE-1/')
+        ->and(is_file($root.DIRECTORY_SEPARATOR.str_replace('/', DIRECTORY_SEPARATOR, $path)))->toBeTrue()
+        ->and(app(PaymentProofStorage::class)->exists($path))->toBeTrue();
+});
+
+it('falls back to database storage when the payment proof disk is unavailable', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+    $order = Order::query()->create([
+        'user_id' => $user->id,
+        'order_number' => 'PAY-DB-FALLBACK-1',
+        'status' => Order::STATUS_PENDING_PAYMENT,
+        'payment_status' => Order::PAYMENT_PENDING,
+        'subtotal_cents' => 100,
+        'total_cents' => 100,
+        'contact_name' => 'Db Fallback User',
+        'contact_phone' => '1',
+    ]);
+    $file = UploadedFile::fake()->image('proof.png');
+    $expectedContent = file_get_contents($file->getRealPath());
+
+    Storage::partialMock()
+        ->shouldReceive('disk')
+        ->with('payment_proofs')
+        ->andThrow(new RuntimeException('disk unavailable'));
+
+    $path = app(PaymentProofStorage::class)->store($order, $file);
+
+    expect($path)->toStartWith('db:')
+        ->and(app(PaymentProofStorage::class)->exists($path))->toBeTrue()
+        ->and(app(PaymentProofStorage::class)->response($path)->getContent())->toBe($expectedContent);
+});
+
 it('preloads payment codes and accepts red packet text as a manual payment fallback', function (): void {
     SiteSetting::query()->create([
         'site_name' => 'ShopWeb',
@@ -307,6 +359,32 @@ it('preloads payment codes and accepts red packet text as a manual payment fallb
         'payment_proof_path' => null,
         'auto_result' => Order::AUTO_CHECK_PENDING,
     ]);
+});
+
+it('keeps payment submission successful when verification logging is unavailable', function (): void {
+    Schema::dropIfExists('payment_verification_logs');
+
+    $user = User::factory()->create(['role' => 'customer']);
+    $order = Order::query()->create([
+        'user_id' => $user->id,
+        'order_number' => 'PAY-LOG-MISSING-1',
+        'status' => Order::STATUS_PENDING_PAYMENT,
+        'payment_status' => Order::PAYMENT_PENDING,
+        'subtotal_cents' => 9900,
+        'total_cents' => 9900,
+        'contact_name' => 'Missing Log User',
+        'contact_phone' => '10086',
+    ]);
+
+    $this->actingAs($user)
+        ->post(route('orders.payment-proof', $order), [
+            'payment_text_proof' => 'red-packet-code-114514',
+        ])
+        ->assertRedirect()
+        ->assertSessionHas('payment_success', true);
+
+    expect($order->fresh()->payment_status)->toBe(Order::PAYMENT_SUBMITTED)
+        ->and($order->fresh()->payment_text_proof)->toBe('red-packet-code-114514');
 });
 
 it('returns a validation error when payment proof submission is empty', function (): void {

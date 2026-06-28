@@ -6,15 +6,17 @@ use App\Models\Order;
 use App\Models\SiteSetting;
 use App\Services\AlertBotService;
 use App\Services\OrderService;
+use App\Services\PaymentProofStorage;
 use App\Services\WalletService;
 use App\Support\OrderPrivacy;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Throwable;
 
 class OrderController extends Controller
 {
@@ -49,7 +51,7 @@ class OrderController extends Controller
         ]);
     }
 
-    public function uploadProof(Request $request, Order $order, OrderService $orders): RedirectResponse
+    public function uploadProof(Request $request, Order $order, OrderService $orders, PaymentProofStorage $proofStorage): RedirectResponse
     {
         $this->authorizeVisibleOrder($request, $order);
 
@@ -66,6 +68,8 @@ class OrderController extends Controller
 
         $order = $order->fresh();
 
+        abort_unless($order, 404);
+
         if ($order->payment_status === Order::PAYMENT_CONFIRMED) {
             return back()->with('status', '订单已确认付款，无需重复提交。');
         }
@@ -76,15 +80,61 @@ class OrderController extends Controller
                 ->with('status', '付款信息已提交，请勿重复操作。');
         }
 
-        if ($request->hasFile('payment_proof') && $order->payment_proof_path) {
-            Storage::disk('payment_proofs')->delete($order->payment_proof_path);
+        $path = $order->payment_proof_path;
+        $oldPath = $order->payment_proof_path;
+        $storedNewProof = false;
+
+        if ($request->hasFile('payment_proof')) {
+            try {
+                $storedPath = $proofStorage->store($order, $data['payment_proof']);
+            } catch (Throwable $exception) {
+                Log::error('Payment proof upload failed.', [
+                    'order_id' => $order->id,
+                    'order_number' => $order->order_number,
+                    'error' => $exception->getMessage(),
+                ]);
+
+                throw ValidationException::withMessages([
+                    'payment_proof' => '付款凭证保存失败，请稍后重试，或改用口令红包/文字付款凭证。',
+                ]);
+            }
+
+            if (! is_string($storedPath) || $storedPath === '') {
+                Log::error('Payment proof upload returned an empty path.', [
+                    'order_id' => $order->id,
+                    'order_number' => $order->order_number,
+                ]);
+
+                throw ValidationException::withMessages([
+                    'payment_proof' => '付款凭证保存失败，请稍后重试，或改用口令红包/文字付款凭证。',
+                ]);
+            }
+
+            $path = $storedPath;
+            $storedNewProof = true;
         }
 
-        $path = $request->hasFile('payment_proof')
-            ? $data['payment_proof']->store($order->order_number, 'payment_proofs')
-            : $order->payment_proof_path;
+        try {
+            $orders->markPaymentSubmitted($order, $path, $data['payment_text_proof'] ?? null);
+        } catch (Throwable $exception) {
+            if ($storedNewProof) {
+                $proofStorage->delete($path);
+            }
 
-        $orders->markPaymentSubmitted($order, $path, $data['payment_text_proof'] ?? null);
+            Log::error('Payment proof submission failed.', [
+                'order_id' => $order->id,
+                'order_number' => $order->order_number,
+                'error' => $exception->getMessage(),
+            ]);
+
+            throw ValidationException::withMessages([
+                'payment_proof' => '付款信息提交失败，请稍后重试；如果重复出现，请联系客服处理。',
+            ]);
+        }
+
+        if ($storedNewProof && $oldPath && $oldPath !== $path) {
+            $proofStorage->delete($oldPath);
+        }
         app(AlertBotService::class)->notify('ShopWeb P3 订单待确认收款', '用户已提交付款信息，订单等待后台确认收款。', [
             'order_id' => $order->id,
             'order_number' => $order->order_number,

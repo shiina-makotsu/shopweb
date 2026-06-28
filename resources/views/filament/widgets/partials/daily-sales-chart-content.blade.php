@@ -74,17 +74,17 @@
         @endforeach
 
         @foreach ($currentChart['sample_points'] as $point)
-            <g class="shop-chart-data-marker" data-shop-chart-point data-chart-x="{{ $point['x'] }}" data-chart-y="{{ $point['paid_y'] }}" data-chart-title="{{ $point['label'] }}" data-chart-line-1="已支付金额" data-chart-line-2="金额：{{ \App\Support\Money::format($point['paid_cents']) }}" data-chart-line-3="已支付订单：{{ $point['paid_order_count'] ?? 0 }}" data-chart-color="#3b82f6">
+            <g class="shop-chart-data-marker" data-shop-chart-point data-chart-x="{{ $point['x'] }}" data-chart-y="{{ $point['paid_y'] }}" data-chart-title="{{ $point['label'] }}" data-chart-line-1="已支付金额：{{ \App\Support\Money::format($point['paid_cents']) }}" data-chart-line-2="已支付订单：{{ $point['paid_order_count'] ?? 0 }}" data-chart-line-3="" data-chart-color="#3b82f6">
                 <circle cx="{{ $point['x'] }}" cy="{{ $point['paid_y'] }}" r="6" class="shop-chart-hit-target" fill="none" stroke="transparent" stroke-width="12" data-shop-chart-hit-target style="pointer-events:stroke;" />
                 <circle cx="{{ $point['x'] }}" cy="{{ $point['paid_y'] }}" r="2.5" class="shop-chart-point-dot" style="fill:#3b82f6; stroke:#3b82f6; opacity:0;" />
                 <circle cx="{{ $point['x'] }}" cy="{{ $point['paid_y'] }}" r="4.5" class="shop-chart-point-ring" style="fill:none; stroke:#3b82f6; opacity:0;" />
             </g>
-            <g class="shop-chart-data-marker" data-shop-chart-point data-chart-x="{{ $point['x'] }}" data-chart-y="{{ $point['created_y'] }}" data-chart-title="{{ $point['label'] }}" data-chart-line-1="下单量" data-chart-line-2="下单量：{{ $point['created_order_count'] }}" data-chart-line-3="已支付金额：{{ \App\Support\Money::format($point['paid_cents']) }}" data-chart-color="#ec4899">
+            <g class="shop-chart-data-marker" data-shop-chart-point data-chart-x="{{ $point['x'] }}" data-chart-y="{{ $point['created_y'] }}" data-chart-title="{{ $point['label'] }}" data-chart-line-1="下单量：{{ $point['created_order_count'] }}" data-chart-line-2="已支付金额：{{ \App\Support\Money::format($point['paid_cents']) }}" data-chart-line-3="" data-chart-color="#ec4899">
                 <circle cx="{{ $point['x'] }}" cy="{{ $point['created_y'] }}" r="6" class="shop-chart-hit-target" fill="none" stroke="transparent" stroke-width="12" data-shop-chart-hit-target style="pointer-events:stroke;" />
                 <circle cx="{{ $point['x'] }}" cy="{{ $point['created_y'] }}" r="2.5" class="shop-chart-point-dot" style="fill:#ec4899; stroke:#ec4899; opacity:0;" />
                 <circle cx="{{ $point['x'] }}" cy="{{ $point['created_y'] }}" r="4.5" class="shop-chart-point-ring" style="fill:none; stroke:#ec4899; opacity:0;" />
             </g>
-            <g class="shop-chart-data-marker" data-shop-chart-point data-chart-x="{{ $point['x'] }}" data-chart-y="{{ $point['completed_y'] }}" data-chart-title="{{ $point['label'] }}" data-chart-line-1="完成订单量" data-chart-line-2="完成量：{{ $point['completed_order_count'] }}" data-chart-line-3="完成销售额：{{ \App\Support\Money::format($point['sales_cents'] ?? 0) }}" data-chart-color="#22c55e">
+            <g class="shop-chart-data-marker" data-shop-chart-point data-chart-x="{{ $point['x'] }}" data-chart-y="{{ $point['completed_y'] }}" data-chart-title="{{ $point['label'] }}" data-chart-line-1="完成订单：{{ $point['completed_order_count'] }}" data-chart-line-2="完成销售额：{{ \App\Support\Money::format($point['sales_cents'] ?? 0) }}" data-chart-line-3="" data-chart-color="#22c55e">
                 <circle cx="{{ $point['x'] }}" cy="{{ $point['completed_y'] }}" r="6" class="shop-chart-hit-target" fill="none" stroke="transparent" stroke-width="12" data-shop-chart-hit-target style="pointer-events:stroke;" />
                 <circle cx="{{ $point['x'] }}" cy="{{ $point['completed_y'] }}" r="2.5" class="shop-chart-point-dot" style="fill:#22c55e; stroke:#22c55e; opacity:0;" />
                 <circle cx="{{ $point['x'] }}" cy="{{ $point['completed_y'] }}" r="4.5" class="shop-chart-point-ring" style="fill:none; stroke:#22c55e; opacity:0;" />

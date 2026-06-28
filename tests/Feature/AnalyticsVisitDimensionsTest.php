@@ -88,10 +88,16 @@ it('summarizes today visitors by customer staff and guest ip', function (): void
             'type' => '后台用户',
             'visits' => 1,
         ])
-        ->and($rows->firstWhere('visitor', '游客 aaaaaaaaaaaa'))->toMatchArray([
-            'type' => '游客/IP',
-            'region' => 'JP / Tokyo',
+        ->and($rows->firstWhere('visitor', '游客'))->toMatchArray([
+            'type' => '游客汇总',
+            'visits' => 1,
         ]);
+
+    $guestSummary = $rows->firstWhere('visitor', '游客');
+    expect(collect($guestSummary['children'] ?? [])->firstWhere('visitor', '游客 aaaaaaaaaaaa'))->toMatchArray([
+        'type' => '游客/IP',
+        'region' => 'JP / Tokyo',
+    ]);
 
     $admin = User::factory()->create(['role' => 'admin']);
 
@@ -100,7 +106,7 @@ it('summarizes today visitors by customer staff and guest ip', function (): void
         ->assertOk()
         ->assertSee('今日访问用户')
         ->assertSee('前台访问者')
-        ->assertSee('游客 aaaaaaaaaaaa');
+        ->assertSee('游客');
 });
 
 it('excludes staff product detail visits from customer conversion metrics', function (): void {
