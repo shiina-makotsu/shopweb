@@ -67,10 +67,13 @@ class SystemUpdateService
             return $this->result('error', '无法读取 Git 工作区状态。', [$dirty['output']]);
         }
 
-        if (trim($dirty['output']) !== '') {
+        $trackedDirty = $this->trackedChangesFromStatus($dirty['output']);
+        $untrackedPaths = $this->untrackedPathsFromStatus($dirty['output']);
+
+        if ($trackedDirty !== []) {
             return $this->result('warning', '工作区存在未提交改动，已停止自动更新。', [
                 '请先提交、暂存或清理生产环境中的本地改动，再执行更新。',
-                trim($dirty['output']),
+                implode("\n", $trackedDirty),
             ]);
         }
 
@@ -99,6 +102,25 @@ class SystemUpdateService
 
         if ($oldHead === $newHead) {
             return $this->result('info', '当前已经是最新版本。', $lines);
+        }
+
+        $incoming = $this->run(['git', 'diff', '--name-only', $oldHead, $newHead]);
+        if (! $incoming['ok']) {
+            return $this->result('error', '无法比对远端更新文件。', [...$lines, $incoming['output']]);
+        }
+
+        $incomingFiles = $this->changedFilesFromOutput($incoming['output']);
+        $conflicts = $this->untrackedPathConflicts($untrackedPaths, $incomingFiles);
+        if ($conflicts !== []) {
+            return $this->result('warning', '未跟踪文件会被本次更新覆盖，已停止自动更新。', [
+                ...$lines,
+                '请先移动、提交或清理以下路径后再执行更新：',
+                implode("\n", $conflicts),
+            ]);
+        }
+
+        if ($untrackedPaths !== []) {
+            $lines[] = '已忽略不会被本次更新覆盖的未跟踪部署文件：'.implode(', ', array_slice($untrackedPaths, 0, 12));
         }
 
         $ancestor = $this->run(['git', 'merge-base', '--is-ancestor', 'HEAD', '@{u}']);
@@ -168,10 +190,13 @@ class SystemUpdateService
             return $this->result('error', '无法读取 Git 工作区状态。', [$dirty['output']]);
         }
 
-        if (trim($dirty['output']) !== '') {
+        $trackedDirty = $this->trackedChangesFromStatus($dirty['output']);
+        $untrackedPaths = $this->untrackedPathsFromStatus($dirty['output']);
+
+        if ($trackedDirty !== []) {
             return $this->result('warning', '工作区存在未提交改动，已停止回滚。', [
                 '请先提交、暂存或清理生产环境中的本地改动，再执行回滚。',
-                trim($dirty['output']),
+                implode("\n", $trackedDirty),
             ]);
         }
 
@@ -198,17 +223,25 @@ class SystemUpdateService
         }
 
         $changed = $this->run(['git', 'diff', '--name-only', $oldHead, $targetHead]);
+        $changedFiles = $this->changedFilesFromOutput($changed['output']);
+        $conflicts = $this->untrackedPathConflicts($untrackedPaths, $changedFiles);
+        if ($conflicts !== []) {
+            return $this->result('warning', '未跟踪文件会被目标版本覆盖，已停止回滚。', [
+                ...$lines,
+                '请先移动、提交或清理以下路径后再执行回滚：',
+                implode("\n", $conflicts),
+            ]);
+        }
+
+        if ($untrackedPaths !== []) {
+            $lines[] = '已忽略不会被目标版本覆盖的未跟踪部署文件：'.implode(', ', array_slice($untrackedPaths, 0, 12));
+        }
 
         $reset = $this->run(['git', 'reset', '--hard', $targetHead], 120);
         $lines[] = $this->formatStep('git reset --hard '.$targetHead, $reset);
         if (! $reset['ok']) {
             return $this->result('error', '代码回滚失败。', $lines);
         }
-
-        $changedFiles = collect(explode("\n", trim($changed['output'])))
-            ->map(fn (string $file): string => trim($file))
-            ->filter()
-            ->values();
 
         if ($this->shouldInstallNodeDependencies($changedFiles)) {
             $install = $this->run(['npm', 'ci'], 300);
@@ -364,6 +397,74 @@ class SystemUpdateService
     private function phpBinary(): string
     {
         return PHP_BINARY ?: 'php';
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function trackedChangesFromStatus(string $status): array
+    {
+        return collect(explode("\n", trim($status)))
+            ->map(fn (string $line): string => trim($line))
+            ->filter()
+            ->reject(fn (string $line): bool => str_starts_with($line, '?? '))
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function untrackedPathsFromStatus(string $status): array
+    {
+        return collect(explode("\n", trim($status)))
+            ->map(fn (string $line): string => trim($line))
+            ->filter(fn (string $line): bool => str_starts_with($line, '?? '))
+            ->map(fn (string $line): string => $this->normalizeGitPath(substr($line, 3)))
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return Collection<int, string>
+     */
+    private function changedFilesFromOutput(string $output): Collection
+    {
+        return collect(explode("\n", trim($output)))
+            ->map(fn (string $file): string => $this->normalizeGitPath($file))
+            ->filter()
+            ->values();
+    }
+
+    /**
+     * @param  array<int, string>  $untrackedPaths
+     * @param  Collection<int, string>  $changedFiles
+     * @return array<int, string>
+     */
+    private function untrackedPathConflicts(array $untrackedPaths, Collection $changedFiles): array
+    {
+        if ($untrackedPaths === [] || $changedFiles->isEmpty()) {
+            return [];
+        }
+
+        return collect($untrackedPaths)
+            ->filter(function (string $untracked) use ($changedFiles): bool {
+                $prefix = rtrim($untracked, '/').'/';
+
+                return $changedFiles->contains(function (string $changed) use ($untracked, $prefix): bool {
+                    return $changed === $untracked
+                        || str_starts_with($changed, $prefix)
+                        || str_starts_with($untracked, rtrim($changed, '/').'/');
+                });
+            })
+            ->values()
+            ->all();
+    }
+
+    private function normalizeGitPath(string $path): string
+    {
+        return trim(str_replace('\\', '/', trim($path)), " \t\n\r\0\x0B\"'");
     }
 
     /**
