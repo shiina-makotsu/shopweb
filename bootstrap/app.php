@@ -22,6 +22,7 @@ return Application::configure(basePath: dirname(__DIR__))
         App\Console\Commands\PruneAiTrashCommand::class,
         App\Console\Commands\PrewarmShopCacheCommand::class,
         App\Console\Commands\RefreshCurrencySnapshotCommand::class,
+        App\Console\Commands\RecordSystemMetricSnapshotCommand::class,
         App\Console\Commands\ShopInstallCommand::class,
         App\Console\Commands\SyncFlashSaleCampaignsCommand::class,
     ])
@@ -31,6 +32,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $schedule->command('shop:flash-sale-sync')->dailyAt('02:55')->withoutOverlapping();
         $schedule->command('shop:ai-trash-prune')->dailyAt('03:20')->withoutOverlapping();
         $schedule->command('shop:cache-prewarm')->everyTenMinutes()->withoutOverlapping();
+        $schedule->command('shop:system-metrics-record')->everyMinute()->withoutOverlapping();
     })
     ->withMiddleware(function (Middleware $middleware): void {
         $trustedProxies = trim((string) env('TRUSTED_PROXIES', '*'));

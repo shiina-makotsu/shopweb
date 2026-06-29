@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Order;
 use App\Models\ProductVariant;
 use App\Models\User;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -58,8 +59,10 @@ class CsvExportController extends Controller
     public function customers(): StreamedResponse
     {
         $rows = User::query()
-            ->withCount('orders')
-            ->withSum('orders as orders_total_cents', 'total_cents')
+            ->withCount(['orders as completed_orders_count' => fn ($query) => $query
+                ->where('status', Order::STATUS_FULFILLED)])
+            ->withSum(['orders as completed_orders_total_cents' => fn ($query) => $query
+                ->where('status', Order::STATUS_FULFILLED)], 'total_cents')
             ->where('role', 'customer')
             ->orderBy('id')
             ->lazyById();
@@ -68,8 +71,8 @@ class CsvExportController extends Controller
             '客户ID',
             '姓名',
             '邮箱',
-            '订单数',
-            '累计订单金额(分)',
+            '完成订单数',
+            '完成累计金额(分)',
             '注册时间',
             '更新时间',
         ], function ($output) use ($rows): void {
@@ -78,8 +81,8 @@ class CsvExportController extends Controller
                     $user->id,
                     $user->name,
                     $user->email,
-                    $user->orders_count,
-                    $user->orders_total_cents ?? 0,
+                    $user->completed_orders_count,
+                    $user->completed_orders_total_cents ?? 0,
                     $user->created_at?->format('Y-m-d H:i:s'),
                     $user->updated_at?->format('Y-m-d H:i:s'),
                 ]);

@@ -7,6 +7,7 @@ use App\Filament\Resources\CustomerResource\Pages\CreateCustomer;
 use App\Filament\Resources\CustomerResource\Pages\EditCustomer;
 use App\Filament\Resources\CustomerResource\Pages\ListCustomers;
 use App\Models\Coupon;
+use App\Models\Order;
 use App\Models\User;
 use App\Models\UserCoupon;
 use App\Models\UserProfileChangeLog;
@@ -68,8 +69,10 @@ class CustomerResource extends Resource
     {
         return parent::getEloquentQuery()
             ->where('role', 'customer')
-            ->withCount('orders')
-            ->withSum('orders as orders_total_cents', 'total_cents');
+            ->withCount(['orders as completed_orders_count' => fn (Builder $query): Builder => $query
+                ->where('status', Order::STATUS_FULFILLED)])
+            ->withSum(['orders as completed_orders_total_cents' => fn (Builder $query): Builder => $query
+                ->where('status', Order::STATUS_FULFILLED)], 'total_cents');
     }
 
     public static function resolveRecordRouteBinding(int|string $key, ?\Closure $modifyQuery = null): ?Model
@@ -212,9 +215,9 @@ class CustomerResource extends Resource
                     ->formatStateUsing(fn ($state): string => $state ? '已封禁' : '可发帖')
                     ->badge()
                     ->toggleable(),
-                TextColumn::make('orders_count')->label('订单数')->sortable(),
-                TextColumn::make('orders_total_cents')
-                    ->label('累计金额')
+                TextColumn::make('completed_orders_count')->label('完成订单数')->sortable(),
+                TextColumn::make('completed_orders_total_cents')
+                    ->label('完成累计金额')
                     ->formatStateUsing(fn ($state): string => Money::format((int) ($state ?? 0)))
                     ->sortable(),
                 TextColumn::make('can_view_order_numbers')->label('订单号可见')->formatStateUsing(fn (bool $state): string => $state ? '可见' : '隐藏')->badge(),

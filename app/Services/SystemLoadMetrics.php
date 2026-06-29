@@ -2,9 +2,11 @@
 
 namespace App\Services;
 
+use App\Models\SystemMetricSnapshot;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redis;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Carbon\CarbonInterface;
 use Throwable;
@@ -68,6 +70,7 @@ class SystemLoadMetrics
             $counts[$scope] = (int) ($counts[$scope] ?? 0) + 1;
             Cache::put('shop:system-load:requests:last-minute', $minute, 180);
             Cache::put($key, $counts, 180);
+            $this->recordOncePerMinute($minute);
         } catch (Throwable) {
             //
         }
@@ -89,15 +92,19 @@ class SystemLoadMetrics
      */
     public function timelineBetween(CarbonInterface $start, CarbonInterface $end): array
     {
-        $start = $start->copy()->second(0);
-        $end = $end->copy()->second(0);
+        $start = $start->copy()->startOfMinute();
+        $end = $end->copy()->startOfMinute();
 
         if ($start->greaterThan($end)) {
             [$start, $end] = [$end, $start];
         }
 
         $limit = max(1, $start->diffInMinutes($end) + 1);
-        $samples = $this->rawTimeline(max(1440, $limit));
+        $samples = $this->databaseTimelineBetween($start, $end);
+
+        if ($samples === []) {
+            $samples = $this->rawTimeline(max(1440, $limit));
+        }
 
         return $this->denseTimelineBetween($samples, $start, $end);
     }
@@ -108,6 +115,12 @@ class SystemLoadMetrics
     private function rawTimeline(int $limit = 60): array
     {
         $limit = max(5, $limit);
+        $databaseSamples = $this->databaseTimeline($limit);
+
+        if ($databaseSamples !== []) {
+            return $databaseSamples;
+        }
+
         $samples = Cache::get('shop:system-load:samples', []);
 
         return array_slice(is_array($samples) ? $samples : [], -$limit);
@@ -116,11 +129,28 @@ class SystemLoadMetrics
     public function record(): array
     {
         $snapshot = $this->snapshot();
-        $samples = $this->rawTimeline(1440);
-        $minuteKey = now()->format('Y-m-d H:i');
+        $minute = now()->copy()->startOfMinute();
+        $minuteKey = $minute->format('Y-m-d H:i');
         $snapshot['minute_key'] = $minuteKey;
+        $snapshot['time'] = $minute->format('H:i');
+        $snapshot['timestamp'] = $minute->getTimestamp();
 
+        $this->persistSnapshot($snapshot, $minute);
+        $this->rememberCacheSample($snapshot);
+        $this->alertIfAbnormal($snapshot);
+
+        return $snapshot;
+    }
+
+    /**
+     * @param  array<string, mixed>  $snapshot
+     */
+    private function rememberCacheSample(array $snapshot): void
+    {
+        $samples = Cache::get('shop:system-load:samples', []);
+        $samples = is_array($samples) ? $samples : [];
         $lastKey = is_array(end($samples)) ? (end($samples)['minute_key'] ?? null) : null;
+        $minuteKey = (string) ($snapshot['minute_key'] ?? '');
 
         if ($lastKey === $minuteKey && $samples !== []) {
             $samples[array_key_last($samples)] = $snapshot;
@@ -128,12 +158,18 @@ class SystemLoadMetrics
             $samples[] = $snapshot;
         }
 
-        $samples = array_slice($samples, -1440);
+        Cache::put('shop:system-load:samples', array_slice($samples, -1440), 90000);
+    }
 
-        Cache::put('shop:system-load:samples', $samples, 90000);
-        $this->alertIfAbnormal($snapshot);
+    private function recordOncePerMinute(string $minute): void
+    {
+        if (! (bool) config('shop.server_monitor.enabled', true)) {
+            return;
+        }
 
-        return $snapshot;
+        if (Cache::add('shop:system-load:recorded:'.$minute, true, 120)) {
+            $this->record();
+        }
     }
 
     /**
@@ -142,7 +178,7 @@ class SystemLoadMetrics
      */
     private function denseTimeline(array $samples, int $limit): array
     {
-        $end = now()->copy()->second(0);
+        $end = now()->copy()->startOfMinute();
         $start = $end->copy()->subMinutes($limit - 1);
 
         return $this->denseTimelineBetween($samples, $start, $end);
@@ -154,8 +190,8 @@ class SystemLoadMetrics
      */
     private function denseTimelineBetween(array $samples, CarbonInterface $start, CarbonInterface $end): array
     {
-        $start = $start->copy()->second(0);
-        $end = $end->copy()->second(0);
+        $start = $start->copy()->startOfMinute();
+        $end = $end->copy()->startOfMinute();
         $limit = max(1, $start->diffInMinutes($end) + 1);
         $byMinute = [];
 
@@ -250,6 +286,141 @@ class SystemLoadMetrics
             'server_memory_used_percent' => 0,
             'server_cpu_percent' => 0,
             'requests_per_minute' => 0,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $snapshot
+     */
+    private function persistSnapshot(array $snapshot, CarbonInterface $minute): void
+    {
+        try {
+            if (! Schema::hasTable('system_metric_snapshots')) {
+                return;
+            }
+
+            SystemMetricSnapshot::query()->updateOrCreate(
+                ['sampled_at' => $minute->copy()->startOfMinute()],
+                [
+                    'php_memory_mb' => $snapshot['php_memory_mb'] ?? null,
+                    'php_memory_percent' => $snapshot['php_memory_percent'] ?? null,
+                    'php_peak_memory_mb' => $snapshot['php_peak_memory_mb'] ?? null,
+                    'server_memory_total_mb' => $snapshot['server_memory_total_mb'] ?? null,
+                    'server_memory_free_mb' => $snapshot['server_memory_free_mb'] ?? null,
+                    'server_memory_used_percent' => $snapshot['server_memory_used_percent'] ?? null,
+                    'server_memory_source' => $snapshot['server_memory_source'] ?? null,
+                    'server_cpu_percent' => $snapshot['server_cpu_percent'] ?? null,
+                    'server_cpu_source' => $snapshot['server_cpu_source'] ?? null,
+                    'load_1m' => $snapshot['load_1m'] ?? null,
+                    'load_5m' => $snapshot['load_5m'] ?? null,
+                    'load_15m' => $snapshot['load_15m'] ?? null,
+                    'cpu_cores' => $snapshot['cpu_cores'] ?? 1,
+                    'db_ms' => $snapshot['db_ms'] ?? null,
+                    'db_ok' => (bool) ($snapshot['db_ok'] ?? false),
+                    'redis_ms' => $snapshot['redis_ms'] ?? null,
+                    'redis_ok' => (bool) ($snapshot['redis_ok'] ?? false),
+                    'cache_store' => $snapshot['cache_store'] ?? null,
+                    'queue_connection' => $snapshot['queue_connection'] ?? null,
+                    'storage_free_gb' => $snapshot['storage_free_gb'] ?? null,
+                    'storage_used_percent' => $snapshot['storage_used_percent'] ?? null,
+                    'requests_per_minute' => $snapshot['requests_per_minute'] ?? 0,
+                    'frontend_requests_per_minute' => $snapshot['frontend_requests_per_minute'] ?? 0,
+                    'admin_requests_per_minute' => $snapshot['admin_requests_per_minute'] ?? 0,
+                    'request_ms' => $snapshot['request_ms'] ?? null,
+                ],
+            );
+
+            $this->pruneOldSnapshots($minute);
+        } catch (Throwable) {
+            //
+        }
+    }
+
+    private function pruneOldSnapshots(CarbonInterface $now): void
+    {
+        $days = max(1, (int) config('shop.server_monitor.retention_days', 62));
+
+        SystemMetricSnapshot::query()
+            ->where('sampled_at', '<', $now->copy()->subDays($days))
+            ->delete();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function databaseTimeline(int $limit): array
+    {
+        try {
+            if (! Schema::hasTable('system_metric_snapshots')) {
+                return [];
+            }
+
+            return SystemMetricSnapshot::query()
+                ->orderByDesc('sampled_at')
+                ->limit(max(1, $limit))
+                ->get()
+                ->reverse()
+                ->map(fn (SystemMetricSnapshot $snapshot): array => $this->snapshotModelToTimelineSample($snapshot))
+                ->values()
+                ->all();
+        } catch (Throwable) {
+            return [];
+        }
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function databaseTimelineBetween(CarbonInterface $start, CarbonInterface $end): array
+    {
+        try {
+            if (! Schema::hasTable('system_metric_snapshots')) {
+                return [];
+            }
+
+            return SystemMetricSnapshot::query()
+                ->whereBetween('sampled_at', [$start->copy()->startOfMinute(), $end->copy()->startOfMinute()])
+                ->orderBy('sampled_at')
+                ->get()
+                ->map(fn (SystemMetricSnapshot $snapshot): array => $this->snapshotModelToTimelineSample($snapshot))
+                ->values()
+                ->all();
+        } catch (Throwable) {
+            return [];
+        }
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function snapshotModelToTimelineSample(SystemMetricSnapshot $snapshot): array
+    {
+        $minute = $snapshot->sampled_at?->copy()->startOfMinute() ?? now()->startOfMinute();
+
+        return [
+            'time' => $minute->format('H:i'),
+            'timestamp' => $minute->getTimestamp(),
+            'minute_key' => $minute->format('Y-m-d H:i'),
+            'sampled' => true,
+            'php_memory_mb' => $snapshot->php_memory_mb ?? 0,
+            'php_memory_percent' => $snapshot->php_memory_percent ?? 0,
+            'php_peak_memory_mb' => $snapshot->php_peak_memory_mb ?? 0,
+            'server_memory_total_mb' => $snapshot->server_memory_total_mb,
+            'server_memory_free_mb' => $snapshot->server_memory_free_mb,
+            'server_memory_used_percent' => $snapshot->server_memory_used_percent ?? 0,
+            'server_cpu_percent' => $snapshot->server_cpu_percent ?? 0,
+            'load_1m' => $snapshot->load_1m,
+            'load_5m' => $snapshot->load_5m,
+            'load_15m' => $snapshot->load_15m,
+            'cpu_cores' => $snapshot->cpu_cores,
+            'db_ms' => $snapshot->db_ms ?? 0,
+            'db_ok' => $snapshot->db_ok,
+            'redis_ms' => $snapshot->redis_ms ?? 0,
+            'redis_ok' => $snapshot->redis_ok,
+            'requests_per_minute' => $snapshot->requests_per_minute,
+            'frontend_requests_per_minute' => $snapshot->frontend_requests_per_minute,
+            'admin_requests_per_minute' => $snapshot->admin_requests_per_minute,
+            'request_ms' => $snapshot->request_ms ?? 0,
         ];
     }
 

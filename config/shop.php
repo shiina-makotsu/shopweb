@@ -37,6 +37,7 @@ return [
         'redis_ms_warning' => (float) env('SHOP_SERVER_REDIS_MS_WARNING', 1000),
         'request_ms_warning' => (float) env('SHOP_SERVER_REQUEST_MS_WARNING', 3000),
         'rpm_warning' => (int) env('SHOP_SERVER_RPM_WARNING', 600),
+        'retention_days' => (int) env('SHOP_SERVER_METRIC_RETENTION_DAYS', 62),
     ],
     'redis_deployment' => [
         'recommended_topology' => env('SHOP_REDIS_TOPOLOGY', '3-master-3-replica-sentinel'),
