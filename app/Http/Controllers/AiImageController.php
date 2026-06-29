@@ -391,6 +391,12 @@ class AiImageController extends Controller
             ->where('public_id', (string) ($data['id'] ?? ''))
             ->first();
 
+        $hadMessages = $session?->exists
+            ? $session->messages()->exists()
+            : false;
+        $incomingMessages = array_slice($data['messages'] ?? [], -200);
+        $shouldAcceptMessagePayload = $incomingMessages !== [] || ! $hadMessages;
+
         if (! $session) {
             $session = new AiChatSession([
                 'user_id' => $request->user()->id,
@@ -398,8 +404,11 @@ class AiImageController extends Controller
             ]);
         }
 
+        $incomingTitle = trim((string) ($data['title'] ?? ''));
         $session->fill([
-            'title' => trim((string) ($data['title'] ?? '')) ?: '新会话',
+            'title' => $shouldAcceptMessagePayload && $incomingTitle !== ''
+                ? $incomingTitle
+                : ($session->title ?: '新会话'),
         ]);
         if (! $session->exists && filled($data['createdAt'] ?? null)) {
             $session->created_at = $data['createdAt'];
@@ -410,22 +419,26 @@ class AiImageController extends Controller
         }
         $session->save();
 
-        $session->messages()->delete();
+        if ($shouldAcceptMessagePayload) {
+            $session->messages()->delete();
 
-        foreach (array_slice($data['messages'] ?? [], -200) as $message) {
-            $session->messages()->create([
-                'user_id' => $request->user()->id,
-                'role' => $message['role'],
-                'content' => $message['content'] ?? '',
-                'files' => $message['files'] ?? [],
-                'model' => $message['model'] ?? '',
-                'reasoning_mode' => $message['reasoning'] ?? '',
-                'reasoning_label' => $message['reasoningLabel'] ?? '',
-                'is_error' => (bool) ($message['error'] ?? false),
-            ]);
+            foreach ($incomingMessages as $message) {
+                $session->messages()->create([
+                    'user_id' => $request->user()->id,
+                    'role' => $message['role'],
+                    'content' => $message['content'] ?? '',
+                    'files' => $message['files'] ?? [],
+                    'model' => $message['model'] ?? '',
+                    'reasoning_mode' => $message['reasoning'] ?? '',
+                    'reasoning_label' => $message['reasoningLabel'] ?? '',
+                    'is_error' => (bool) ($message['error'] ?? false),
+                ]);
+            }
         }
 
-        $session->touch();
+        if ($shouldAcceptMessagePayload) {
+            $session->touch();
+        }
 
         return response()->json([
             'chat' => $session->fresh()->load('messages')->toWorkbenchArray(),

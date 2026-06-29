@@ -2393,12 +2393,19 @@
                     });
 
                     if (targetStore === chatStore) {
-                        activeChatId = chatStore.keys().next().value ?? null;
+                        activeChatId = activeChatId && chatStore.has(activeChatId)
+                            ? activeChatId
+                            : (chatStore.keys().next().value ?? null);
                     }
                 };
 
                 const loadServerState = async () => {
-                    if (!root.dataset.stateUrl) return;
+                    if (!root.dataset.stateUrl) {
+                        if (!activeChatId) createChatSession();
+                        renderChatSessions();
+                        renderChats();
+                        return;
+                    }
 
                     try {
                         const localTasks = Array.from(tasks.values());
@@ -2416,13 +2423,21 @@
                         }
 
                         if (serverChats.length) {
+                            const serverChatIds = new Set(serverChats.map((session) => session.id).filter(Boolean));
+                            const unsyncedLocalChats = localChats.filter((session) => session.id && !serverChatIds.has(session.id));
+                            chatStore.clear();
                             applyStoredChats(serverChats);
+                            unsyncedLocalChats.forEach((session) => {
+                                chatStore.set(session.id, session);
+                                saveChatToServer(session);
+                            });
                         } else {
                             localChats.forEach((session) => saveChatToServer(session));
                         }
 
                         trashedTasks.clear();
                         applyStoredTasks(serverTrashedTasks, trashedTasks);
+                        trashedChatStore.clear();
                         applyStoredChats(serverTrashedChats, trashedChatStore);
 
                         if (!activeChatId) createChatSession();
@@ -2431,6 +2446,11 @@
                         renderChats();
                     } catch (error) {
                         // Local cache remains available when the account state endpoint is unreachable.
+                        if (!activeChatId) {
+                            createChatSession();
+                            renderChatSessions();
+                            renderChats();
+                        }
                     }
                 };
 
@@ -2720,7 +2740,6 @@
                 syncChatModelOptions();
                 loadSavedConfigs();
                 hydrateTasks();
-                if (!activeChatId) createChatSession();
                 setMode('gallery');
                 renderTasks();
                 loadServerState();

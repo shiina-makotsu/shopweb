@@ -935,6 +935,50 @@ it('persists account ai image tasks and chat sessions with recycle bin restore',
         ->assertJsonCount(0, 'trashed_chats');
 });
 
+it('keeps persisted ai chat messages when an empty client save arrives', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+
+    $this->actingAs($user)
+        ->postJson(route('ai-image.chats.store'), [
+            'id' => 'chat-persistent-1',
+            'title' => 'Persistent chat',
+            'messages' => [
+                [
+                    'role' => 'user',
+                    'content' => 'first question',
+                    'model' => 'gpt-5.5',
+                ],
+                [
+                    'role' => 'assistant',
+                    'content' => 'first answer',
+                    'model' => 'gpt-5.5',
+                ],
+            ],
+        ])
+        ->assertOk()
+        ->assertJsonCount(2, 'chat.messages');
+
+    $this->actingAs($user)
+        ->postJson(route('ai-image.chats.store'), [
+            'id' => 'chat-persistent-1',
+            'title' => 'Empty client title',
+            'messages' => [],
+        ])
+        ->assertOk()
+        ->assertJsonPath('chat.title', 'Persistent chat')
+        ->assertJsonCount(2, 'chat.messages')
+        ->assertJsonPath('chat.messages.0.content', 'first question')
+        ->assertJsonPath('chat.messages.1.content', 'first answer');
+
+    $this->actingAs($user)
+        ->getJson(route('ai-image.state'))
+        ->assertOk()
+        ->assertJsonPath('chats.0.id', 'chat-persistent-1')
+        ->assertJsonCount(2, 'chats.0.messages');
+
+    $this->assertDatabaseCount('ai_chat_messages', 2);
+});
+
 it('prunes expired ai recycle bin records by configured retention days', function (): void {
     $user = User::factory()->create(['role' => 'customer']);
 
