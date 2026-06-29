@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Order;
 use App\Models\PrivateMessage;
 use App\Models\User;
 use App\Models\UserAddress;
@@ -11,6 +10,7 @@ use App\Services\AiUsageService;
 use App\Services\CouponService;
 use App\Services\WalletService;
 use App\Support\ChinaRegions;
+use App\Support\UserOrderSummary;
 use Illuminate\Support\Collection;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -21,17 +21,12 @@ use Illuminate\View\View;
 
 class UserCenterController extends Controller
 {
-    public function show(Request $request): View
+    public function show(Request $request, UserOrderSummary $orderSummary): View
     {
         $user = $request->user();
         $user->ensurePublicId();
 
-        $orderCounts = Order::query()
-            ->whereBelongsTo($user)
-            ->whereNull('user_deleted_at')
-            ->selectRaw('status, count(*) as total')
-            ->groupBy('status')
-            ->pluck('total', 'status');
+        $orders = $orderSummary->forUser($user);
 
         return view('user.center', [
             'user' => $user->loadCount(['wishlists', 'favorites']),
@@ -40,11 +35,10 @@ class UserCenterController extends Controller
                 ->latest('viewed_at')
                 ->limit(8)
                 ->get(),
-            'orderCounts' => $orderCounts,
-            'pendingPaymentCount' => (int) ($orderCounts[Order::STATUS_PENDING_PAYMENT] ?? 0),
-            'pendingShipmentCount' => (int) ($orderCounts[Order::STATUS_PENDING_SHIPMENT] ?? 0) + (int) ($orderCounts[Order::STATUS_INCOMING] ?? 0),
-            'awaitingReceiptCount' => (int) ($orderCounts[Order::STATUS_SHIPPED] ?? 0) + (int) ($orderCounts[Order::STATUS_AWAITING_RECEIPT] ?? 0),
-            'fulfilledCount' => (int) ($orderCounts[Order::STATUS_FULFILLED] ?? 0),
+            'pendingPaymentCount' => $orders['pending_payment'],
+            'pendingShipmentCount' => $orders['pending_shipment'],
+            'awaitingReceiptCount' => $orders['awaiting_receipt'],
+            'fulfilledCount' => $orders['fulfilled'],
             'privateUnreadCount' => $this->privateUnreadCount($user),
         ]);
     }

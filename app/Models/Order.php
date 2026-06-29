@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use App\Support\UserOrderStatusPresenter;
 
 class Order extends Model
 {
@@ -159,19 +160,12 @@ class Order extends Model
 
     public function userPaymentLabel(): string
     {
-        if ($this->payment_status === self::PAYMENT_CONFIRMED) {
-            return '已付款';
-        }
+        return app(UserOrderStatusPresenter::class)->paymentLabel($this);
+    }
 
-        if ($this->payment_status === self::PAYMENT_SUBMITTED && $this->payment_auto_check_status === self::AUTO_CHECK_PASSED) {
-            return '已付款';
-        }
-
-        return match ($this->payment_status) {
-            self::PAYMENT_SUBMITTED => '已提交凭证',
-            self::PAYMENT_REJECTED => '待支付',
-            default => '待支付',
-        };
+    public function userStatusLabel(?string $fallback = null): string
+    {
+        return app(UserOrderStatusPresenter::class)->orderLabel($this, $fallback);
     }
 
     public function paymentMethodLabel(): string

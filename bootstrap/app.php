@@ -62,6 +62,24 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        $exceptions->respond(function ($response) {
+            if (config('app.debug')) {
+                return $response;
+            }
+
+            $status = method_exists($response, 'getStatusCode') ? $response->getStatusCode() : 500;
+
+            if ($status < 500 || request()?->expectsJson()) {
+                return $response;
+            }
+
+            return response()
+                ->view('errors.500', ['status' => $status], $status)
+                ->withHeaders([
+                    'Cache-Control' => 'no-store, no-cache, must-revalidate',
+                ]);
+        });
+
         $exceptions->report(function (Throwable $exception): void {
             try {
                 app(App\Services\AlertBotService::class)->notify('ShopWeb P0 未捕获异常', $exception->getMessage(), [

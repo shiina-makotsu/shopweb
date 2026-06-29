@@ -98,7 +98,8 @@ it('auto checks payment proof for user display while keeping backend payment sub
 
     expect($order->fresh()->payment_status)->toBe(Order::PAYMENT_SUBMITTED)
         ->and($order->fresh()->payment_auto_check_status)->toBe(Order::AUTO_CHECK_PASSED)
-        ->and($order->fresh()->userPaymentLabel())->toBe('已付款');
+        ->and($order->fresh()->userPaymentLabel())->toBe('待确认收款')
+        ->and($order->fresh()->userStatusLabel())->toBe('待确认收款');
 
     $this->assertDatabaseHas('payment_verification_logs', [
         'order_id' => $order->id,
@@ -220,12 +221,13 @@ it('shows payment proof images to admins and a payment success state to customer
     expect($order->fresh()->payment_proof_path)->not->toBeNull()
         ->and($order->fresh()->payment_status)->toBe(Order::PAYMENT_SUBMITTED)
         ->and($order->fresh()->payment_auto_check_status)->toBe(Order::AUTO_CHECK_PASSED)
-        ->and($order->fresh()->userPaymentLabel())->toBe('已付款');
+        ->and($order->fresh()->userPaymentLabel())->toBe('待确认收款');
 
     $this->actingAs($user)
         ->get(route('orders.show', $order))
         ->assertOk()
         ->assertSee('付款成功')
+        ->assertSee('待确认收款')
         ->assertSee('data-payment-redirect-url="/forum"', false)
         ->assertDontSee('待后台人工复核')
         ->assertDontSee('后台会继续人工复核');
@@ -252,6 +254,37 @@ it('shows payment proof images to admins and a payment success state to customer
         ->assertSee('电话')
         ->assertSee('邮箱')
         ->assertSee('Admin Visible Product');
+});
+
+it('does not count submitted payment proof orders as pending payment notices for customers', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+    $order = Order::query()->create([
+        'user_id' => $user->id,
+        'order_number' => 'PAY-NOTICE-1',
+        'status' => Order::STATUS_PENDING_PAYMENT,
+        'payment_status' => Order::PAYMENT_SUBMITTED,
+        'payment_text_proof' => 'red-packet-code',
+        'payment_submitted_at' => now(),
+        'subtotal_cents' => 9900,
+        'total_cents' => 9900,
+        'contact_name' => 'Notice User',
+        'contact_phone' => '10086',
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('orders.index'))
+        ->assertOk()
+        ->assertSee('待确认收款')
+        ->assertDontSee('>待支付<', false);
+
+    $this->actingAs($user)
+        ->get(route('user.center'))
+        ->assertOk()
+        ->assertSee('待付款')
+        ->assertSee('>0<', false);
+
+    expect($order->fresh()->userPaymentLabel())->toBe('待确认收款')
+        ->and($order->fresh()->userStatusLabel())->toBe('待确认收款');
 });
 
 it('stores payment proof files into an ensured private directory', function (): void {

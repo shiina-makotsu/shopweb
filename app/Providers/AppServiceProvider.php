@@ -2,20 +2,15 @@
 
 namespace App\Providers;
 
-use App\Models\Announcement;
 use App\Models\Category;
 use App\Models\NavigationMenuItem;
-use App\Models\Order;
 use App\Models\Page;
-use App\Models\PrivateMessage;
 use App\Models\SiteSetting;
-use App\Models\SupportChatMessage;
-use App\Models\SupportChatSession;
 use App\Services\AdminLoginLogger;
-use App\Services\CartService;
 use App\Services\DatabaseMigrationHealth;
 use App\Services\StorefrontCache;
 use App\Support\RelativeUrlRewriter;
+use App\Support\StorefrontViewData;
 use Filament\Actions\CreateAction;
 use Illuminate\Auth\Events\Failed;
 use Illuminate\Auth\Events\Login;
@@ -31,10 +26,6 @@ use Throwable;
 class AppServiceProvider extends ServiceProvider
 {
     private ?bool $canReadSettingsCache = null;
-
-    private ?SiteSetting $sharedSiteSettings = null;
-
-    private ?array $sharedStorefrontViewData = null;
 
     public function register(): void
     {
@@ -77,7 +68,8 @@ class AppServiceProvider extends ServiceProvider
                 return;
             }
 
-            $siteSettings = $this->sharedSiteSettings();
+            $storefrontViewData = app(StorefrontViewData::class);
+            $siteSettings = $storefrontViewData->settings();
 
             if (request()->is('admin*', 'livewire*')) {
                 $view->with('siteSettings', $siteSettings);
@@ -85,146 +77,8 @@ class AppServiceProvider extends ServiceProvider
                 return;
             }
 
-            $view->with($this->sharedStorefrontViewData());
+            $view->with($storefrontViewData->data());
         });
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function sharedStorefrontViewData(): array
-    {
-        if ($this->sharedStorefrontViewData !== null) {
-            return $this->sharedStorefrontViewData;
-        }
-
-        $storefrontCache = app(StorefrontCache::class);
-        $cartItems = app(CartService::class)->items();
-        $pendingPaymentOrderCount = $this->pendingPaymentOrderCount();
-        $awaitingReceiptOrderCount = $this->awaitingReceiptOrderCount();
-
-        return $this->sharedStorefrontViewData = [
-            'siteSettings' => $this->sharedSiteSettings(),
-            'storeCategories' => $storefrontCache->categories(),
-            'storePages' => $storefrontCache->pages(),
-            'storeMenuItems' => $storefrontCache->menuItems(NavigationMenuItem::PLACEMENT_TOP_NAV),
-            'storeTopNavItems' => $storefrontCache->menuItems(NavigationMenuItem::PLACEMENT_TOP_NAV),
-            'storeHomeInfoMenuItems' => $storefrontCache->menuItems(NavigationMenuItem::PLACEMENT_HOME_INFO),
-            'cartItemCount' => $cartItems->sum('quantity'),
-            'cartSubtotalCents' => $cartItems->sum('line_total_cents'),
-            'unreadAnnouncementCount' => $this->unreadAnnouncementCount(),
-            'privateUnreadMessageCount' => $this->privateUnreadMessageCount(),
-            'supportUnreadMessageCount' => $this->supportUnreadMessageCount(),
-            'pendingPaymentOrderCount' => $pendingPaymentOrderCount,
-            'awaitingReceiptOrderCount' => $awaitingReceiptOrderCount,
-            'userOrderNoticeCount' => $pendingPaymentOrderCount + $awaitingReceiptOrderCount,
-            'popupAnnouncement' => $this->popupAnnouncement(),
-        ];
-    }
-
-    private function sharedSiteSettings(): ?SiteSetting
-    {
-        return $this->sharedSiteSettings ??= app(StorefrontCache::class)->settings();
-    }
-
-    private function unreadAnnouncementCount(): int
-    {
-        try {
-            if (! auth()->check() || ! \Schema::hasTable('announcements')) {
-                return 0;
-            }
-
-            return Announcement::query()
-                ->published()
-                ->whereDoesntHave('reads', fn ($query) => $query->where('user_id', auth()->id()))
-                ->count();
-        } catch (Throwable) {
-            return 0;
-        }
-    }
-
-    private function popupAnnouncement(): ?Announcement
-    {
-        try {
-            if (! auth()->check() || ! \Schema::hasTable('announcements')) {
-                return null;
-            }
-
-            return Announcement::query()
-                ->published()
-                ->where('popup_when_unread', true)
-                ->whereDoesntHave('reads', fn ($query) => $query->where('user_id', auth()->id()))
-                ->orderByDesc('is_pinned')
-                ->latest('published_at')
-                ->first();
-        } catch (Throwable) {
-            return null;
-        }
-    }
-
-    private function privateUnreadMessageCount(): int
-    {
-        try {
-            if (! auth()->check() || ! \Schema::hasTable('private_messages')) {
-                return 0;
-            }
-
-            return PrivateMessage::query()
-                ->where('recipient_id', auth()->id())
-                ->whereNull('read_at')
-                ->count();
-        } catch (Throwable) {
-            return 0;
-        }
-    }
-
-    private function supportUnreadMessageCount(): int
-    {
-        try {
-            if (! auth()->check() || ! \Schema::hasTable('support_chat_messages') || ! \Schema::hasTable('support_chat_sessions')) {
-                return 0;
-            }
-
-            return SupportChatMessage::query()
-                ->whereIn('sender_type', [SupportChatMessage::SENDER_ADMIN, SupportChatMessage::SENDER_SYSTEM])
-                ->whereNull('read_at')
-                ->whereHas('session', fn ($query) => $query
-                    ->where('user_id', auth()->id())
-                    ->whereIn('status', [SupportChatSession::STATUS_OPEN, SupportChatSession::STATUS_ACTIVE]))
-                ->count();
-        } catch (Throwable) {
-            return 0;
-        }
-    }
-
-    private function pendingPaymentOrderCount(): int
-    {
-        return $this->userOrderCount([Order::STATUS_PENDING_PAYMENT]);
-    }
-
-    private function awaitingReceiptOrderCount(): int
-    {
-        return $this->userOrderCount([Order::STATUS_AWAITING_RECEIPT]);
-    }
-
-    /**
-     * @param  array<int, string>  $statuses
-     */
-    private function userOrderCount(array $statuses): int
-    {
-        try {
-            if (! auth()->check() || ! \Schema::hasTable('orders')) {
-                return 0;
-            }
-
-            return Order::query()
-                ->where('user_id', auth()->id())
-                ->whereIn('status', $statuses)
-                ->whereNull('user_deleted_at')
-                ->count();
-        } catch (Throwable) {
-            return 0;
-        }
     }
 
     private function configureFilamentActions(): void
@@ -236,32 +90,6 @@ class AppServiceProvider extends ServiceProvider
                     return $createAnotherAction->label('保存并创建新'.($action->getModelLabel() ?: '记录'));
                 });
         });
-    }
-
-    private function navigationMenuItems(string $placement)
-    {
-        try {
-            if (! \Schema::hasTable('navigation_menu_items')) {
-                return collect();
-            }
-
-            $hasPlacementColumn = \Schema::hasColumn('navigation_menu_items', 'placement');
-
-            return NavigationMenuItem::query()
-                ->active()
-                ->when($hasPlacementColumn, fn ($query) => $query->placement($placement))
-                ->whereNull('parent_id')
-                ->with(['children' => fn ($query) => $query
-                    ->active()
-                    ->when($hasPlacementColumn, fn ($query) => $query->placement($placement))
-                    ->orderBy('sort_order')
-                    ->orderBy('label')])
-                ->orderBy('sort_order')
-                ->orderBy('label')
-                ->get();
-        } catch (Throwable) {
-            return collect();
-        }
     }
 
     private function canReadSettings(): bool

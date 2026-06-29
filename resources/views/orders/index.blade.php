@@ -31,7 +31,7 @@
                                 <td class="px-4 py-3 text-slate-600">{{ $order->created_at->format('Y-m-d H:i') }}</td>
                                 <td class="px-4 py-3 text-right font-medium">@money($order->total_cents)</td>
                                 <td class="px-4 py-3">
-                                    <p>{{ $statusPresenter->label($order->status) }}</p>
+                                    <p>{{ $order->userStatusLabel($statusPresenter->label($order->status)) }}</p>
                                     @if($order->hasDigitalDelivery() && $order->status === \App\Models\Order::STATUS_AWAITING_RECEIPT)
                                         <p class="mt-1 text-xs text-emerald-700">线上交付已发放，请进入订单详情领取。</p>
                                     @endif

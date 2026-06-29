@@ -24,7 +24,7 @@
         <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-100 px-4 py-3">
             <div>
                 <h1 class="text-lg font-semibold">{{ $privacy->displayOrderNumber($order, auth()->user(), $settings) }}</h1>
-                <p class="mt-1 text-xs text-slate-600">订单状态：{{ $statusPresenter->label($order->status) }} / 付款状态：{{ $order->userPaymentLabel() }}</p>
+                <p class="mt-1 text-xs text-slate-600">订单状态：{{ $order->userStatusLabel($statusPresenter->label($order->status)) }} / 付款状态：{{ $order->userPaymentLabel() }}</p>
             </div>
             <p class="text-2xl font-semibold text-red-700">@money($order->total_cents)</p>
         </div>
