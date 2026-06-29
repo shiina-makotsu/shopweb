@@ -56,3 +56,14 @@ it('still blocks tracked local changes before update or rollback', function (): 
         'A  app/NewFile.php',
     ]);
 });
+
+it('uses temporary git safe directory config instead of writing global config', function (): void {
+    $service = app(SystemUpdateService::class);
+
+    $lines = invokeSystemUpdateServiceMethod($service, 'ensureGitSafeDirectory');
+
+    expect($lines)->toHaveCount(1)
+        ->and($lines[0])->toContain('safe.directory')
+        ->and($lines[0])->not->toContain('--global')
+        ->and($lines[0])->not->toContain('.gitconfig');
+});

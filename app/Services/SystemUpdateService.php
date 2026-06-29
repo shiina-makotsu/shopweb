@@ -85,6 +85,14 @@ class SystemUpdateService
         $lines[] = '当前版本：'.trim($head['output']);
         $lines[] = '上游分支：'.trim($upstream['output']);
 
+        $writableCheck = $this->gitRepositoryWritableCheck();
+        if ($writableCheck !== []) {
+            return $this->result('error', 'Git 仓库目录不可写，无法拉取更新。', [
+                ...$lines,
+                ...$writableCheck,
+            ]);
+        }
+
         $fetch = $this->run(['git', 'fetch', '--prune']);
         $lines[] = $this->formatStep('git fetch --prune', $fetch);
         if (! $fetch['ok']) {
@@ -237,6 +245,14 @@ class SystemUpdateService
             $lines[] = '已忽略不会被目标版本覆盖的未跟踪部署文件：'.implode(', ', array_slice($untrackedPaths, 0, 12));
         }
 
+        $writableCheck = $this->gitRepositoryWritableCheck();
+        if ($writableCheck !== []) {
+            return $this->result('error', 'Git 仓库目录不可写，无法回滚版本。', [
+                ...$lines,
+                ...$writableCheck,
+            ]);
+        }
+
         $reset = $this->run(['git', 'reset', '--hard', $targetHead], 120);
         $lines[] = $this->formatStep('git reset --hard '.$targetHead, $reset);
         if (! $reset['ok']) {
@@ -291,40 +307,9 @@ class SystemUpdateService
      */
     private function ensureGitSafeDirectory(): array
     {
-        $existing = $this->runRaw(['git', 'config', '--global', '--get-all', 'safe.directory']);
-        $safeDirectories = collect(explode("\n", trim($existing['output'])))
-            ->map(fn (string $path): string => trim($path))
-            ->filter()
-            ->all();
-
         $paths = $this->safeDirectoryPaths();
-        $missing = array_values(array_filter(
-            $paths,
-            fn (string $path): bool => ! in_array($path, $safeDirectories, true)
-        ));
 
-        if ($missing === []) {
-            return ['Git 安全目录：已存在 '.implode(' / ', $paths)];
-        }
-
-        $failed = [];
-
-        foreach ($missing as $path) {
-            $safe = $this->runRaw(['git', 'config', '--global', '--add', 'safe.directory', $path]);
-
-            if (! $safe['ok']) {
-                $failed[] = trim($safe['output']);
-            }
-        }
-
-        if ($failed === []) {
-            return ['Git 安全目录：已确认 '.implode(' / ', $paths)];
-        }
-
-        return [
-            'Git 安全目录：无法写入全局配置，已为本次更新命令启用临时 safe.directory。',
-            implode("\n", array_filter($failed)),
-        ];
+        return ['Git 安全目录：已为本次命令临时启用 safe.directory：'.implode(' / ', $paths)];
     }
 
     /**
@@ -350,25 +335,6 @@ class SystemUpdateService
     }
 
     /**
-     * @param  array<int, string>  $command
-     * @return array{ok: bool, output: string, exit_code: int|null}
-     */
-    private function runRaw(array $command, int $timeout = 60): array
-    {
-        $process = new Process($command, base_path());
-        $process->setTimeout($timeout);
-        $process->run();
-
-        $output = trim($process->getOutput()."\n".$process->getErrorOutput());
-
-        return [
-            'ok' => $process->isSuccessful(),
-            'output' => $output,
-            'exit_code' => $process->getExitCode(),
-        ];
-    }
-
-    /**
      * @return array<int, string>
      */
     private function safeDirectoryPaths(): array
@@ -379,6 +345,47 @@ class SystemUpdateService
             ->unique()
             ->values()
             ->all();
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function gitRepositoryWritableCheck(): array
+    {
+        $gitDir = base_path('.git');
+
+        if (! is_dir($gitDir)) {
+            return ['未找到 .git 目录，无法执行 Git 更新。'];
+        }
+
+        $paths = [
+            $gitDir,
+            $gitDir.DIRECTORY_SEPARATOR.'FETCH_HEAD',
+            $gitDir.DIRECTORY_SEPARATOR.'index',
+        ];
+
+        $blocked = collect($paths)
+            ->filter(function (string $path): bool {
+                if (file_exists($path)) {
+                    return ! is_writable($path);
+                }
+
+                return ! is_writable(dirname($path));
+            })
+            ->map(fn (string $path): string => str_replace('\\', '/', $path))
+            ->values()
+            ->all();
+
+        if ($blocked === []) {
+            return [];
+        }
+
+        return [
+            '当前运行网站的用户没有写入 Git 元数据的权限，Git 无法创建或更新 FETCH_HEAD。',
+            '不可写路径：',
+            implode("\n", $blocked),
+            '请在服务器上让执行 PHP/队列/网页更新的用户拥有仓库写权限，例如把 /var/www 及 /var/www/.git 的属主调整为该运行用户，或改用有权限的部署用户执行更新。',
+        ];
     }
 
     /**
