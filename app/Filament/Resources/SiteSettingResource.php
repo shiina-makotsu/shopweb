@@ -115,6 +115,17 @@ class SiteSettingResource extends Resource
                 Toggle::make('show_tracking_numbers_to_users')->label('默认向用户显示国内物流号')->default(true),
             ])->visible(fn (): bool => auth()->user()?->isSuperAdmin() ?? false)->columns(2)->columnSpanFull(),
 
+            Section::make('预售与物流')
+                ->description('预售商品未单独指定邮费仓库时，使用这里的默认仓库邮费模板。')
+                ->schema([
+                    Select::make('presale_default_warehouse_id')
+                        ->label('预售默认仓库')
+                        ->relationship('presaleDefaultWarehouse', 'name')
+                        ->searchable()
+                        ->preload()
+                        ->helperText('可留空；留空时系统会按可用仓库顺序选择。'),
+                ])->columns(2)->columnSpanFull(),
+
             Section::make('语言')
                 ->description('前台语言默认跟随系统，并预留后续多语言扩展。')
                 ->schema([

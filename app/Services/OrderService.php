@@ -45,7 +45,7 @@ class OrderService
                 ? $coupon->discountFor($subtotalCents)
                 : collect($couponAllocations)->sum('discount_cents');
             $shippingProvince = $data['shipping_province'] ?? ChinaRegions::guessProvinceFromAddress($data['shipping_address'] ?? null);
-            $shippingQuote = $this->shippingQuotes->quote($cartItems, $shippingProvince);
+            $shippingQuote = $this->shippingQuotes->quote($cartItems, $shippingProvince, $data['shipping_carriers'] ?? [], $data['shipping_city'] ?? null);
             $shippingFeeCents = (int) $shippingQuote['shipping_fee_cents'];
             $totalCents = max(0, $subtotalCents - $discountCents + $shippingFeeCents);
             $shippingAddress = $this->shippingAddressText($data);
@@ -64,6 +64,7 @@ class OrderService
                 'is_wallet_recharge' => false,
                 'shipment_plan' => $shippingQuote['shipments'],
                 'shipment_notice' => $shippingQuote['notice'],
+                'shipping_carrier_id' => $shippingQuote['shipping_carrier_id'],
                 'total_cents' => $totalCents,
                 'coupon_id' => $coupon?->id,
                 'coupon_code' => $coupon?->code,

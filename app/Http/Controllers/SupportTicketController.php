@@ -8,6 +8,7 @@ use App\Models\SiteSetting;
 use App\Models\SupportChatMessage;
 use App\Models\SupportChatSession;
 use App\Models\SupportTicket;
+use App\Services\ChatAttachmentService;
 use App\Services\SupportChatService;
 use App\Services\SupportNotificationService;
 use App\Support\Money;
@@ -469,15 +470,7 @@ TEXT);
             return [];
         }
 
-        $file = $request->file('attachment');
-        $path = $file->store('session-'.$session->id, 'support_attachments');
-
-        return [
-            'attachment_path' => $path,
-            'attachment_original_name' => $file->getClientOriginalName(),
-            'attachment_mime_type' => $file->getClientMimeType(),
-            'attachment_size' => $file->getSize(),
-        ];
+        return app(ChatAttachmentService::class)->storeSupportAttachment($request->file('attachment'), $session);
     }
 
     private function authorizeSession(Request $request, SupportChatSession $session): void

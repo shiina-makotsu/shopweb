@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Facades\Storage;
 
 class SiteSetting extends Model
@@ -48,6 +49,7 @@ class SiteSetting extends Model
         'payment_account_note',
         'payment_auto_check_enabled',
         'payment_pending_timeout_minutes',
+        'presale_default_warehouse_id',
         'payment_gateway_provider',
         'payment_enabled_methods',
         'payment_gateway_config',
@@ -116,6 +118,11 @@ class SiteSetting extends Model
             'guide_pet_enabled' => 'boolean',
             'support_ai_enabled' => 'boolean',
         ];
+    }
+
+    public function presaleDefaultWarehouse(): BelongsTo
+    {
+        return $this->belongsTo(Warehouse::class, 'presale_default_warehouse_id');
     }
 
     public function logoUrl(): ?string

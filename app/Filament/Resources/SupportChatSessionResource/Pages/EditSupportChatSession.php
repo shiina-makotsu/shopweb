@@ -6,18 +6,24 @@ use App\Filament\Resources\SupportChatSessionResource;
 use App\Models\SupportChatMessage;
 use App\Models\SupportChatSession;
 use App\Models\SupportQuickReply;
+use App\Services\ChatAttachmentService;
 use App\Services\SupportChatService;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
 use App\Filament\Resources\Pages\EditRecord;
+use Livewire\WithFileUploads;
 
 class EditSupportChatSession extends EditRecord
 {
+    use WithFileUploads;
+
     protected static string $resource = SupportChatSessionResource::class;
     protected string $view = 'filament.resources.support-chat-session-resource.pages.edit-support-chat-session';
 
     public string $replyMessage = '';
+
+    public $replyAttachment = null;
 
     public function mount(int|string $record): void
     {
@@ -55,7 +61,7 @@ class EditSupportChatSession extends EditRecord
     {
         $message = trim($this->replyMessage);
 
-        if ($message === '') {
+        if ($message === '' && ! $this->replyAttachment) {
             return;
         }
 
@@ -68,9 +74,18 @@ class EditSupportChatSession extends EditRecord
             return;
         }
 
-        app(SupportChatService::class)->reply($this->record, auth()->user(), $message);
+        $this->validate([
+            'replyAttachment' => ['nullable', 'file', 'max:20480'],
+        ]);
+
+        $attachment = $this->replyAttachment
+            ? app(ChatAttachmentService::class)->storeSupportAttachment($this->replyAttachment, $this->record)
+            : [];
+
+        app(SupportChatService::class)->reply($this->record, auth()->user(), $message, $attachment);
 
         $this->replyMessage = '';
+        $this->replyAttachment = null;
         $this->record->refresh()->load(['messages.sender', 'assignedAdmin', 'order', 'user']);
 
         Notification::make()

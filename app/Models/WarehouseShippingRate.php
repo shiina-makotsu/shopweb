@@ -9,6 +9,7 @@ class WarehouseShippingRate extends Model
 {
     protected $fillable = [
         'warehouse_id',
+        'shipping_carrier_id',
         'name',
         'provinces',
         'fee_cents',
@@ -29,6 +30,11 @@ class WarehouseShippingRate extends Model
     public function warehouse(): BelongsTo
     {
         return $this->belongsTo(Warehouse::class);
+    }
+
+    public function shippingCarrier(): BelongsTo
+    {
+        return $this->belongsTo(ShippingCarrier::class);
     }
 
     public function matchesProvince(?string $province): bool

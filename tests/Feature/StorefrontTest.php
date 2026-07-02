@@ -16,6 +16,7 @@ use App\Models\Product;
 use App\Models\ProductMedia;
 use App\Models\ProductTag;
 use App\Models\ProductVariant;
+use App\Models\ShippingCarrier;
 use App\Models\SiteSetting;
 use App\Models\User;
 use App\Models\UserCoupon;
@@ -2676,6 +2677,153 @@ it('charges shipping for presale logistics products without requiring stock', fu
         ->and($order->items()->first()->warehouse_id)->toBe($warehouse->id);
 });
 
+it('uses the selected logistics carrier without exposing warehouse choice at checkout', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+    $category = Category::query()->create(['name' => '物流选择', 'slug' => 'carrier-choice', 'is_active' => true]);
+    $warehouse = Warehouse::query()->create([
+        'name' => '内部仓库',
+        'country' => '中国',
+        'province' => '北京',
+        'city' => '北京市',
+        'is_active' => true,
+    ]);
+    $carrierA = ShippingCarrier::query()->create(['name' => '标准快递', 'code' => 'standard', 'is_active' => true]);
+    $carrierB = ShippingCarrier::query()->create(['name' => '特快物流', 'code' => 'express', 'is_active' => true]);
+
+    WarehouseShippingRate::query()->create([
+        'warehouse_id' => $warehouse->id,
+        'shipping_carrier_id' => $carrierA->id,
+        'name' => '标准',
+        'provinces' => ['北京'],
+        'fee_cents' => 1200,
+        'is_active' => true,
+        'sort_order' => 1,
+    ]);
+    WarehouseShippingRate::query()->create([
+        'warehouse_id' => $warehouse->id,
+        'shipping_carrier_id' => $carrierB->id,
+        'name' => '特快',
+        'provinces' => ['北京'],
+        'fee_cents' => 800,
+        'is_active' => true,
+        'sort_order' => 2,
+    ]);
+
+    $product = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => '可选物流商品',
+        'slug' => 'carrier-choice-product',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_LOGISTICS,
+        'shipping_extra_fee_cents' => 200,
+    ]);
+    $variant = ProductVariant::query()->create([
+        'product_id' => $product->id,
+        'sku' => 'CARRIER-1',
+        'price_cents' => 5000,
+        'stock' => 5,
+        'is_active' => true,
+    ]);
+    WarehouseStock::query()->create([
+        'warehouse_id' => $warehouse->id,
+        'product_id' => $product->id,
+        'product_variant_id' => $variant->id,
+        'name' => $product->title,
+        'sku' => $variant->sku,
+        'quantity' => 5,
+    ]);
+
+    $this->post(route('cart.items.store'), ['variant_id' => $variant->id, 'quantity' => 1]);
+
+    $this->actingAs($user)
+        ->get(route('checkout.create'))
+        ->assertOk()
+        ->assertSee('物流方式')
+        ->assertSee('标准快递')
+        ->assertSee('特快物流')
+        ->assertDontSee('内部仓库');
+
+    $this->actingAs($user)->post(route('checkout.store'), [
+        'contact_name' => '收件人',
+        'contact_phone' => '13800000000',
+        'contact_email' => 'carrier@example.com',
+        'shipping_country' => '中国',
+        'shipping_province' => '北京',
+        'shipping_city' => '北京市',
+        'shipping_detail' => '测试路 1 号',
+        'shipping_carriers' => [$warehouse->id => $carrierB->id],
+    ])->assertRedirect();
+
+    $order = Order::query()->where('user_id', $user->id)->firstOrFail();
+    $plan = $order->shipment_plan[0] ?? [];
+
+    expect($order->shipping_fee_cents)->toBe(1000)
+        ->and($order->total_cents)->toBe(6000)
+        ->and($order->shipping_carrier_id)->toBe($carrierB->id)
+        ->and($plan['shipping_carrier_id'])->toBe($carrierB->id)
+        ->and($plan['fee_cents'])->toBe(1000);
+});
+
+it('uses the presale default warehouse unless the product overrides it', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+    $category = Category::query()->create(['name' => '预售默认仓', 'slug' => 'presale-default-warehouse', 'is_active' => true]);
+    $wrongWarehouse = Warehouse::query()->create(['name' => '非默认仓', 'country' => '中国', 'is_active' => true, 'sort_order' => 0]);
+    $defaultWarehouse = Warehouse::query()->create(['name' => '预售默认仓', 'country' => '中国', 'is_active' => true, 'sort_order' => 10]);
+    $carrier = ShippingCarrier::query()->create(['name' => '预售物流', 'code' => 'presale', 'is_active' => true]);
+
+    SiteSetting::query()->create(['presale_default_warehouse_id' => $defaultWarehouse->id]);
+
+    WarehouseShippingRate::query()->create([
+        'warehouse_id' => $wrongWarehouse->id,
+        'shipping_carrier_id' => $carrier->id,
+        'name' => '默认',
+        'fee_cents' => 9900,
+        'is_default' => true,
+        'is_active' => true,
+    ]);
+    WarehouseShippingRate::query()->create([
+        'warehouse_id' => $defaultWarehouse->id,
+        'shipping_carrier_id' => $carrier->id,
+        'name' => '默认',
+        'fee_cents' => 1500,
+        'is_default' => true,
+        'is_active' => true,
+    ]);
+
+    $product = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => '默认仓预售商品',
+        'slug' => 'default-presale-warehouse-product',
+        'status' => Product::STATUS_PRESALE,
+        'fulfillment_type' => Product::FULFILLMENT_LOGISTICS,
+        'shipping_extra_fee_cents' => 300,
+    ]);
+    $variant = ProductVariant::query()->create([
+        'product_id' => $product->id,
+        'sku' => 'PRESALE-DEFAULT-WAREHOUSE',
+        'price_cents' => 6000,
+        'stock' => 0,
+        'is_active' => true,
+    ]);
+
+    $this->post(route('cart.items.store'), ['variant_id' => $variant->id, 'quantity' => 1]);
+
+    $this->actingAs($user)->post(route('checkout.store'), [
+        'contact_name' => '预售收件人',
+        'contact_phone' => '13800000000',
+        'contact_email' => 'presale-default@example.com',
+        'shipping_country' => '中国',
+        'shipping_province' => '北京',
+        'shipping_city' => '北京市',
+        'shipping_detail' => '预售路 1 号',
+    ])->assertRedirect();
+
+    $order = Order::query()->where('user_id', $user->id)->firstOrFail();
+
+    expect($order->shipping_fee_cents)->toBe(1800)
+        ->and($order->items()->first()->warehouse_id)->toBe($defaultWarehouse->id);
+});
+
 it('warns and charges per warehouse when an order must ship from multiple warehouses', function (): void {
     $user = User::factory()->create(['role' => 'customer']);
     $category = Category::query()->create(['name' => '多仓', 'slug' => 'multi-warehouse', 'is_active' => true]);
@@ -2741,9 +2889,11 @@ it('warns and charges per warehouse when an order must ship from multiple wareho
     $this->actingAs($user)
         ->get(route('checkout.create'))
         ->assertOk()
-        ->assertSee('本订单需要多仓发货')
-        ->assertSee('测试 A 仓')
-        ->assertSee('测试 B 仓');
+        ->assertSee('物流方式')
+        ->assertSee('包裹 1')
+        ->assertSee('包裹 2')
+        ->assertDontSee('测试 A 仓')
+        ->assertDontSee('测试 B 仓');
 
     $this->actingAs($user)->post(route('checkout.store'), [
         'contact_name' => '收件人',
@@ -2757,7 +2907,7 @@ it('warns and charges per warehouse when an order must ship from multiple wareho
 
     expect($order->shipping_fee_cents)->toBe(3500)
         ->and($order->total_cents)->toBe(33500)
-        ->and($order->shipment_notice)->toContain('多仓发货')
+        ->and($order->shipment_notice)->toContain('分批发货')
         ->and($order->items()->where('warehouse_id', $warehouseA->id)->count())->toBe(1)
         ->and($order->items()->where('warehouse_id', $warehouseB->id)->count())->toBe(1);
 });

@@ -25,11 +25,22 @@ class SupportChatService
         ])->save();
     }
 
-    public function reply(SupportChatSession $session, User $admin, string $message): void
+    /**
+     * @param  array<string, mixed>  $attachment
+     */
+    public function reply(SupportChatSession $session, User $admin, ?string $message, array $attachment = []): SupportChatMessage
     {
         if ($session->isClosed()) {
             throw ValidationException::withMessages([
                 'message' => '该会话窗口已被用户关闭，不能继续回复。',
+            ]);
+        }
+
+        $body = trim((string) $message);
+
+        if ($body === '' && $attachment === []) {
+            throw ValidationException::withMessages([
+                'message' => '请输入消息内容，或选择图片/文件后发送。',
             ]);
         }
 
@@ -43,10 +54,11 @@ class SupportChatService
             ->whereNull('read_at')
             ->update(['read_at' => now()]);
 
-        $session->messages()->create([
+        $reply = $session->messages()->create([
             'sender_user_id' => $admin->id,
             'sender_type' => SupportChatMessage::SENDER_ADMIN,
-            'body' => $message,
+            'body' => $body === '' ? null : $body,
+            ...$attachment,
         ]);
 
         $session->update([
@@ -54,6 +66,8 @@ class SupportChatService
             'status' => SupportChatSession::STATUS_ACTIVE,
             'ended_at' => null,
         ]);
+
+        return $reply;
     }
 
     public function startForUser(User $customer, User $admin, string $message): SupportChatSession

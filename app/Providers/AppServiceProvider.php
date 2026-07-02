@@ -105,6 +105,11 @@ class AppServiceProvider extends ServiceProvider
         }
     }
 
+    private function supportUnreadMessageCount(): int
+    {
+        return (int) (app(StorefrontViewData::class)->data()['supportUnreadMessageCount'] ?? 0);
+    }
+
     private function autoRepairDatabaseSchema(): void
     {
         if (! (bool) config('shop.auto_migrate_on_boot', true)) {

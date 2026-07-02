@@ -63,6 +63,13 @@ class WarehouseResource extends Resource
                     ->relationship()
                     ->schema([
                         TextInput::make('name')->label('规则名称')->required()->maxLength(255)->default('其他地区'),
+                        Select::make('shipping_carrier_id')
+                            ->label('物流快递')
+                            ->relationship('shippingCarrier', 'name')
+                            ->searchable()
+                            ->preload()
+                            ->required()
+                            ->helperText('每条邮费规则绑定一个物流；同一仓库可以添加多条物流规则。'),
                         Select::make('province_preset')
                             ->label('预设地区')
                             ->options(ChinaRegions::presetOptions())

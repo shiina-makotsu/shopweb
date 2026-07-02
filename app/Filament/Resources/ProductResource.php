@@ -112,6 +112,13 @@ class ProductResource extends Resource
                 Select::make('delivery_status_id')->label('交付状态')->relationship('deliveryStatus', 'name')->searchable()->preload(),
                 Select::make('quantity_unit_id')->label('数量单位')->relationship('quantityUnit', 'name')->searchable()->preload(),
                 ...MoneyInput::convertedCents(TextInput::make('shipping_extra_fee_cents')->label('额外邮费')->helperText('可为空；体积/重量超额商品可填写追加邮费，结算时叠加仓库基础邮费。')),
+                Select::make('presale_shipping_warehouse_id')
+                    ->label('预售邮费仓库')
+                    ->relationship('presaleShippingWarehouse', 'name')
+                    ->searchable()
+                    ->preload()
+                    ->visible(fn (Get $get): bool => $get('status') === Product::STATUS_PRESALE)
+                    ->helperText('可留空；留空时使用站点设置中的预售默认仓库邮费模板。'),
                 TextInput::make('sort_order')->label('排序')->numeric()->default(0),
                 Toggle::make('is_featured')->label('推荐')->default(false),
                 Toggle::make('comments_enabled')->label('开启评论')->default(true),

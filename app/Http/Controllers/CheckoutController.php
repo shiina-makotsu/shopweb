@@ -35,7 +35,12 @@ class CheckoutController extends Controller
             'shipping_province',
             $defaultAddress?->province ?: ChinaRegions::guessProvinceFromAddress($defaultAddress?->formatted()),
         );
-        $shippingQuote = $shippingQuotes->quote($cart->items(), $shippingProvince);
+        $shippingQuote = $shippingQuotes->quote(
+            $cart->items(),
+            $shippingProvince,
+            $request->old('shipping_carriers', []),
+            $request->old('shipping_city', $defaultAddress?->city),
+        );
 
         return view('checkout.create', [
             'items' => $cart->items(),
@@ -80,6 +85,8 @@ class CheckoutController extends Controller
             'coupon_code' => ['nullable', 'string', 'max:100'],
             'coupon_items' => ['nullable', 'array'],
             'coupon_items.*' => ['nullable', 'integer', 'exists:user_coupons,id'],
+            'shipping_carriers' => ['nullable', 'array'],
+            'shipping_carriers.*' => ['nullable', 'integer', 'exists:shipping_carriers,id'],
         ])->validate();
 
         $data['requires_shipping'] = $requiresShipping;

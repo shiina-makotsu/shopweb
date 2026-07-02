@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\PrivateMessage;
 use App\Models\User;
+use App\Services\ChatAttachmentService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -56,14 +57,11 @@ class PrivateMessageController extends Controller
         ]);
 
         if ($request->hasFile('attachment')) {
-            $file = $request->file('attachment');
-            $path = $file->store('thread-'.$request->user()->id.'-'.$user->id, 'private_attachments');
-            $message->update([
-                'attachment_path' => $path,
-                'attachment_original_name' => $file->getClientOriginalName(),
-                'attachment_mime_type' => $file->getClientMimeType(),
-                'attachment_size' => $file->getSize(),
-            ]);
+            $message->update(app(ChatAttachmentService::class)->storePrivateAttachment(
+                $request->file('attachment'),
+                $request->user()->id,
+                $user->id,
+            ));
         }
 
         return back()->with('status', '消息已发送。');

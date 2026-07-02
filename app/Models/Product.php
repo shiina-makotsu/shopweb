@@ -57,6 +57,7 @@ class Product extends Model
         'crowdfunding_reward',
         'crowdfunding_cancelled_at',
         'shipping_extra_fee_cents',
+        'presale_shipping_warehouse_id',
         'sort_order',
     ];
 
@@ -118,6 +119,11 @@ class Product extends Model
     public function shippingCarrier(): BelongsTo
     {
         return $this->belongsTo(ShippingCarrier::class);
+    }
+
+    public function presaleShippingWarehouse(): BelongsTo
+    {
+        return $this->belongsTo(Warehouse::class, 'presale_shipping_warehouse_id');
     }
 
     public function tags(): BelongsToMany

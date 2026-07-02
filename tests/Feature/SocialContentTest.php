@@ -409,8 +409,19 @@ it('supports chat style customer service sessions with attachments and admin rec
 
     expect($message->fresh()->read_at)->not->toBeNull();
 
+    $adminAttachment = app(\App\Services\ChatAttachmentService::class)->storeSupportAttachment(
+        UploadedFile::fake()->image('admin-reply.png', 120, 120),
+        $session,
+    );
+    $adminAttachmentReply = app(\App\Services\SupportChatService::class)->reply($session->fresh(), $admin, '', $adminAttachment);
+
+    Storage::disk('support_attachments')->assertExists($adminAttachmentReply->attachment_path);
+    expect($adminAttachmentReply->body)->toBeNull()
+        ->and($adminAttachmentReply->isImage())->toBeTrue();
+
     $adminReply = $session->messages()
         ->where('sender_type', SupportChatMessage::SENDER_ADMIN)
+        ->whereNotNull('body')
         ->firstOrFail();
 
     expect($adminReply->read_at)->toBeNull();

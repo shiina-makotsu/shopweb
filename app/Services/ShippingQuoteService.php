@@ -3,7 +3,9 @@
 namespace App\Services;
 
 use App\Models\Product;
+use App\Models\SiteSetting;
 use App\Models\Warehouse;
+use App\Models\WarehouseShippingRate;
 use App\Models\WarehouseStock;
 use App\Support\ChinaRegions;
 use Illuminate\Support\Collection;
@@ -12,18 +14,14 @@ class ShippingQuoteService
 {
     /**
      * @param  Collection<int, array{product: Product, variant: mixed, quantity: int}>  $cartItems
-     * @return array{
-     *     province:?string,
-     *     shipping_fee_cents:int,
-     *     is_multi_warehouse:bool,
-     *     shipments:array<int, array{warehouse_id:?int, warehouse_name:string, fee_cents:int, items:array<int, array{product_id:int, product_variant_id:?int, title:string, quantity:int}>}>,
-     *     item_warehouse_map:array<int, int|null>,
-     *     notice:?string
-     * }
+     * @param  array<int|string, mixed>  $selectedCarriers warehouse_id => shipping_carrier_id
+     * @return array<string, mixed>
      */
-    public function quote(Collection $cartItems, ?string $province = null): array
+    public function quote(Collection $cartItems, ?string $province = null, array $selectedCarriers = [], ?string $city = null): array
     {
         $province = ChinaRegions::normalizeProvince($province);
+        $selectedCarriers = $this->normalizeSelectedCarriers($selectedCarriers);
+        $defaultPresaleWarehouseId = $this->defaultPresaleWarehouseId();
         $shippingItems = $cartItems
             ->filter(fn (array $item): bool => $item['product']->requiresShipping())
             ->values();
@@ -33,7 +31,7 @@ class ShippingQuoteService
         }
 
         $warehouses = Warehouse::query()
-            ->with('shippingRates')
+            ->with('shippingRates.shippingCarrier')
             ->where('is_active', true)
             ->orderBy('sort_order')
             ->orderBy('id')
@@ -45,13 +43,13 @@ class ShippingQuoteService
 
         $stockMatrix = $this->stockMatrix($shippingItems);
         $singleWarehouse = $warehouses
-            ->filter(fn (Warehouse $warehouse): bool => $this->warehouseCoversAllItems($warehouse, $shippingItems, $stockMatrix))
-            ->sortByDesc(fn (Warehouse $warehouse): int => $this->warehouseHasActiveRate($warehouse, $province) ? 1 : 0)
+            ->filter(fn (Warehouse $warehouse): bool => $this->warehouseCoversAllItems($warehouse, $shippingItems, $stockMatrix, $defaultPresaleWarehouseId))
+            ->sortByDesc(fn (Warehouse $warehouse): int => $this->warehouseAddressScore($warehouse, $province, $city) * 10 + ($this->warehouseHasActiveRate($warehouse, $province) ? 1 : 0))
             ->first();
 
         if ($singleWarehouse) {
             return $this->buildQuote($province, [
-                $this->shipmentFor($singleWarehouse, $shippingItems, $province),
+                $this->shipmentFor($singleWarehouse, $shippingItems, $province, $selectedCarriers),
             ]);
         }
 
@@ -59,16 +57,29 @@ class ShippingQuoteService
         $itemWarehouseMap = [];
 
         foreach ($shippingItems as $item) {
-            $warehouse = $this->bestWarehouseForItem($warehouses, $item, $stockMatrix) ?: $warehouses->first();
+            $warehouse = $this->bestWarehouseForItem($warehouses, $item, $stockMatrix, $defaultPresaleWarehouseId, $province, $city) ?: $warehouses->first();
             $key = (string) ($warehouse?->id ?? 0);
-            $shipments[$key] ??= [
-                'warehouse_id' => $warehouse?->id,
-                'warehouse_name' => $warehouse?->name ?? '默认仓库',
-                'fee_cents' => $warehouse ? $this->warehouseBaseFee($warehouse, $province) : 0,
-                'items' => [],
-            ];
+
+            if (! isset($shipments[$key])) {
+                $rate = $warehouse ? $this->selectedRateForWarehouse($warehouse, $province, $selectedCarriers[(int) $warehouse->id] ?? null) : null;
+                $baseFee = (int) ($rate['fee_cents'] ?? 0);
+                $shipments[$key] = [
+                    'warehouse_id' => $warehouse?->id,
+                    'warehouse_name' => $warehouse?->name ?? '默认仓库',
+                    'shipping_carrier_id' => $rate['shipping_carrier_id'] ?? null,
+                    'shipping_carrier_name' => $rate['shipping_carrier_name'] ?? null,
+                    'base_fee_cents' => $baseFee,
+                    'extra_fee_cents' => 0,
+                    'fee_cents' => $baseFee,
+                    'available_carriers' => $warehouse ? $this->warehouseRateOptions($warehouse, $province) : [],
+                    'items' => [],
+                ];
+            }
+
+            $extraFee = $this->productExtraFee($item);
             $shipments[$key]['items'][] = $this->itemSummary($item);
-            $shipments[$key]['fee_cents'] += $this->productExtraFee($item);
+            $shipments[$key]['extra_fee_cents'] += $extraFee;
+            $shipments[$key]['fee_cents'] += $extraFee;
             $itemWarehouseMap[(int) $item['variant']->id] = $warehouse?->id;
         }
 
@@ -79,7 +90,7 @@ class ShippingQuoteService
     }
 
     /**
-     * @param  array<int, array{warehouse_id:?int, warehouse_name:string, fee_cents:int, items:array<int, array{product_id:int, product_variant_id:?int, title:string, quantity:int}>}>  $shipments
+     * @param  array<int, array<string, mixed>>  $shipments
      * @return array<string, mixed>
      */
     private function buildQuote(?string $province, array $shipments): array
@@ -89,12 +100,7 @@ class ShippingQuoteService
         $notice = null;
 
         if ($isMultiWarehouse) {
-            $parts = array_map(function (array $shipment): string {
-                $items = collect($shipment['items'])->map(fn (array $item): string => $item['title'].' x '.$item['quantity'])->implode('、');
-
-                return $shipment['warehouse_name'].'：'.$items;
-            }, $shipments);
-            $notice = '本订单需要多仓发货，以下商品来自不同仓库，将分别计算邮费：'.implode('；', $parts);
+            $notice = '订单中的商品需要分批发货，邮费已按系统匹配的发货位置分别计算。';
         }
 
         $itemWarehouseMap = [];
@@ -107,9 +113,12 @@ class ShippingQuoteService
             }
         }
 
+        $carrierIds = collect($shipments)->pluck('shipping_carrier_id')->filter()->unique()->values();
+
         return [
             'province' => $province,
             'shipping_fee_cents' => $shippingFee,
+            'shipping_carrier_id' => $carrierIds->count() === 1 ? $carrierIds->first() : null,
             'is_multi_warehouse' => $isMultiWarehouse,
             'shipments' => $shipments,
             'item_warehouse_map' => $itemWarehouseMap,
@@ -119,15 +128,23 @@ class ShippingQuoteService
 
     /**
      * @param  Collection<int, array{product: Product, variant: mixed, quantity: int}>  $items
-     * @return array{warehouse_id:?int, warehouse_name:string, fee_cents:int, items:array<int, array{product_id:int, product_variant_id:?int, title:string, quantity:int}>}
+     * @return array<string, mixed>
      */
-    private function shipmentFor(Warehouse $warehouse, Collection $items, ?string $province): array
+    private function shipmentFor(Warehouse $warehouse, Collection $items, ?string $province, array $selectedCarriers): array
     {
+        $rate = $this->selectedRateForWarehouse($warehouse, $province, $selectedCarriers[(int) $warehouse->id] ?? null);
+        $baseFee = (int) ($rate['fee_cents'] ?? 0);
+        $extraFee = (int) $items->sum(fn (array $item): int => $this->productExtraFee($item));
+
         return [
             'warehouse_id' => $warehouse->id,
             'warehouse_name' => $warehouse->name,
-            'fee_cents' => $this->warehouseBaseFee($warehouse, $province)
-                + (int) $items->sum(fn (array $item): int => $this->productExtraFee($item)),
+            'shipping_carrier_id' => $rate['shipping_carrier_id'] ?? null,
+            'shipping_carrier_name' => $rate['shipping_carrier_name'] ?? null,
+            'base_fee_cents' => $baseFee,
+            'extra_fee_cents' => $extraFee,
+            'fee_cents' => $baseFee + $extraFee,
+            'available_carriers' => $this->warehouseRateOptions($warehouse, $province),
             'items' => $items->map(fn (array $item): array => $this->itemSummary($item))->values()->all(),
         ];
     }
@@ -148,17 +165,66 @@ class ShippingQuoteService
 
     private function warehouseBaseFee(Warehouse $warehouse, ?string $province): int
     {
+        return (int) ($this->selectedRateForWarehouse($warehouse, $province)['fee_cents'] ?? 0);
+    }
+
+    /**
+     * @return array<int, array{shipping_carrier_id:?int, shipping_carrier_name:string, rate_id:int, name:string, fee_cents:int}>
+     */
+    private function warehouseRateOptions(Warehouse $warehouse, ?string $province): array
+    {
         $rates = $warehouse->shippingRates
             ->where('is_active', true)
-            ->sortBy('sort_order');
+            ->sortBy('sort_order')
+            ->values();
 
-        $provinceRate = $rates->first(fn ($rate): bool => ! $rate->is_default && $rate->matchesProvince($province));
+        $matched = blank($province)
+            ? $rates
+            : $rates
+                ->filter(fn (WarehouseShippingRate $rate): bool => ! $rate->is_default && $rate->matchesProvince($province))
+                ->values();
 
-        if ($provinceRate) {
-            return (int) $provinceRate->fee_cents;
+        if ($matched->isEmpty()) {
+            $matched = $rates
+                ->filter(fn (WarehouseShippingRate $rate): bool => (bool) $rate->is_default)
+                ->values();
         }
 
-        return (int) ($rates->firstWhere('is_default', true)?->fee_cents ?? 0);
+        return $matched
+            ->map(function (WarehouseShippingRate $rate): array {
+                return [
+                    'shipping_carrier_id' => $rate->shipping_carrier_id ? (int) $rate->shipping_carrier_id : null,
+                    'shipping_carrier_name' => $rate->shippingCarrier?->name ?: $rate->name ?: '默认物流',
+                    'rate_id' => (int) $rate->id,
+                    'name' => (string) $rate->name,
+                    'fee_cents' => (int) $rate->fee_cents,
+                ];
+            })
+            ->unique(fn (array $rate): string => (string) ($rate['shipping_carrier_id'] ?? 'rate-'.$rate['rate_id']))
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array{shipping_carrier_id:?int, shipping_carrier_name:string, rate_id:int, name:string, fee_cents:int}|null
+     */
+    private function selectedRateForWarehouse(Warehouse $warehouse, ?string $province, ?int $selectedCarrierId = null): ?array
+    {
+        $options = $this->warehouseRateOptions($warehouse, $province);
+
+        if ($options === []) {
+            return null;
+        }
+
+        if ($selectedCarrierId) {
+            foreach ($options as $option) {
+                if ((int) ($option['shipping_carrier_id'] ?? 0) === $selectedCarrierId) {
+                    return $option;
+                }
+            }
+        }
+
+        return $options[0];
     }
 
     private function warehouseHasActiveRate(Warehouse $warehouse, ?string $province): bool
@@ -198,10 +264,20 @@ class ShippingQuoteService
      * @param  array<int, array<int, int>>  $stockMatrix
      * @param  Collection<int, array{variant: mixed, quantity: int}>  $items
      */
-    private function warehouseCoversAllItems(Warehouse $warehouse, Collection $items, array $stockMatrix): bool
+    private function warehouseCoversAllItems(Warehouse $warehouse, Collection $items, array $stockMatrix, ?int $defaultPresaleWarehouseId): bool
     {
         foreach ($items as $item) {
-            if (in_array($item['product']->status, [Product::STATUS_CONCEPT, Product::STATUS_PRESALE], true)) {
+            if ($item['product']->status === Product::STATUS_PRESALE) {
+                $preferredWarehouseId = $this->preferredPresaleWarehouseId($item['product'], $defaultPresaleWarehouseId);
+
+                if ($preferredWarehouseId && (int) $warehouse->id !== $preferredWarehouseId) {
+                    return false;
+                }
+
+                continue;
+            }
+
+            if ($item['product']->status === Product::STATUS_CONCEPT) {
                 continue;
             }
 
@@ -220,17 +296,28 @@ class ShippingQuoteService
      * @param  array{variant: mixed, quantity: int}  $item
      * @param  array<int, array<int, int>>  $stockMatrix
      */
-    private function bestWarehouseForItem(Collection $warehouses, array $item, array $stockMatrix): ?Warehouse
+    private function bestWarehouseForItem(Collection $warehouses, array $item, array $stockMatrix, ?int $defaultPresaleWarehouseId, ?string $province, ?string $city): ?Warehouse
     {
-        return $warehouses->first(function (Warehouse $warehouse) use ($item, $stockMatrix): bool {
-            if (in_array($item['product']->status, [Product::STATUS_CONCEPT, Product::STATUS_PRESALE], true)) {
-                return true;
+        if ($item['product']->status === Product::STATUS_PRESALE) {
+            $preferredWarehouseId = $this->preferredPresaleWarehouseId($item['product'], $defaultPresaleWarehouseId);
+
+            if ($preferredWarehouseId) {
+                return $warehouses->firstWhere('id', $preferredWarehouseId) ?: $warehouses->first();
             }
+        }
 
-            $available = $stockMatrix[(int) $warehouse->id][(int) $item['variant']->id] ?? 0;
+        return $warehouses
+            ->filter(function (Warehouse $warehouse) use ($item, $stockMatrix): bool {
+                if (in_array($item['product']->status, [Product::STATUS_CONCEPT, Product::STATUS_PRESALE], true)) {
+                    return true;
+                }
 
-            return $available >= (int) $item['quantity'];
-        });
+                $available = $stockMatrix[(int) $warehouse->id][(int) $item['variant']->id] ?? 0;
+
+                return $available >= (int) $item['quantity'];
+            })
+            ->sortByDesc(fn (Warehouse $warehouse): int => $this->warehouseAddressScore($warehouse, $province, $city))
+            ->first();
     }
 
     /**
@@ -241,6 +328,7 @@ class ShippingQuoteService
         return [
             'province' => $province,
             'shipping_fee_cents' => 0,
+            'shipping_carrier_id' => null,
             'is_multi_warehouse' => false,
             'shipments' => [],
             'item_warehouse_map' => [],
@@ -254,5 +342,55 @@ class ShippingQuoteService
             ['name' => '默认仓库'],
             ['country' => '中国', 'is_active' => true, 'sort_order' => 0],
         );
+    }
+
+    private function defaultPresaleWarehouseId(): ?int
+    {
+        $id = SiteSetting::query()->value('presale_default_warehouse_id');
+
+        return $id ? (int) $id : null;
+    }
+
+    private function preferredPresaleWarehouseId(Product $product, ?int $defaultPresaleWarehouseId): ?int
+    {
+        return $product->presale_shipping_warehouse_id
+            ? (int) $product->presale_shipping_warehouse_id
+            : $defaultPresaleWarehouseId;
+    }
+
+    private function warehouseAddressScore(Warehouse $warehouse, ?string $province, ?string $city): int
+    {
+        $score = 0;
+        $warehouseProvince = ChinaRegions::normalizeProvince($warehouse->province) ?? trim((string) $warehouse->province);
+        $orderProvince = ChinaRegions::normalizeProvince($province) ?? trim((string) $province);
+
+        if ($warehouseProvince !== '' && $orderProvince !== '' && $warehouseProvince === $orderProvince) {
+            $score += 100;
+        }
+
+        if (trim((string) $warehouse->city) !== '' && trim((string) $city) !== '' && trim((string) $warehouse->city) === trim((string) $city)) {
+            $score += 30;
+        }
+
+        return $score;
+    }
+
+    /**
+     * @param  array<int|string, mixed>  $selectedCarriers
+     * @return array<int, int>
+     */
+    private function normalizeSelectedCarriers(array $selectedCarriers): array
+    {
+        $normalized = [];
+
+        foreach ($selectedCarriers as $warehouseId => $carrierId) {
+            if (! is_numeric($warehouseId) || ! is_numeric($carrierId)) {
+                continue;
+            }
+
+            $normalized[(int) $warehouseId] = (int) $carrierId;
+        }
+
+        return $normalized;
     }
 }

@@ -12,7 +12,7 @@
 
 <x-filament-panels::page>
     <div class="space-y-4">
-        <section class="rounded-sm border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+        <section class="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
             <div class="flex flex-wrap items-start justify-between gap-3">
                 <div>
                     <h2 class="text-lg font-semibold">会话 #{{ $record->id }}</h2>
@@ -26,64 +26,58 @@
                     @endif
                 </div>
                 @if($record->isClosed())
-                    <span class="rounded-sm border border-red-200 bg-red-50 px-3 py-1 text-sm text-red-700">用户已删除并关闭窗口，客服不可继续回复</span>
+                    <span class="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-sm text-red-700">用户已删除并关闭窗口，客服不可继续回复</span>
                 @endif
             </div>
         </section>
 
-        <section class="overflow-hidden rounded-sm border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
+        <section class="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
             <div class="border-b border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
                 <label class="block text-xs font-medium text-gray-600 dark:text-gray-300">
                     搜索聊天记录
                     <input
-                        class="mt-1 w-full rounded-sm border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-950"
+                        class="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-950"
                         type="search"
                         placeholder="搜索消息内容、客服或客户..."
                         data-admin-chat-search
                     >
                 </label>
             </div>
-            <div class="max-h-[560px] space-y-4 overflow-y-auto bg-gray-50 p-4 dark:bg-gray-950" wire:poll.3s="refreshMessages" data-admin-support-messages>
+            <div class="max-h-[560px] space-y-4 overflow-y-auto bg-gray-50 p-4 dark:bg-gray-950" data-admin-support-messages>
                 @include('support.partials.messages', [
                     'session' => $record,
                     'mineMode' => 'admin',
-                    'dark' => true,
+                    'dark' => false,
                     'emptyText' => '暂无消息。',
                 ])
             </div>
 
-            <form wire:submit="sendReply" class="border-t border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900">
-                @if($this->quickReplies()->isNotEmpty())
-                    <div class="mb-3 rounded-sm border border-gray-200 bg-gray-50 p-3 text-sm dark:border-gray-800 dark:bg-gray-950">
-                        <p class="mb-2 font-medium">预设回复</p>
-                        <div class="flex flex-wrap gap-2">
-                            @foreach($this->quickReplies() as $reply)
-                                <button
-                                    class="rounded-sm border border-gray-300 bg-white px-3 py-1.5 text-xs hover:bg-blue-50 dark:border-gray-700 dark:bg-gray-900"
-                                    type="button"
-                                    wire:click="useQuickReply({{ $reply->id }})"
-                                >
-                                    {{ $reply->title }}
-                                </button>
-                            @endforeach
-                        </div>
+            @if($this->quickReplies()->isNotEmpty())
+                <div class="border-t border-gray-200 bg-gray-50 p-3 text-sm dark:border-gray-800 dark:bg-gray-950">
+                    <p class="mb-2 font-medium text-gray-700 dark:text-gray-200">预设回复</p>
+                    <div class="flex flex-wrap gap-2">
+                        @foreach($this->quickReplies() as $reply)
+                            <button
+                                class="rounded-full border border-gray-300 bg-white px-3 py-1.5 text-xs hover:bg-blue-50 dark:border-gray-700 dark:bg-gray-900 dark:hover:bg-gray-800"
+                                type="button"
+                                wire:click="useQuickReply({{ $reply->id }})"
+                            >
+                                {{ $reply->title }}
+                            </button>
+                        @endforeach
                     </div>
-                @endif
-                <label class="block">
-                    <span class="text-sm font-medium">回复消息</span>
-                    <textarea
-                        wire:model="replyMessage"
-                        class="mt-2 min-h-24 w-full rounded-sm border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-950"
-                        @disabled($record->isClosed())
-                        placeholder="{{ $record->isClosed() ? '用户已关闭该窗口，不能继续回复。' : '输入给客户的回复...' }}"
-                    ></textarea>
-                </label>
-                <div class="mt-3 flex justify-end">
-                    <x-filament::button type="submit" :disabled="$record->isClosed()">
-                        发送回复
-                    </x-filament::button>
                 </div>
-            </form>
+            @endif
+
+            <x-chat.composer
+                mode="livewire"
+                wire-submit="sendReply"
+                message-model="replyMessage"
+                attachment-model="replyAttachment"
+                placeholder="{{ $record->isClosed() ? '用户已关闭该窗口，不能继续回复。' : '输入给客户的回复...' }}"
+                submit-label="发送回复"
+                :disabled="$record->isClosed()"
+            />
         </section>
 
         <script>
