@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\ShippingCarrier;
 use App\Services\AdminActivityLogger;
+use App\Services\OrderService;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -15,7 +16,7 @@ use Throwable;
 
 class OrderQuickShippingController extends Controller
 {
-    public function update(Request $request, Order $order, AdminActivityLogger $activity): RedirectResponse
+    public function update(Request $request, Order $order, AdminActivityLogger $activity, OrderService $orders): RedirectResponse
     {
         if (! $this->ensureShippingSchema()) {
             return back()->withErrors([
@@ -60,6 +61,13 @@ class OrderQuickShippingController extends Controller
             ];
         }
 
+        $shouldShip = $trackingNumber !== ''
+            && in_array($order->status, [
+                Order::STATUS_PAID,
+                Order::STATUS_PENDING_SHIPMENT,
+                Order::STATUS_INCOMING,
+            ], true);
+
         if ($changes !== []) {
             $order->update($updates);
 
@@ -68,6 +76,10 @@ class OrderQuickShippingController extends Controller
                 'note' => trim((string) ($data['admin_note'] ?? '')) ?: '后台列表补充物流信息',
                 'changes' => $changes,
             ], $request->user());
+        }
+
+        if ($shouldShip) {
+            $orders->ship($order->fresh() ?? $order, $updates, $request->user());
         }
 
         return back();

@@ -543,6 +543,77 @@ it('lets admins add shipping information from the expanded order row', function 
     ]);
 });
 
+it('ships pending orders from the expanded row when only a tracking number is filled', function (): void {
+    Mail::fake();
+
+    $admin = User::factory()->create(['role' => 'admin']);
+    $user = User::factory()->create(['role' => 'customer']);
+    $category = Category::query()->create([
+        'name' => 'Quick Ship Category',
+        'slug' => 'quick-ship-category',
+        'is_active' => true,
+    ]);
+    $product = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => 'Quick Ship Product',
+        'slug' => 'quick-ship-product',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_LOGISTICS,
+    ]);
+    $variant = ProductVariant::query()->create([
+        'product_id' => $product->id,
+        'sku' => 'QUICK-SHIP-1',
+        'price_cents' => 1000,
+        'stock' => 5,
+        'is_active' => true,
+    ]);
+    $order = Order::query()->create([
+        'user_id' => $user->id,
+        'order_number' => 'ROW-SHIP-TRACKING-ONLY',
+        'status' => Order::STATUS_PENDING_SHIPMENT,
+        'payment_status' => Order::PAYMENT_CONFIRMED,
+        'subtotal_cents' => 1000,
+        'total_cents' => 1000,
+        'contact_name' => 'A',
+        'contact_phone' => '1',
+        'requires_shipping' => true,
+    ]);
+    $item = OrderItem::query()->create([
+        'order_id' => $order->id,
+        'product_id' => $product->id,
+        'product_variant_id' => $variant->id,
+        'product_title' => $product->title,
+        'product_status' => Product::STATUS_PUBLISHED,
+        'variant_sku' => $variant->sku,
+        'unit_price_cents' => 1000,
+        'quantity' => 1,
+        'line_total_cents' => 1000,
+        'status' => Order::STATUS_PENDING_SHIPMENT,
+    ]);
+
+    $this->actingAs($admin)
+        ->post(route('admin.orders.quick-shipping', $order), [
+            'tracking_number' => 'TRACKING-ONLY-1',
+            'admin_note' => 'ship from expanded row',
+        ])
+        ->assertRedirect();
+
+    $order->refresh();
+
+    expect($order->status)->toBe(Order::STATUS_AWAITING_RECEIPT)
+        ->and($order->shipping_carrier_id)->toBeNull()
+        ->and($order->tracking_number)->toBe('TRACKING-ONLY-1')
+        ->and($order->shipped_at)->not->toBeNull()
+        ->and($item->fresh()->status)->toBe(Order::STATUS_AWAITING_RECEIPT);
+
+    $this->assertDatabaseHas('admin_activity_logs', [
+        'user_id' => $admin->id,
+        'action' => 'order_shipped',
+        'subject_type' => Order::class,
+        'subject_id' => $order->id,
+    ]);
+});
+
 it('repairs missing quick shipping columns before saving logistics from the expanded order row', function (): void {
     $admin = User::factory()->create(['role' => 'admin']);
     $user = User::factory()->create(['role' => 'customer']);
