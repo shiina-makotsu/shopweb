@@ -608,7 +608,41 @@ it('ships pending orders from the expanded row when only a tracking number is fi
 
     $this->assertDatabaseHas('admin_activity_logs', [
         'user_id' => $admin->id,
-        'action' => 'order_shipped',
+        'action' => 'order_awaiting_receipt',
+        'subject_type' => Order::class,
+        'subject_id' => $order->id,
+    ]);
+});
+
+it('uses an existing tracking number to mark an order awaiting receipt without reshipping inventory', function (): void {
+    Mail::fake();
+
+    $admin = User::factory()->create(['role' => 'admin']);
+    $user = User::factory()->create(['role' => 'customer']);
+    $order = Order::query()->create([
+        'user_id' => $user->id,
+        'order_number' => 'ROW-SHIP-EXISTING-TRACKING',
+        'status' => Order::STATUS_PENDING_SHIPMENT,
+        'payment_status' => Order::PAYMENT_CONFIRMED,
+        'subtotal_cents' => 1000,
+        'total_cents' => 1000,
+        'contact_name' => 'A',
+        'contact_phone' => '1',
+        'requires_shipping' => true,
+        'tracking_number' => 'EXISTING-TRACKING-1',
+    ]);
+
+    app(OrderService::class)->ship($order->fresh(), [], $admin);
+
+    $order->refresh();
+
+    expect($order->status)->toBe(Order::STATUS_AWAITING_RECEIPT)
+        ->and($order->tracking_number)->toBe('EXISTING-TRACKING-1')
+        ->and($order->shipped_at)->not->toBeNull();
+
+    $this->assertDatabaseHas('admin_activity_logs', [
+        'user_id' => $admin->id,
+        'action' => 'order_awaiting_receipt',
         'subject_type' => Order::class,
         'subject_id' => $order->id,
     ]);

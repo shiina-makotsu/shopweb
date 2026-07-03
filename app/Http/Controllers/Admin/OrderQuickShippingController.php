@@ -79,7 +79,7 @@ class OrderQuickShippingController extends Controller
         }
 
         if ($shouldShip) {
-            $orders->ship($order->fresh() ?? $order, $updates, $request->user());
+            $orders->markAwaitingReceiptFromLogistics($order->fresh() ?? $order, $updates, $request->user());
         }
 
         return back();

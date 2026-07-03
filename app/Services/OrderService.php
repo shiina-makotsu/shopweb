@@ -349,6 +349,16 @@ class OrderService
             ->only(['shipping_carrier_id', 'tracking_number', 'tracking_url'])
             ->all();
 
+        if (
+            blank($data['tracking_number'] ?? null)
+            && filled($order->tracking_number)
+            && in_array($order->status, [Order::STATUS_PAID, Order::STATUS_PENDING_SHIPMENT, Order::STATUS_INCOMING], true)
+        ) {
+            $this->markAwaitingReceiptFromLogistics($order, [], $actor);
+
+            return;
+        }
+
         $carrier = isset($data['shipping_carrier_id'])
             ? ShippingCarrier::query()->find($data['shipping_carrier_id'])
             : null;
@@ -379,6 +389,45 @@ class OrderService
             ], $actor);
 
             app(WarehouseService::class)->shipOrder($order, $actor, '订单发货自动出库');
+        });
+
+        $this->sendShippingMail($order->fresh(['shippingCarrier', 'user']) ?? $order);
+    }
+
+    public function markAwaitingReceiptFromLogistics(Order $order, array $data = [], ?User $actor = null): void
+    {
+        $data = collect($data)
+            ->only(['shipping_carrier_id', 'tracking_number', 'tracking_url'])
+            ->all();
+
+        $carrier = isset($data['shipping_carrier_id'])
+            ? ShippingCarrier::query()->find($data['shipping_carrier_id'])
+            : null;
+        $trackingNumber = trim((string) ($data['tracking_number'] ?? $order->tracking_number ?? ''));
+        $trackingUrl = trim((string) ($data['tracking_url'] ?? $order->tracking_url ?? ''));
+
+        if ($trackingUrl === '' && $carrier) {
+            $trackingUrl = (string) ($carrier->trackingUrl($trackingNumber) ?? '');
+        }
+
+        DB::transaction(function () use ($order, $carrier, $trackingNumber, $trackingUrl, $actor): void {
+            $order = Order::query()->whereKey($order->id)->lockForUpdate()->firstOrFail();
+
+            $order->update([
+                'status' => Order::STATUS_AWAITING_RECEIPT,
+                'shipping_carrier_id' => $carrier?->id ?? $order->shipping_carrier_id,
+                'tracking_number' => $trackingNumber !== '' ? $trackingNumber : $order->tracking_number,
+                'tracking_url' => $trackingUrl !== '' ? $trackingUrl : $order->tracking_url,
+                'shipped_at' => $order->shipped_at ?? now(),
+            ]);
+
+            $order->items()->update(['status' => Order::STATUS_AWAITING_RECEIPT]);
+
+            $this->activity->log('order_awaiting_receipt', $order, $order->order_number, [
+                'status' => Order::STATUS_AWAITING_RECEIPT,
+                'shipping_carrier_id' => $order->shipping_carrier_id,
+                'tracking_number' => $order->tracking_number,
+            ], $actor);
         });
 
         $this->sendShippingMail($order->fresh(['shippingCarrier', 'user']) ?? $order);
