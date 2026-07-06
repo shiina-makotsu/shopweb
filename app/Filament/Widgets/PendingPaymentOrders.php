@@ -49,6 +49,6 @@ class PendingPaymentOrders extends TableWidget
     {
         return Order::query()
             ->with('user')
-            ->where('payment_status', Order::PAYMENT_SUBMITTED);
+            ->awaitingPaymentReview();
     }
 }

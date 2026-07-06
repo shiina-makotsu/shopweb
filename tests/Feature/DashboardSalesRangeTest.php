@@ -1,8 +1,11 @@
 <?php
 
+use App\Filament\Resources\OrderResource;
 use App\Models\Order;
 use App\Models\User;
+use App\Services\AdminDashboardCache;
 use App\Support\DashboardSalesRange;
+use Illuminate\Support\Facades\Cache;
 
 it('builds zero filled thirty day sales metrics from fulfilled orders only', function (): void {
     $customer = User::factory()->create(['role' => 'customer']);
@@ -111,4 +114,41 @@ it('renders the thirty day dashboard sales widgets', function (): void {
         ->assertSee('shop-daily-sales-svg', false)
         ->assertSee('客户排行')
         ->assertSee('商品销售排行');
+});
+
+it('excludes cancelled and user deleted orders from pending payment review stats', function (): void {
+    Cache::flush();
+
+    $customer = User::factory()->create(['role' => 'customer']);
+
+    $base = [
+        'user_id' => $customer->id,
+        'status' => Order::STATUS_PENDING_PAYMENT,
+        'payment_status' => Order::PAYMENT_SUBMITTED,
+        'subtotal_cents' => 1000,
+        'discount_cents' => 0,
+        'total_cents' => 1000,
+        'contact_name' => 'Buyer',
+        'contact_phone' => '13800000000',
+        'payment_submitted_at' => now(),
+    ];
+
+    Order::query()->create(array_merge($base, ['order_number' => 'DASH-REVIEW-ACTIVE']));
+    Order::query()->create(array_merge($base, [
+        'order_number' => 'DASH-REVIEW-CANCELLED',
+        'status' => Order::STATUS_CANCELLED,
+        'cancelled_at' => now(),
+    ]));
+    Order::query()->create(array_merge($base, [
+        'order_number' => 'DASH-REVIEW-DELETED',
+        'user_deleted_at' => now(),
+    ]));
+
+    $cache = app(AdminDashboardCache::class);
+
+    expect(Order::query()->awaitingPaymentReview()->pluck('order_number')->all())
+        ->toBe(['DASH-REVIEW-ACTIVE'])
+        ->and($cache->dashboardStats()['pending_payments'])->toBe(1)
+        ->and($cache->orderStats()['pending_payment_proofs'])->toBe(1)
+        ->and(OrderResource::getNavigationBadge())->toBe('1');
 });

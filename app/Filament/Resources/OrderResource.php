@@ -56,8 +56,7 @@ class OrderResource extends Resource
     public static function getNavigationBadge(): ?string
     {
         $count = Order::query()
-            ->where('payment_status', Order::PAYMENT_SUBMITTED)
-            ->where('status', '!=', Order::STATUS_CANCELLED)
+            ->awaitingPaymentReview()
             ->count();
 
         return $count > 0 ? ($count > 99 ? '99+' : (string) $count) : null;
@@ -497,6 +496,27 @@ class OrderResource extends Resource
                 SelectFilter::make('status')
                     ->label('订单状态')
                     ->options(fn (): array => app(OrderStatusPresenter::class)->options()),
+                SelectFilter::make('payment_status')
+                    ->label('付款状态')
+                    ->options([
+                        Order::PAYMENT_PENDING => '待付款',
+                        Order::PAYMENT_SUBMITTED => '已提交凭证',
+                        Order::PAYMENT_CONFIRMED => '已确认付款',
+                        Order::PAYMENT_REJECTED => '已驳回',
+                    ]),
+                SelectFilter::make('user_visibility')
+                    ->label('用户可见')
+                    ->options([
+                        'visible' => '用户可见',
+                        'deleted' => '用户已删除',
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        return match ($data['value'] ?? null) {
+                            'visible' => $query->whereNull('user_deleted_at'),
+                            'deleted' => $query->whereNotNull('user_deleted_at'),
+                            default => $query,
+                        };
+                    }),
                 Filter::make('created_at')
                     ->label('创建日期')
                     ->schema([

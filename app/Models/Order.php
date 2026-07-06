@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -149,6 +150,14 @@ class Order extends Model
     public function paymentProofFiles(): HasMany
     {
         return $this->hasMany(PaymentProofFile::class);
+    }
+
+    public function scopeAwaitingPaymentReview(Builder $query): Builder
+    {
+        return $query
+            ->where('payment_status', self::PAYMENT_SUBMITTED)
+            ->where('status', '!=', self::STATUS_CANCELLED)
+            ->whereNull('user_deleted_at');
     }
 
     public function afterSalesRequests(): HasMany

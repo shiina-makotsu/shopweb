@@ -55,7 +55,7 @@ class AdminDashboardCache
 
             return [
                 'pending_payment_proofs' => Order::query()
-                    ->where('payment_status', Order::PAYMENT_SUBMITTED)
+                    ->awaitingPaymentReview()
                     ->count(),
                 'pending_fulfillment' => Order::query()
                     ->where('payment_status', Order::PAYMENT_CONFIRMED)
@@ -247,7 +247,7 @@ class AdminDashboardCache
         }
 
         return Order::query()
-            ->where('payment_status', Order::PAYMENT_SUBMITTED)
+            ->awaitingPaymentReview()
             ->count();
     }
 
