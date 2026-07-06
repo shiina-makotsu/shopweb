@@ -235,7 +235,20 @@ it('automatically uses wallet balance before the selected checkout method', func
     expect($order->payment_method)->toBe(Order::PAYMENT_METHOD_QR_CODE)
         ->and($order->wallet_payment_cents)->toBe(3000)
         ->and($order->total_cents)->toBe(7000)
+        ->and($order->paymentTotalCents())->toBe(10000)
+        ->and($order->walletPaymentCents())->toBe(3000)
+        ->and($order->remainingPaymentCents())->toBe(7000)
         ->and($user->fresh()->wallet_balance_cents)->toBe(0);
+
+    $this->actingAs($user)
+        ->get(route('orders.show', $order))
+        ->assertOk()
+        ->assertSee('付款总金额')
+        ->assertSee('钱包支付金额')
+        ->assertSee('待支付金额')
+        ->assertSee('¥100.00')
+        ->assertSee('¥30.00')
+        ->assertSee('¥70.00');
 
     $this->assertDatabaseHas('wallet_transactions', [
         'user_id' => $user->id,
@@ -325,6 +338,10 @@ it('shows paypal checkout only after a paypal receiver email is configured', fun
 
     SiteSetting::query()->first()->update([
         'payment_gateway_config' => ['paypal_email' => 'seller@example.com'],
+        'payment_fallback_config' => [
+            'password_red_packet_enabled' => true,
+            'password_red_packet_note' => 'Use a red packet when PayPal is not convenient.',
+        ],
     ]);
     Cache::flush();
 
@@ -342,8 +359,19 @@ it('shows paypal checkout only after a paypal receiver email is configured', fun
         ])
         ->assertRedirect();
 
-    expect(Order::query()->whereBelongsTo($user)->latest('id')->firstOrFail()->payment_method)
-        ->toBe(Order::PAYMENT_METHOD_PAYPAL);
+    $order = Order::query()->whereBelongsTo($user)->latest('id')->firstOrFail();
+
+    expect($order->payment_method)->toBe(Order::PAYMENT_METHOD_PAYPAL);
+
+    $this->actingAs($user)
+        ->get(route('orders.show', $order))
+        ->assertOk()
+        ->assertSee('PayPal 收款邮箱')
+        ->assertSee('seller@example.com')
+        ->assertSee('口令红包付款')
+        ->assertSee('Use a red packet when PayPal is not convenient.')
+        ->assertSee('name="payment_proof"', false)
+        ->assertSee('name="payment_text_proof"', false);
 });
 
 it('attributes referral registrations and issues configured coupon and wallet rewards', function (): void {
@@ -564,6 +592,8 @@ it('uses wallet balance when completing a flash sale order selection', function 
 
     expect($order->wallet_payment_cents)->toBe(1990)
         ->and($order->total_cents)->toBe(0)
+        ->and($order->paymentTotalCents())->toBe(1990)
+        ->and($order->remainingPaymentCents())->toBe(0)
         ->and($order->payment_status)->toBe(Order::PAYMENT_CONFIRMED)
         ->and($user->fresh()->wallet_balance_cents)->toBe(0);
 });

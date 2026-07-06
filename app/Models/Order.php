@@ -191,6 +191,21 @@ class Order extends Model
         };
     }
 
+    public function walletPaymentCents(): int
+    {
+        return max(0, (int) $this->wallet_payment_cents);
+    }
+
+    public function remainingPaymentCents(): int
+    {
+        return max(0, (int) $this->total_cents);
+    }
+
+    public function paymentTotalCents(): int
+    {
+        return $this->remainingPaymentCents() + $this->walletPaymentCents();
+    }
+
     public function hasDigitalDelivery(): bool
     {
         return filled($this->digital_delivery_content)

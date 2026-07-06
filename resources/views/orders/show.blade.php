@@ -8,6 +8,7 @@
     @php($fallbackQrUrl = $settings?->paymentFallbackQrUrl())
     @php($friendQrUrl = $settings?->paymentFriendQrUrl())
     @php($paypalEmail = $settings?->paypalEmail())
+    @php($hasPasswordRedPacket = (bool) ($fallbackPayment['password_red_packet_enabled'] ?? false))
     @php($isWalletRecharge = $order->isWalletRecharge())
     @php($walletRechargeSuccessMessage = $settings?->wallet_recharge_success_message ?: '钱包充值已到账，余额已经更新。')
     @php($paymentTimeoutMinutes = max(1, (int) ($settings?->payment_pending_timeout_minutes ?: 10)))
@@ -27,7 +28,7 @@
                 <h1 class="text-lg font-semibold">{{ $privacy->displayOrderNumber($order, auth()->user(), $settings) }}</h1>
                 <p class="mt-1 text-xs text-slate-600">订单状态：{{ $order->userStatusLabel($statusPresenter->label($order->status)) }} / 付款状态：{{ $order->userPaymentLabel() }}</p>
             </div>
-            <p class="text-2xl font-semibold text-red-700">@money($order->total_cents)</p>
+            <p class="text-2xl font-semibold text-red-700">@money($order->paymentTotalCents())</p>
         </div>
 
         <div class="grid min-w-0 gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,340px)]">
@@ -143,13 +144,34 @@
                             </div>
                             @if((int) $order->wallet_payment_cents > 0)
                                 <div class="mb-4 rounded-sm border border-emerald-200 bg-emerald-50 px-3 py-3 text-emerald-900">
-                                    钱包已自动抵扣 @money((int) $order->wallet_payment_cents)；还需支付 @money((int) $order->total_cents)。
+                                    <div class="flex justify-between gap-3"><span>付款总金额</span><span class="font-semibold">@money($order->paymentTotalCents())</span></div>
+                                    <div class="mt-1 flex justify-between gap-3"><span>钱包支付金额</span><span class="font-semibold">@money($order->walletPaymentCents())</span></div>
+                                    <div class="mt-1 flex justify-between gap-3"><span>待支付金额</span><span class="font-semibold">@money($order->remainingPaymentCents())</span></div>
                                 </div>
                             @endif
-                            @if($order->payment_method === \App\Models\Order::PAYMENT_METHOD_PAYPAL && $paypalEmail)
+                            @if(! $paymentQrUrl && $paypalEmail)
                                 <div class="mb-4 rounded-sm border border-blue-200 bg-blue-50 px-3 py-3 text-blue-900">
                                     <p class="font-medium">PayPal 收款邮箱</p>
                                     <p class="mt-1 break-all">{{ $paypalEmail }}</p>
+                                    <p class="mt-2 text-sm">完成 PayPal 付款后，请在付款凭证区上传截图或填写付款说明。</p>
+                                    @if($order->payment_method !== \App\Models\Order::PAYMENT_METHOD_PAYPAL)
+                                        <form class="mt-2" method="post" action="{{ route('orders.payment-method', $order) }}">
+                                            @csrf
+                                            <input type="hidden" name="payment_method" value="{{ \App\Models\Order::PAYMENT_METHOD_PAYPAL }}">
+                                            <button class="rounded-sm border border-blue-700 bg-white px-3 py-2 text-xs font-medium text-blue-900 hover:bg-blue-50" type="submit">改用 PayPal 支付</button>
+                                        </form>
+                                    @endif
+                                </div>
+                                @if($hasPasswordRedPacket)
+                                    <div class="mb-4 rounded-sm border border-amber-200 bg-amber-50 px-3 py-3 text-amber-950">
+                                        <p class="font-medium">口令红包付款</p>
+                                        <p class="mt-1 whitespace-pre-line">{{ $fallbackPayment['password_red_packet_note'] ?? '请在下方填写口令红包内容，后台会人工确认收款。' }}</p>
+                                    </div>
+                                @endif
+                            @elseif($order->payment_method === \App\Models\Order::PAYMENT_METHOD_RED_PACKET && ! $paymentQrUrl)
+                                <div class="mb-4 rounded-sm border border-amber-200 bg-amber-50 px-3 py-3 text-amber-950">
+                                    <p class="font-medium">口令红包付款</p>
+                                    <p class="mt-1 whitespace-pre-line">{{ $fallbackPayment['password_red_packet_note'] ?? '请在下方填写口令红包内容，后台会人工确认收款。' }}</p>
                                 </div>
                             @elseif($order->payment_method === \App\Models\Order::PAYMENT_METHOD_FALLBACK_QR && $fallbackQrUrl)
                                 <img class="mb-4 h-40 w-40 rounded-sm border border-slate-200 object-contain" src="{{ $fallbackQrUrl }}" alt="备用付款二维码" loading="eager" fetchpriority="high" decoding="async">
@@ -166,7 +188,7 @@
                                 @endif
                             </div>
                             {{ \App\Support\Markdown::render($settings?->payment_instructions ?: "请按页面显示的付款备注单号完成转账，并上传付款截图。\n\n截图上传后系统会自动识别并显示付款成功。请联系管理员获取付款方式。") }}
-                            @if($fallbackQrUrl || $friendQrUrl || $paypalEmail || ($fallbackPayment['password_red_packet_enabled'] ?? false) || ($fallbackPayment['support_enabled'] ?? true))
+                            @if($fallbackQrUrl || $friendQrUrl || ($paymentQrUrl && $paypalEmail) || ($paymentQrUrl && $hasPasswordRedPacket) || ($fallbackPayment['support_enabled'] ?? true))
                                 <button class="mt-4 rounded-sm border border-amber-300 bg-white px-3 py-2 text-sm font-medium text-amber-900 hover:bg-amber-50" type="button" data-payment-fallback-toggle>
                                     支付失败 / 付款码不可用
                                 </button>
@@ -191,7 +213,7 @@
                                             </div>
                                         @endif
                                     </div>
-                                    @if($fallbackPayment['password_red_packet_enabled'] ?? false)
+                                    @if($hasPasswordRedPacket && $paymentQrUrl)
                                         <p class="mt-3 whitespace-pre-line text-sm">{{ $fallbackPayment['password_red_packet_note'] ?? '如果二维码支付受限，可以提交支付宝口令红包，后台人工确认后会更新订单付款状态。' }}</p>
                                         <form class="mt-2" method="post" action="{{ route('orders.payment-method', $order) }}">
                                             @csrf
@@ -199,7 +221,7 @@
                                             <button class="rounded-sm border border-amber-700 bg-white px-3 py-2 text-xs font-medium text-amber-900 hover:bg-amber-100" type="submit">改用口令红包支付</button>
                                         </form>
                                     @endif
-                                    @if($paypalEmail && $order->payment_method !== \App\Models\Order::PAYMENT_METHOD_PAYPAL)
+                                    @if($paypalEmail && $paymentQrUrl && $order->payment_method !== \App\Models\Order::PAYMENT_METHOD_PAYPAL)
                                         <p class="mt-3 break-all text-sm">PayPal 收款邮箱：{{ $paypalEmail }}</p>
                                         <form class="mt-2" method="post" action="{{ route('orders.payment-method', $order) }}">
                                             @csrf
@@ -292,10 +314,9 @@
                         @if((int) $order->wallet_recharge_cents > 0)
                             <div class="flex justify-between"><dt>钱包充值</dt><dd>@money((int) $order->wallet_recharge_cents)</dd></div>
                         @endif
-                        @if((int) $order->wallet_payment_cents > 0)
-                            <div class="flex justify-between"><dt>钱包抵扣</dt><dd>- @money((int) $order->wallet_payment_cents)</dd></div>
-                        @endif
-                        <div class="flex justify-between border-t border-slate-200 pt-2 text-base font-semibold"><dt>应付</dt><dd>@money($order->total_cents)</dd></div>
+                        <div class="flex justify-between border-t border-slate-200 pt-2"><dt>付款总金额</dt><dd>@money($order->paymentTotalCents())</dd></div>
+                        <div class="flex justify-between text-emerald-700"><dt>钱包支付金额</dt><dd>@money($order->walletPaymentCents())</dd></div>
+                        <div class="flex justify-between text-base font-semibold text-red-700"><dt>待支付金额</dt><dd>@money($order->remainingPaymentCents())</dd></div>
                     </dl>
                     @if($isPaymentPage)
                         <div class="border-t border-slate-200 px-4 py-4">
@@ -332,7 +353,7 @@
                                     @if($order->payment_method !== \App\Models\Order::PAYMENT_METHOD_RED_PACKET)
                                         <input class="block w-full max-w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" type="file" name="payment_proof" accept="image/*">
                                     @endif
-                                    @if(($fallbackPayment['password_red_packet_enabled'] ?? false) || $order->payment_method === \App\Models\Order::PAYMENT_METHOD_RED_PACKET)
+                                    @if($hasPasswordRedPacket || $order->payment_method === \App\Models\Order::PAYMENT_METHOD_RED_PACKET)
                                         <textarea class="w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" name="payment_text_proof" rows="3" placeholder="{{ $order->payment_method === \App\Models\Order::PAYMENT_METHOD_RED_PACKET ? '请填写口令红包内容，后台会人工确认。' : '可填写支付宝口令红包、转账口令或其他文字付款凭证' }}">{{ old('payment_text_proof') }}</textarea>
                                     @endif
                                     <button class="rounded-sm border border-emerald-700 bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800" type="submit" data-payment-proof-submit>提交付款信息</button>

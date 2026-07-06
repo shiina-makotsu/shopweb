@@ -3,6 +3,9 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Concerns\ChecksAdminAccess;
+use App\Filament\Resources\AnnouncementCommentResource;
+use App\Filament\Resources\ForumCommentResource;
+use App\Filament\Resources\PageCommentResource;
 use App\Filament\Resources\ProductCommentResource\Pages\ListProductComments;
 use App\Models\ProductComment;
 use App\Support\RegexSearch;
@@ -20,12 +23,22 @@ class ProductCommentResource extends Resource
 
     protected static ?string $model = ProductComment::class;
     protected static string $permissionArea = 'catalog';
-    protected static ?string $navigationLabel = '商品评论';
+    protected static ?string $navigationLabel = '评论管理';
     protected static ?string $modelLabel = '商品评论';
     protected static ?string $pluralModelLabel = '商品评论';
-    protected static string|\UnitEnum|null $navigationGroup = '商品';
-    protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedStar;
-    protected static ?int $navigationSort = 45;
+    protected static string|\UnitEnum|null $navigationGroup = '内容';
+    protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedChatBubbleLeftEllipsis;
+    protected static ?int $navigationSort = 20;
+
+    public static function tabs(): array
+    {
+        return [
+            'products' => ['label' => '商品评论', 'url' => static::getUrl('index')],
+            'pages' => ['label' => '页面评论', 'url' => PageCommentResource::getUrl('index')],
+            'announcements' => ['label' => '公告评论', 'url' => AnnouncementCommentResource::getUrl('index')],
+            'forum' => ['label' => '论坛回复', 'url' => ForumCommentResource::getUrl('index')],
+        ];
+    }
 
     public static function table(Table $table): Table
     {

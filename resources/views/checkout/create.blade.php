@@ -230,7 +230,9 @@
                         </div>
                     @endforeach
                 </div>
-                <div class="border-t border-slate-200 bg-slate-50 px-4 py-4" data-checkout-summary data-subtotal-cents="{{ (int) $subtotalCents }}">
+                @php($checkoutTotalCents = (int) $subtotalCents + (int) $shippingQuote['shipping_fee_cents'])
+                @php($checkoutWalletCents = min((int) auth()->user()->wallet_balance_cents, $checkoutTotalCents))
+                <div class="border-t border-slate-200 bg-slate-50 px-4 py-4" data-checkout-summary data-subtotal-cents="{{ (int) $subtotalCents }}" data-wallet-balance-cents="{{ (int) auth()->user()->wallet_balance_cents }}">
                     <div class="flex justify-between text-sm">
                         <span>商品金额</span>
                         <span class="font-semibold">@money($subtotalCents)</span>
@@ -259,8 +261,16 @@
                         @endif
                     @endif
                     <div class="mt-2 flex justify-between border-t border-slate-200 pt-3 text-sm">
-                        <span>总金额</span>
-                        <span class="font-semibold" data-order-total>@money($subtotalCents + (int) $shippingQuote['shipping_fee_cents'])</span>
+                        <span>付款总金额</span>
+                        <span class="font-semibold" data-order-total>@money($checkoutTotalCents)</span>
+                    </div>
+                    <div class="mt-2 flex justify-between text-sm text-emerald-700">
+                        <span>钱包支付金额</span>
+                        <span class="font-semibold" data-wallet-payment>@money($checkoutWalletCents)</span>
+                    </div>
+                    <div class="mt-2 flex justify-between text-base font-semibold text-red-700">
+                        <span>待支付金额</span>
+                        <span data-remaining-payment>@money(max(0, $checkoutTotalCents - $checkoutWalletCents))</span>
                     </div>
                 </div>
             </aside>
@@ -278,6 +288,8 @@
                 const summary = document.querySelector('[data-checkout-summary]');
                 const shippingTotalNode = document.querySelector('[data-shipping-total]');
                 const orderTotalNode = document.querySelector('[data-order-total]');
+                const walletPaymentNode = document.querySelector('[data-wallet-payment]');
+                const remainingPaymentNode = document.querySelector('[data-remaining-payment]');
                 const updateShippingTotals = () => {
                     let shippingTotal = 0;
 
@@ -301,8 +313,13 @@
                     }
 
                     const subtotal = Number(summary.dataset.subtotalCents || 0);
+                    const walletBalance = Number(summary.dataset.walletBalanceCents || 0);
+                    const orderTotal = subtotal + shippingTotal;
+                    const walletPayment = Math.min(walletBalance, orderTotal);
                     shippingTotalNode.textContent = money(shippingTotal);
-                    orderTotalNode.textContent = money(subtotal + shippingTotal);
+                    orderTotalNode.textContent = money(orderTotal);
+                    if (walletPaymentNode) walletPaymentNode.textContent = money(walletPayment);
+                    if (remainingPaymentNode) remainingPaymentNode.textContent = money(orderTotal - walletPayment);
                 };
 
                 document.querySelectorAll('[data-shipping-carrier-select]').forEach((select) => {

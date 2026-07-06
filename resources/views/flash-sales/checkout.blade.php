@@ -116,9 +116,23 @@
                     @endif
                 </div>
                 <div class="border-t border-slate-200 bg-slate-50 px-4 py-4">
+                    @php($flashSaleTotalCents = (int) $flash_sale->sale_price_cents * (int) $quantity)
+                    @php($flashSaleWalletCents = min((int) auth()->user()->wallet_balance_cents, $flashSaleTotalCents))
                     <div class="flex justify-between text-sm">
                         <span>秒杀小计</span>
-                        <span class="font-semibold">@money($flash_sale->sale_price_cents * $quantity)</span>
+                        <span class="font-semibold">@money($flashSaleTotalCents)</span>
+                    </div>
+                    <div class="mt-2 flex justify-between border-t border-slate-200 pt-3 text-sm">
+                        <span>付款总金额</span>
+                        <span class="font-semibold">@money($flashSaleTotalCents)</span>
+                    </div>
+                    <div class="mt-2 flex justify-between text-sm text-emerald-700">
+                        <span>钱包支付金额</span>
+                        <span class="font-semibold">@money($flashSaleWalletCents)</span>
+                    </div>
+                    <div class="mt-2 flex justify-between text-base font-semibold text-red-700">
+                        <span>待支付金额</span>
+                        <span>@money(max(0, $flashSaleTotalCents - $flashSaleWalletCents))</span>
                     </div>
                 </div>
             </aside>

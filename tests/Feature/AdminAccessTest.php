@@ -4,6 +4,7 @@ use App\Filament\Resources\CategoryResource\Pages\CreateCategory;
 use App\Models\User;
 use App\Filament\Resources\PageResource\Pages\Concerns\HandlesPageCoverUpload;
 use App\Models\MediaAsset;
+use App\Models\Order;
 use App\Models\OrderStatusSetting;
 use App\Models\Page;
 use App\Models\Product;
@@ -416,6 +417,70 @@ it('creates a media asset when a page cover upload path is submitted', function 
         ->and($asset->usage)->toBe(MediaAsset::USAGE_PAGE)
         ->and($data['cover_media_asset_id'])->toBe($asset->id)
         ->and($data)->not->toHaveKey('cover_upload');
+});
+
+it('shows wallet payment breakdown on the admin order form', function (): void {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $user = User::factory()->create(['role' => 'customer']);
+    $order = Order::query()->create([
+        'user_id' => $user->id,
+        'order_number' => 'ADMIN-WALLET-1',
+        'status' => Order::STATUS_PENDING_PAYMENT,
+        'payment_status' => Order::PAYMENT_PENDING,
+        'subtotal_cents' => 10000,
+        'discount_cents' => 0,
+        'shipping_fee_cents' => 0,
+        'wallet_payment_cents' => 3000,
+        'total_cents' => 7000,
+        'contact_name' => 'Admin Wallet',
+        'contact_phone' => '13800000000',
+    ]);
+
+    $this->actingAs($admin)
+        ->get(\App\Filament\Resources\OrderResource::getUrl('edit', ['record' => $order]))
+        ->assertOk()
+        ->assertSee('付款总金额')
+        ->assertSee('钱包支付金额')
+        ->assertSee('待支付金额')
+        ->assertSee('¥100.00')
+        ->assertSee('¥30.00')
+        ->assertSee('¥70.00');
+});
+
+it('renders merged admin management tabs for wallet flash sale and comments', function (): void {
+    $admin = User::factory()->create(['role' => 'admin']);
+
+    $this->actingAs($admin)
+        ->get(\App\Filament\Pages\WalletSettingsPage::getUrl())
+        ->assertOk()
+        ->assertSee('钱包设置')
+        ->assertSee('兑换码管理');
+
+    $this->actingAs($admin)
+        ->get(\App\Filament\Resources\WalletRedeemCodeResource::getUrl('index'))
+        ->assertOk()
+        ->assertSee('钱包设置')
+        ->assertSee('兑换码管理');
+
+    $this->actingAs($admin)
+        ->get(\App\Filament\Resources\FlashSaleResource::getUrl('index'))
+        ->assertOk()
+        ->assertSee('秒杀活动')
+        ->assertSee('秒杀计划');
+
+    $this->actingAs($admin)
+        ->get(\App\Filament\Resources\FlashSaleCampaignResource::getUrl('index'))
+        ->assertOk()
+        ->assertSee('秒杀活动')
+        ->assertSee('秒杀计划');
+
+    $this->actingAs($admin)
+        ->get(\App\Filament\Resources\ProductCommentResource::getUrl('index'))
+        ->assertOk()
+        ->assertSee('商品评论')
+        ->assertSee('页面评论')
+        ->assertSee('公告评论')
+        ->assertSee('论坛回复');
 });
 
 it('renders resource library forum logs and admin role defaults for admins', function (): void {

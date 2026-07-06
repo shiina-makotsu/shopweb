@@ -6,6 +6,7 @@ use App\Filament\Concerns\ChecksAdminAccess;
 use App\Filament\Resources\FlashSaleResource\Pages\CreateFlashSale;
 use App\Filament\Resources\FlashSaleResource\Pages\EditFlashSale;
 use App\Filament\Resources\FlashSaleResource\Pages\ListFlashSales;
+use App\Filament\Resources\FlashSaleCampaignResource;
 use App\Models\FlashSale;
 use App\Models\Product;
 use App\Models\ProductVariant;
@@ -37,6 +38,14 @@ class FlashSaleResource extends Resource
     protected static string|\UnitEnum|null $navigationGroup = '交易';
     protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedBolt;
     protected static ?int $navigationSort = 23;
+
+    public static function tabs(): array
+    {
+        return [
+            'sales' => ['label' => '秒杀活动', 'url' => static::getUrl('index')],
+            'campaigns' => ['label' => '秒杀计划', 'url' => FlashSaleCampaignResource::getUrl('index')],
+        ];
+    }
 
     public static function form(Schema $schema): Schema
     {

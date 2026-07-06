@@ -2,7 +2,9 @@
 
 namespace App\Filament\Resources\FlashSaleCampaignResource\Pages;
 
+use App\Filament\Resources\FlashSaleResource;
 use App\Filament\Resources\FlashSaleCampaignResource;
+use App\Filament\Support\AdminPageTabs;
 use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\ListRecords;
 
@@ -13,6 +15,7 @@ class ListFlashSaleCampaigns extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
+            ...AdminPageTabs::actions(FlashSaleResource::tabs(), 'campaigns'),
             CreateAction::make()->label('创建秒杀计划'),
         ];
     }

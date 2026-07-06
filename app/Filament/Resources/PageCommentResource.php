@@ -27,6 +27,11 @@ class PageCommentResource extends Resource
     protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedChatBubbleLeftEllipsis;
     protected static ?int $navigationSort = 18;
 
+    public static function shouldRegisterNavigation(): bool
+    {
+        return false;
+    }
+
     public static function table(Table $table): Table
     {
         return $table

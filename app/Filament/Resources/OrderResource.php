@@ -88,7 +88,15 @@ class OrderResource extends Resource
                 TextInput::make('subtotal_cents')->label('小计')->disabled()->formatStateUsing(fn ($state): string => Money::format((int) $state)),
                 TextInput::make('discount_cents')->label('优惠')->disabled()->formatStateUsing(fn ($state): string => Money::format((int) $state)),
                 TextInput::make('shipping_fee_cents')->label('邮费')->disabled()->formatStateUsing(fn ($state): string => Money::format((int) $state)),
-                TextInput::make('total_cents')->label('应付')->disabled()->formatStateUsing(fn ($state): string => Money::format((int) $state)),
+                Placeholder::make('payment_total_cents_display')
+                    ->label('付款总金额')
+                    ->content(fn (?Order $record): string => $record ? Money::format($record->paymentTotalCents()) : '-'),
+                Placeholder::make('wallet_payment_cents_display')
+                    ->label('钱包支付金额')
+                    ->content(fn (?Order $record): string => $record ? Money::format($record->walletPaymentCents()) : '-'),
+                Placeholder::make('total_cents_display')
+                    ->label('待支付金额')
+                    ->content(fn (?Order $record): string => $record ? Money::format($record->remainingPaymentCents()) : '-'),
                 TextInput::make('coupon_code')->label('优惠码')->disabled(),
                 Placeholder::make('private_shipping_requested_display')
                     ->label('私密发货')
@@ -301,6 +309,9 @@ class OrderResource extends Resource
         $items = nl2br(e(static::orderItemsSummary($record)));
         $status = e(app(OrderStatusPresenter::class)->label($record->status));
         $payment = e($record->payment_status ?: '-');
+        $paymentTotal = e(Money::format($record->paymentTotalCents()));
+        $walletPayment = e(Money::format($record->walletPaymentCents()));
+        $remainingPayment = e(Money::format($record->remainingPaymentCents()));
         $carrier = e($record->shippingCarrier?->name ?: '-');
         $trackingNumber = e($record->tracking_number ?: '-');
         $trackingUrl = e($record->tracking_url ?: '-');
@@ -354,6 +365,12 @@ class OrderResource extends Resource
                         <div>{$status}</div>
                         <strong style="color:#475569;">付款状态</strong>
                         <div>{$payment}</div>
+                        <strong style="color:#475569;">付款总金额</strong>
+                        <div>{$paymentTotal}</div>
+                        <strong style="color:#475569;">钱包支付</strong>
+                        <div>{$walletPayment}</div>
+                        <strong style="color:#475569;">待支付</strong>
+                        <div>{$remainingPayment}</div>
                     </div>
                     <div style="display:grid;grid-template-columns:82px minmax(0,1fr);gap:6px 10px;">
                         <strong style="color:#475569;">联系人</strong>
@@ -470,7 +487,15 @@ class OrderResource extends Resource
                 TextColumn::make('user.name')
                     ->label('用户昵称')
                     ->searchable(query: fn (Builder $query, string $search): Builder => $query->whereHas('user', fn (Builder $userQuery) => RegexSearch::where($userQuery, ['name'], $search))),
-                TextColumn::make('total_cents')->label('金额')->formatStateUsing(fn ($state) => Money::format($state))->sortable(),
+                TextColumn::make('payment_total_cents')
+                    ->label('付款总金额')
+                    ->state(fn (Order $record): string => Money::format($record->paymentTotalCents())),
+                TextColumn::make('wallet_payment_cents')
+                    ->label('钱包支付')
+                    ->formatStateUsing(fn ($state): string => Money::format((int) $state))
+                    ->sortable()
+                    ->toggleable(),
+                TextColumn::make('total_cents')->label('待支付')->formatStateUsing(fn ($state) => Money::format($state))->sortable(),
                 TextColumn::make('shipping_fee_cents')->label('邮费')->formatStateUsing(fn ($state) => Money::format((int) $state))->sortable()->toggleable(),
                 TextColumn::make('status')
                     ->label('订单状态')

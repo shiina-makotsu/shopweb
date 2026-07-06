@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use App\Models\WalletRechargeOption;
 use App\Filament\Resources\WalletRedeemCodeResource;
+use App\Filament\Support\AdminPageTabs;
 use App\Support\AdminAccess;
 use App\Support\CurrencyUnit;
 use App\Support\MoneyInput;
@@ -62,10 +63,14 @@ class WalletSettingsPage extends Page implements HasSchemas
 
     protected function getHeaderActions(): array
     {
+        return AdminPageTabs::actions(static::tabs(), 'settings');
+    }
+
+    public static function tabs(): array
+    {
         return [
-            Action::make('redeemCodes')
-                ->label('兑换码管理')
-                ->url(WalletRedeemCodeResource::getUrl('index')),
+            'settings' => ['label' => '钱包设置', 'url' => static::getUrl()],
+            'redeem_codes' => ['label' => '兑换码管理', 'url' => WalletRedeemCodeResource::getUrl('index')],
         ];
     }
 
