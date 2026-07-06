@@ -49,6 +49,41 @@ it('records login attempts for backoffice users only', function (): void {
     expect(AdminLoginLog::query()->count())->toBe(2);
 });
 
+it('stores a remember token when users choose to stay signed in', function (): void {
+    $user = User::factory()->create([
+        'email' => 'remember-me@example.com',
+        'password' => 'password',
+        'role' => 'customer',
+        'remember_token' => null,
+    ]);
+
+    $this->post('/login', [
+        'email' => 'remember-me@example.com',
+        'password' => 'password',
+        'remember' => '1',
+    ])->assertRedirect();
+
+    expect($user->fresh()->remember_token)->not->toBeNull()
+        ->and(config('session.lifetime'))->toBe(43200)
+        ->and(config('auth.guards.web.remember'))->toBe(43200);
+});
+
+it('does not store a remember token when users do not choose to stay signed in', function (): void {
+    $user = User::factory()->create([
+        'email' => 'session-only@example.com',
+        'password' => 'password',
+        'role' => 'customer',
+        'remember_token' => null,
+    ]);
+
+    $this->post('/login', [
+        'email' => 'session-only@example.com',
+        'password' => 'password',
+    ])->assertRedirect();
+
+    expect($user->fresh()->remember_token)->toBeNull();
+});
+
 it('shows login logs to authorized admins', function (): void {
     $admin = User::factory()->create(['role' => 'admin']);
     $finance = User::factory()->create(['role' => 'finance']);

@@ -14,6 +14,8 @@ class ProductVariant extends Model
 {
     use HasFactory;
 
+    protected $touches = ['product'];
+
     protected $fillable = [
         'product_id',
         'sku',

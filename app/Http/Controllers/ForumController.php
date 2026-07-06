@@ -6,7 +6,9 @@ use App\Models\ForumComment;
 use App\Models\ForumSection;
 use App\Models\ForumSectionRead;
 use App\Models\ForumThread;
+use App\Models\ForumThreadRead;
 use App\Models\MediaAsset;
+use App\Models\User;
 use App\Services\ForumActivityLogger;
 use App\Support\ForumThreadTemplate;
 use Illuminate\Http\RedirectResponse;
@@ -48,13 +50,8 @@ class ForumController extends Controller
             ->withQueryString();
 
         if ($request->user()) {
-            $sections->getCollection()->each(function (ForumSection $section): void {
-                $activityAt = $section->last_thread_activity_at
-                    ? Carbon::parse($section->last_thread_activity_at)
-                    : $section->updated_at;
-                $readAt = $section->reads->first()?->read_at;
-
-                $section->setAttribute('has_unread_threads', $activityAt !== null && ($readAt === null || $activityAt->gt($readAt)));
+            $sections->getCollection()->each(function (ForumSection $section) use ($request): void {
+                $section->setAttribute('has_unread_threads', $this->sectionHasUnread($section, $request->user()));
             });
         }
 
@@ -71,14 +68,8 @@ class ForumController extends Controller
     {
         abort_unless($section->is_active, 404);
 
-        if ($request->user()) {
-            ForumSectionRead::query()->updateOrCreate(
-                [
-                    'forum_section_id' => $section->id,
-                    'user_id' => $request->user()->id,
-                ],
-                ['read_at' => now()],
-            );
+        if ($request->user() && ! $this->sectionHasUnreadThreads($section, $request->user())) {
+            $this->markSectionRead($section, $request->user());
         }
 
         $sort = $this->sortFrom($request);
@@ -104,12 +95,26 @@ class ForumController extends Controller
         ]);
     }
 
-    public function show(ForumSection $section, ForumThread $thread): View
+    public function show(Request $request, ForumSection $section, ForumThread $thread): View
     {
         abort_unless($section->is_active && $thread->forum_section_id === $section->id && $thread->deleted_at === null, 404);
 
         $thread->increment('views_count');
         $thread->refresh();
+
+        if ($request->user()) {
+            ForumThreadRead::query()->updateOrCreate(
+                [
+                    'forum_thread_id' => $thread->id,
+                    'user_id' => $request->user()->id,
+                ],
+                ['read_at' => now()],
+            );
+
+            if (! $this->sectionHasUnreadThreads($section, $request->user())) {
+                $this->markSectionRead($section, $request->user());
+            }
+        }
 
         return view('forum.show', [
             'section' => $section->load('moderators'),
@@ -401,6 +406,49 @@ class ForumController extends Controller
         $this->ensureThread($section, $thread);
 
         abort_unless($comment->forum_thread_id === $thread->id && $comment->deleted_at === null, 404);
+    }
+
+    private function sectionHasUnread(ForumSection $section, User $user): bool
+    {
+        if ($this->sectionHasUnreadThreads($section, $user)) {
+            return true;
+        }
+
+        $activityAt = $section->last_thread_activity_at
+            ? Carbon::parse($section->last_thread_activity_at)
+            : $section->updated_at;
+        $readAt = $section->reads->first()?->read_at
+            ?: ForumSectionRead::query()
+                ->where('forum_section_id', $section->id)
+                ->where('user_id', $user->id)
+                ->value('read_at');
+
+        return $activityAt !== null && ($readAt === null || $activityAt->gt(Carbon::parse($readAt)));
+    }
+
+    private function sectionHasUnreadThreads(ForumSection $section, User $user): bool
+    {
+        return $section->threads()
+            ->visible()
+            ->with(['reads' => fn ($query) => $query->where('user_id', $user->id)])
+            ->get(['id', 'forum_section_id', 'created_at', 'updated_at', 'last_replied_at'])
+            ->contains(function (ForumThread $thread): bool {
+                $readAt = $thread->reads->first()?->read_at;
+                $activityAt = $thread->latestActivityAt();
+
+                return $activityAt !== null && ($readAt === null || $activityAt->gt($readAt));
+            });
+    }
+
+    private function markSectionRead(ForumSection $section, User $user): void
+    {
+        ForumSectionRead::query()->updateOrCreate(
+            [
+                'forum_section_id' => $section->id,
+                'user_id' => $user->id,
+            ],
+            ['read_at' => now()],
+        );
     }
 
     private function sortFrom(Request $request): string

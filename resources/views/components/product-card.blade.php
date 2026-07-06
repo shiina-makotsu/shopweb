@@ -1,8 +1,10 @@
 @props(['product'])
 
 @php
-    $variant = $product->variants->where('is_active', true)->sortBy(fn ($variant) => $variant->effectivePriceCents())->first();
-    $stock = $product->variants->where('is_active', true)->sum('stock');
+    $activeVariants = $product->variants->where('is_active', true);
+    $discountVariant = $activeVariants->first(fn ($variant) => $variant->hasActiveDiscount());
+    $variant = $discountVariant ?: $activeVariants->sortBy(fn ($variant) => $variant->effectivePriceCents())->first();
+    $stock = $activeVariants->sum('stock');
     $unlimitedStock = $product->hasUnlimitedStock();
     $stockLabel = $product->isPresale() ? '预售不限库存' : ($unlimitedStock ? '不限库存' : '库存 '.$stock);
     $isSoldOut = $product->isSoldOut() || ($product->status === \App\Models\Product::STATUS_PUBLISHED && ! $unlimitedStock && $stock <= 0);
@@ -41,6 +43,9 @@
         : false;
     $productUrl = $product->showUrl();
     $productRoute = $product->showRouteParameters();
+    $comparePriceCents = $variant?->hasActiveDiscount()
+        ? (int) $variant->price_cents
+        : ($variant?->compare_at_price_cents ? (int) $variant->compare_at_price_cents : null);
 @endphp
 
 <article class="min-w-0 overflow-hidden bg-white">
@@ -71,12 +76,14 @@
         @endif
         <div class="flex min-w-0 items-end justify-between gap-3">
             <div class="min-w-0">
-                <p class="text-base font-semibold text-red-700">{{ $product->priceRangeLabel() }}</p>
-                @if($variant?->hasActiveDiscount())
-                    <p class="text-xs text-slate-500 line-through">@money($variant->price_cents)</p>
-                    <p class="text-xs font-medium text-pink-700">限时折扣</p>
-                @elseif($variant?->compare_at_price_cents)
-                    <p class="text-xs text-slate-500 line-through">@money($variant->compare_at_price_cents)</p>
+                @if($comparePriceCents)
+                    <p class="text-lg font-bold leading-tight text-red-700 line-through decoration-red-600 decoration-2">@money($comparePriceCents)</p>
+                    <p class="mt-0.5 text-base font-semibold leading-tight text-red-700">@money($variant?->effectivePriceCents())</p>
+                    @if($variant?->hasActiveDiscount())
+                        <p class="mt-1 text-xs font-medium text-red-700">限时折扣</p>
+                    @endif
+                @else
+                    <p class="text-base font-semibold text-red-700">{{ $product->priceRangeLabel() }}</p>
                 @endif
                 <p class="mt-1 text-xs text-slate-500">{{ $statusNote }}</p>
                 @if($variant)

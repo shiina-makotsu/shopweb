@@ -58,6 +58,11 @@ class ForumThread extends Model
         return $this->hasMany(ForumComment::class);
     }
 
+    public function reads(): HasMany
+    {
+        return $this->hasMany(ForumThreadRead::class);
+    }
+
     public function deletedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'deleted_by_id');
@@ -82,5 +87,10 @@ class ForumThread extends Model
     public function canReceiveReplies(): bool
     {
         return ! $this->is_locked && $this->deleted_at === null;
+    }
+
+    public function latestActivityAt()
+    {
+        return $this->last_replied_at ?? $this->updated_at ?? $this->created_at;
     }
 }

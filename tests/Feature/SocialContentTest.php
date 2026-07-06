@@ -907,7 +907,7 @@ it('browses forum sections before posting and supports search sorting and locked
         ->assertForbidden();
 });
 
-it('marks forum sections unread until the viewer enters the section', function (): void {
+it('keeps forum section badges until unread threads are opened', function (): void {
     $user = User::factory()->create(['role' => 'customer']);
     $author = User::factory()->create(['role' => 'customer']);
     $section = ForumSection::query()->create([
@@ -921,6 +921,38 @@ it('marks forum sections unread until the viewer enters the section', function (
         'title' => 'Unread thread',
         'slug' => 'unread-thread',
         'body' => 'Body',
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('forum.index'))
+        ->assertOk()
+        ->assertSee('aria-label="有未读帖子"', false);
+
+    $this->actingAs($user)
+        ->get(route('forum.sections.show', $section))
+        ->assertOk();
+
+    $this->actingAs($user)
+        ->get(route('forum.index'))
+        ->assertOk()
+        ->assertSee('aria-label="有未读帖子"', false);
+
+    $this->actingAs($user)
+        ->get(route('forum.threads.show', [$section, $section->threads()->firstOrFail()]))
+        ->assertOk();
+
+    $this->actingAs($user)
+        ->get(route('forum.index'))
+        ->assertOk()
+        ->assertDontSee('aria-label="有未读帖子"', false);
+});
+
+it('clears an empty forum section badge only after the viewer enters the section', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+    $section = ForumSection::query()->create([
+        'name' => 'Empty Unread Section',
+        'slug' => 'empty-unread-section',
+        'is_active' => true,
     ]);
 
     $this->actingAs($user)

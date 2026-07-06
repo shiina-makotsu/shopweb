@@ -141,7 +141,8 @@ class StorefrontCache
                     ->limit(8)
                     ->get(),
                 default => $query
-                    ->latest()
+                    ->orderBy('sort_order')
+                    ->oldest()
                     ->limit(8)
                     ->get(),
             };

@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Models\ProductVariant;
+use App\Services\StorefrontCache;
 use App\Support\AdminAccess;
 use App\Support\MoneyInput;
 use Filament\Forms\Components\DateTimePicker;
@@ -106,20 +107,30 @@ class ProductDiscountPage extends Page implements HasSchemas
         $ids = collect($state['variant_ids'] ?? [])->map(fn ($id): int => (int) $id)->all();
 
         $discountEnabled = (bool) ($state['discount_enabled'] ?? false);
+        $productIds = [];
 
         ProductVariant::query()
             ->whereIn('id', $ids)
-            ->update($discountEnabled
-                ? [
+            ->get()
+            ->each(function (ProductVariant $variant) use ($discountEnabled, $state, &$productIds): void {
+                $variant->fill($discountEnabled ? [
                     'discount_price_cents' => (int) $state['discount_price_cents'],
                     'discount_starts_at' => $state['discount_starts_at'] ?? null,
                     'discount_ends_at' => $state['discount_ends_at'] ?? null,
-                ]
-                : [
+                ] : [
                     'discount_price_cents' => null,
                     'discount_starts_at' => null,
                     'discount_ends_at' => null,
                 ]);
+
+                $variant->save();
+                $variant->product?->touch();
+                $productIds[] = (int) $variant->product_id;
+            });
+
+        if ($productIds !== []) {
+            app(StorefrontCache::class)->clear();
+        }
 
         Notification::make()
             ->title($discountEnabled ? '商品折扣已保存' : '商品折扣已关闭')

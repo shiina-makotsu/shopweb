@@ -216,8 +216,15 @@ setting. If you know the exact proxy IP ranges, you can set those instead.
 For HTTPS domains, use:
 
 ```ini
+SESSION_LIFETIME=43200
+AUTH_REMEMBER_LIFETIME=43200
 SESSION_SECURE_COOKIE=true
 ```
+
+`SESSION_LIFETIME=43200` keeps normal web sessions for 30 days, and
+`AUTH_REMEMBER_LIFETIME=43200` keeps the "remember me" cookie on the same
+30-day window. Together they prevent active users and admins from being
+redirected back to login after the old 120-minute default.
 
 Leave `SESSION_DOMAIN` empty unless you need to share login state across
 multiple subdomains. A wrong `SESSION_DOMAIN` can make `/admin/login` appear to

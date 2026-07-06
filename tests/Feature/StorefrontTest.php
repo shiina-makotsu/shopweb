@@ -1,6 +1,8 @@
 <?php
 
 use App\Filament\Resources\ProductResource\Pages\EditProduct;
+use App\Filament\Resources\FlashSaleCampaignResource\Pages\CreateFlashSaleCampaign;
+use App\Filament\Pages\ProductDiscountPage;
 use App\Models\Category;
 use App\Models\Coupon;
 use App\Models\FlashSale;
@@ -27,11 +29,13 @@ use App\Models\WarehouseShippingRate;
 use App\Models\WarehouseStock;
 use App\Services\FlashSaleCampaignService;
 use App\Services\OrderService;
+use App\Services\StorefrontCache;
 use App\Support\Money;
 use App\Support\PageMenuPublication;
 use App\Support\Url;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
@@ -948,17 +952,14 @@ it('orders home product sections and places store pages in the welcome header', 
         ->assertSee('商店信息')
         ->assertSee('关于我们')
         ->assertSee('推荐商品')
-        ->assertSee('最新商品')
         ->assertSee('折扣商品')
+        ->assertSee('秒杀商品')
         ->assertSee('概念商品')
         ->assertSee('客服会话')
         ->assertSee('客服工单')
         ->assertSee('折扣测试商品')
-        ->assertSee('预售测试商品')
-        ->assertSee('进货中测试商品')
         ->assertSee('概念测试商品')
         ->assertSee('right-4 top-4', false)
-        ->assertSee('进货中')
         ->assertSee('购买')
         ->assertSee('加入购物车')
         ->assertSee('投票')
@@ -968,9 +969,61 @@ it('orders home product sections and places store pages in the welcome header', 
 
     $html = $response->getContent();
 
-    expect(strpos($html, '推荐商品'))->toBeLessThan(strpos($html, '最新商品'))
-        ->and(strpos($html, '最新商品'))->toBeLessThan(strpos($html, '折扣商品'))
+    expect(strpos($html, '推荐商品'))->toBeLessThan(strpos($html, '折扣商品'))
+        ->and(strpos($html, '折扣商品'))->toBeLessThan(strpos($html, '秒杀商品'))
+        ->and(strpos($html, '秒杀商品'))->toBeLessThan(strpos($html, '概念商品'))
         ->and(strpos($html, '折扣商品'))->toBeLessThan(strpos($html, '概念商品'));
+});
+
+it('shows default home products by sort order when there are no discount products', function (): void {
+    $this->seed();
+
+    ProductVariant::query()->update([
+        'discount_price_cents' => null,
+        'discount_starts_at' => null,
+        'discount_ends_at' => null,
+    ]);
+
+    $category = Category::query()->firstOrFail();
+    $lateProduct = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => '默认排序靠后商品',
+        'slug' => 'default-order-late-product',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_ONLINE,
+        'sort_order' => 20,
+    ]);
+    ProductVariant::query()->create([
+        'product_id' => $lateProduct->id,
+        'sku' => 'DEFAULT-LATE',
+        'price_cents' => 2000,
+        'stock' => 5,
+        'is_active' => true,
+    ]);
+    $earlyProduct = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => '默认排序靠前商品',
+        'slug' => 'default-order-early-product',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_ONLINE,
+        'sort_order' => -10,
+    ]);
+    ProductVariant::query()->create([
+        'product_id' => $earlyProduct->id,
+        'sku' => 'DEFAULT-EARLY',
+        'price_cents' => 1000,
+        'stock' => 5,
+        'is_active' => true,
+    ]);
+
+    $response = $this->get(route('home'))
+        ->assertOk()
+        ->assertSee('默认商品')
+        ->assertDontSee('<h2 class="text-base font-semibold">折扣商品</h2>', false);
+
+    $html = $response->getContent();
+
+    expect(strpos($html, '默认排序靠前商品'))->toBeLessThan(strpos($html, '默认排序靠后商品'));
 });
 
 it('renders configurable top navigation and home information menu items separately', function (): void {
@@ -1099,7 +1152,7 @@ it('keeps store information menu managed and hides empty placeholder menus', fun
         ->and($response->getContent())->toContain('/p/menu-managed-about');
 });
 
-it('always renders home discount and concept sections with empty states', function (): void {
+it('renders default and concept home sections when there are no discounts', function (): void {
     $this->seed();
 
     Product::query()
@@ -1114,12 +1167,13 @@ it('always renders home discount and concept sections with empty states', functi
 
     $this->get(route('home'))
         ->assertOk()
-        ->assertSee('折扣商品')
-        ->assertSee('暂无折扣商品')
+        ->assertSee('默认商品')
+        ->assertSee('商品列表')
         ->assertSee('概念商品')
         ->assertSee('暂无概念商品')
-        ->assertSee(Url::route('products.index', ['discount' => 1]), false)
+        ->assertSee(Url::route('products.index'), false)
         ->assertSee(Url::route('products.index', ['status' => Product::STATUS_CONCEPT]), false)
+        ->assertDontSee('<h2 class="text-base font-semibold">折扣商品</h2>', false)
         ->assertDontSee('<h2 class="text-base font-semibold">预售商品</h2>', false)
         ->assertDontSee('<h2 class="text-base font-semibold">进货中商品</h2>', false);
 });
@@ -1794,6 +1848,64 @@ it('shows product price ranges and defaults detail price to the first sku', func
         ->assertSee('data-price="¥10.00"', false);
 });
 
+it('refreshes cached storefront prices when the discount page updates a sku', function (): void {
+    $this->seed();
+
+    Cache::flush();
+
+    $admin = User::factory()->create(['role' => 'admin']);
+    $category = Category::query()->firstOrFail();
+    $product = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => 'Cache Discount Product',
+        'slug' => 'cache-discount-product',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_ONLINE,
+    ]);
+    $lowVariant = ProductVariant::query()->create([
+        'product_id' => $product->id,
+        'sku' => 'CACHE-DISCOUNT-LOW',
+        'specs' => ['规格' => '低价'],
+        'price_cents' => 1000,
+        'stock' => 5,
+        'is_active' => true,
+    ]);
+    ProductVariant::query()->create([
+        'product_id' => $product->id,
+        'sku' => 'CACHE-DISCOUNT-HIGH',
+        'specs' => ['规格' => '高价'],
+        'price_cents' => 3000,
+        'stock' => 5,
+        'is_active' => true,
+    ]);
+
+    app(StorefrontCache::class)->homeProducts('latest');
+
+    $this->get(route('home'))
+        ->assertOk()
+        ->assertSee('Cache Discount Product')
+        ->assertSee(Money::format(1000).'~'.Money::format(3000));
+
+    $this->actingAs($admin);
+
+    Livewire::test(ProductDiscountPage::class)
+        ->fillForm([
+            'variant_ids' => [$lowVariant->id],
+            'discount_enabled' => true,
+            'discount_price_cents' => '5.00',
+        ])
+        ->call('save')
+        ->assertHasNoFormErrors();
+
+    expect($lowVariant->fresh()->effectivePriceCents())->toBe(500);
+
+    $this->get(route('home'))
+        ->assertOk()
+        ->assertSee('Cache Discount Product')
+        ->assertSee(Money::format(1000), false)
+        ->assertSee(Money::format(500), false);
+});
+
 it('lets users claim coupons and apply one coupon per cart sku', function (): void {
     $this->seed();
 
@@ -2276,6 +2388,57 @@ it('allows presale products to join flash sales without stock limits', function 
         'unit_price_cents' => 1990,
         'flash_sale_id' => $flashSale->id,
     ]);
+});
+
+it('opens the flash sale campaign create page and creates a one-time campaign', function (): void {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $category = Category::query()->create(['name' => '秒杀计划', 'slug' => 'flash-campaign-create', 'is_active' => true]);
+    $product = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => '秒杀计划商品',
+        'slug' => 'flash-campaign-product',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_LOGISTICS,
+    ]);
+    $variant = ProductVariant::query()->create([
+        'product_id' => $product->id,
+        'sku' => 'FLASH-CAMPAIGN-SKU',
+        'price_cents' => 10000,
+        'stock' => 5,
+        'is_active' => true,
+    ]);
+
+    $this->actingAs($admin)
+        ->get('/admin/flash-sale-campaigns/create')
+        ->assertOk();
+
+    Livewire::actingAs($admin)
+        ->test(CreateFlashSaleCampaign::class)
+        ->fillForm([
+            'name' => '一次性秒杀计划',
+            'schedule_type' => FlashSaleCampaign::TYPE_ONCE,
+            'starts_on' => now()->toDateString(),
+            'starts_at_time' => now()->subMinute()->format('H:i'),
+            'ends_at_time' => now()->addHour()->format('H:i'),
+            'generate_days_ahead' => 1,
+            'is_active' => true,
+            'items' => [
+                [
+                    'product_id' => $product->id,
+                    'product_variant_ids' => [$variant->id],
+                    'sale_price_cents' => '8.00',
+                    'quantity_limit' => 3,
+                    'is_active' => true,
+                ],
+            ],
+        ])
+        ->call('create')
+        ->assertHasNoFormErrors();
+
+    $campaign = FlashSaleCampaign::query()->where('name', '一次性秒杀计划')->firstOrFail();
+
+    expect($campaign->items()->count())->toBe(1)
+        ->and(FlashSale::query()->where('flash_sale_campaign_id', $campaign->id)->count())->toBe(1);
 });
 
 it('generates recurring flash sale sessions with multiple campaign products', function (): void {

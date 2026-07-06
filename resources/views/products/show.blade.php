@@ -3,7 +3,9 @@
         $mainMedia = $product->media->first();
         $firstVariantImage = $product->variants->first(fn ($variant) => filled($variant->image_path));
         $mainImageUrl = $mainMedia ? null : $firstVariantImage?->imageUrl();
-        $firstVariant = $product->variants->first();
+        $activeVariants = $product->variants->where('is_active', true);
+        $discountVariant = $activeVariants->first(fn ($variant) => $variant->hasActiveDiscount());
+        $firstVariant = $discountVariant ?: $product->variants->first();
         $totalStock = $product->variants->sum('stock');
         $unlimitedStock = $product->hasUnlimitedStock();
         $stockLabel = $product->isPresale() ? '预售不限库存' : ($unlimitedStock ? '不限库存' : (string) $totalStock);
@@ -30,6 +32,9 @@
             ? auth()->user()->favorites()->where('product_id', $product->id)->exists()
             : false;
         $productRoute = $product->showRouteParameters();
+        $firstComparePriceCents = $firstVariant?->hasActiveDiscount()
+            ? (int) $firstVariant->price_cents
+            : ($firstVariant?->compare_at_price_cents ? (int) $firstVariant->compare_at_price_cents : null);
     @endphp
 
     <section class="mb-4 rounded-sm border border-slate-300 bg-white">
@@ -133,16 +138,17 @@
 
                 <div class="mt-4 rounded-sm border border-red-200 bg-red-50 px-4 py-3">
                     <p class="text-sm text-slate-600">{{ $product->isConcept() ? '预计价格' : '售价' }}</p>
-                    <p class="text-3xl font-semibold text-red-700" data-product-price>@money($firstVariant?->effectivePriceCents())</p>
-                    @if($firstVariant?->hasActiveDiscount())
-                        <p class="text-sm text-slate-500" data-product-compare-price>原价 <span class="line-through">@money($firstVariant->price_cents)</span></p>
-                        <p class="mt-1 text-xs text-red-700" data-product-discount-note>限时折扣中</p>
-                    @elseif($firstVariant?->compare_at_price_cents)
-                        <p class="text-sm text-slate-500" data-product-compare-price>原价 <span class="line-through">@money($firstVariant->compare_at_price_cents)</span></p>
-                        <p class="mt-1 hidden text-xs text-red-700" data-product-discount-note>限时折扣中</p>
+                    @if($firstComparePriceCents)
+                        <p class="text-3xl font-bold leading-tight text-red-700 line-through decoration-red-600 decoration-2" data-product-compare-price>@money($firstComparePriceCents)</p>
+                        <p class="mt-1 text-2xl font-semibold leading-tight text-red-700" data-product-price>@money($firstVariant?->effectivePriceCents())</p>
                     @else
-                        <p class="hidden text-sm text-slate-500" data-product-compare-price>原价 <span class="line-through"></span></p>
-                        <p class="mt-1 hidden text-xs text-red-700" data-product-discount-note>限时折扣中</p>
+                        <p class="hidden text-3xl font-bold leading-tight text-red-700 line-through decoration-red-600 decoration-2" data-product-compare-price></p>
+                        <p class="text-3xl font-semibold text-red-700" data-product-price>@money($firstVariant?->effectivePriceCents())</p>
+                    @endif
+                    @if($firstVariant?->hasActiveDiscount())
+                        <p class="mt-1 text-xs font-medium text-red-700" data-product-discount-note>限时折扣中</p>
+                    @else
+                        <p class="mt-1 hidden text-xs font-medium text-red-700" data-product-discount-note>限时折扣中</p>
                     @endif
                 </div>
 
@@ -230,6 +236,7 @@
                                         data-image-url="{{ $variant->imageUrl() }}"
                                         data-image-alt="{{ $variant->displayName() }}"
                                         data-spec-label="{{ $variant->displayName() }}"
+                                        @selected($firstVariant?->id === $variant->id)
                                     >
                                         {{ $variant->displayName() }} / @money($variant->effectivePriceCents()) / {{ $variantStockLabel }}
                                     </option>
@@ -237,12 +244,13 @@
                             </select>
                             <div class="mt-2 grid min-w-0 gap-2 overflow-hidden" data-product-variant-options>
                                 @foreach($product->variants as $variant)
+                                    @php($isSelectedVariant = $firstVariant?->id === $variant->id)
                                     <button
                                         type="button"
-                                        class="grid w-full min-w-0 max-w-full grid-cols-[minmax(0,1fr)_auto] items-start gap-3 overflow-hidden rounded-sm border px-3 py-2 text-sm transition hover:border-blue-400 hover:bg-blue-50 {{ $loop->first ? 'border-blue-700 bg-blue-50 text-blue-900' : 'border-slate-300 bg-white text-slate-700' }}"
+                                        class="grid w-full min-w-0 max-w-full grid-cols-[minmax(0,1fr)_auto] items-start gap-3 overflow-hidden rounded-sm border px-3 py-2 text-sm transition hover:border-blue-400 hover:bg-blue-50 {{ $isSelectedVariant ? 'border-blue-700 bg-blue-50 text-blue-900' : 'border-slate-300 bg-white text-slate-700' }}"
                                         data-product-variant-option
                                         data-variant-id="{{ $variant->id }}"
-                                        aria-pressed="{{ $loop->first ? 'true' : 'false' }}"
+                                        aria-pressed="{{ $isSelectedVariant ? 'true' : 'false' }}"
                                     >
                                         <span class="min-w-0 overflow-hidden break-words text-left font-medium leading-5">{{ $variant->displayName() }}</span>
                                         <span class="shrink-0 text-right font-semibold text-red-700">@money($variant->effectivePriceCents())</span>
@@ -280,13 +288,13 @@
                             </label>
                             <form method="post" action="{{ route('cart.items.store') }}" data-cart-add-form data-product-title="{{ $product->title }}" onsubmit="this.variant_id.value = document.getElementById('product-detail-variant').value; this.quantity.value = document.getElementById('product-detail-quantity').value;">
                                 @csrf
-                                <input type="hidden" name="variant_id" value="{{ $product->variants->first()?->id }}">
+                                <input type="hidden" name="variant_id" value="{{ $firstVariant?->id }}">
                                 <input type="hidden" name="quantity" value="1">
                                 <button class="rounded-sm border border-blue-700 bg-blue-700 px-5 py-2 text-sm font-medium text-white hover:bg-blue-800" type="submit">{{ $product->isPresale() ? '加入预售购物车' : '加入购物车' }}</button>
                             </form>
                             <form method="post" action="{{ route('cart.buy-now') }}" onsubmit="this.variant_id.value = document.getElementById('product-detail-variant').value; this.quantity.value = document.getElementById('product-detail-quantity').value;">
                                 @csrf
-                                <input type="hidden" name="variant_id" value="{{ $product->variants->first()?->id }}">
+                                <input type="hidden" name="variant_id" value="{{ $firstVariant?->id }}">
                                 <input type="hidden" name="quantity" value="1">
                                 <button class="rounded-sm border border-emerald-700 bg-emerald-700 px-5 py-2 text-sm font-medium text-white hover:bg-emerald-800" type="submit">{{ $product->isPresale() ? '预售下单' : '立即购买' }}</button>
                             </form>
@@ -464,7 +472,6 @@
             const select = document.getElementById('product-detail-variant');
             const price = document.querySelector('[data-product-price]');
             const comparePrice = document.querySelector('[data-product-compare-price]');
-            const comparePriceValue = comparePrice?.querySelector('span');
             const discountNote = document.querySelector('[data-product-discount-note]');
             const specList = document.querySelector('[data-product-spec-list]');
             const variantButtons = document.querySelectorAll('[data-product-variant-option]');
@@ -511,10 +518,14 @@
 
                 price.textContent = option.dataset.price || price.textContent;
 
-                if (comparePrice && comparePriceValue) {
+                if (comparePrice) {
                     const value = option.dataset.comparePrice || '';
-                    comparePriceValue.textContent = value;
+                    comparePrice.textContent = value;
                     comparePrice.classList.toggle('hidden', value === '');
+                    price.classList.toggle('mt-1', value !== '');
+                    price.classList.toggle('text-2xl', value !== '');
+                    price.classList.toggle('leading-tight', value !== '');
+                    price.classList.toggle('text-3xl', value === '');
                 }
 
                 if (discountNote) {

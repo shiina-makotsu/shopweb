@@ -17,11 +17,12 @@ class HomeController extends Controller
         $featuredProducts = $cache->homeProducts('featured');
         $discountProducts = $cache->homeProducts('discount');
         $latestProducts = $cache->homeProducts('latest');
+        $secondRowProducts = $discountProducts->isNotEmpty() ? $discountProducts : $latestProducts;
+        $secondRowType = $discountProducts->isNotEmpty() ? 'discount' : 'default';
         $conceptProducts = $cache->homeProducts('concept');
 
         $analytics->trackProductImpressions($request, $featuredProducts, 'home_featured');
-        $analytics->trackProductImpressions($request, $discountProducts, 'home_discount');
-        $analytics->trackProductImpressions($request, $latestProducts, 'home_latest');
+        $analytics->trackProductImpressions($request, $secondRowProducts, 'home_'.$secondRowType);
         $analytics->trackProductImpressions($request, $conceptProducts, 'home_concept');
 
         return view('home', [
@@ -29,6 +30,8 @@ class HomeController extends Controller
             'featuredProducts' => $featuredProducts,
             'discountProducts' => $discountProducts,
             'latestProducts' => $latestProducts,
+            'secondRowProducts' => $secondRowProducts,
+            'secondRowType' => $secondRowType,
             'conceptProducts' => $conceptProducts,
             'flashSales' => $cache->flashSales(),
             'homeInfoMenuItems' => $cache->menuItems(NavigationMenuItem::PLACEMENT_HOME_INFO),
