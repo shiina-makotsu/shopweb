@@ -68,7 +68,6 @@ class SupportChatSessionResource extends Resource
     public static function getEloquentQuery(): Builder
     {
         return parent::getEloquentQuery()
-            ->whereNotNull('user_id')
             ->whereHas('messages');
     }
 
@@ -301,7 +300,6 @@ class SupportChatSessionResource extends Resource
     protected static function pendingReceptionQuery(): Builder
     {
         return SupportChatSession::query()
-            ->whereNotNull('user_id')
             ->where('status', SupportChatSession::STATUS_OPEN)
             ->whereNull('assigned_admin_id')
             ->whereHas('messages', fn (Builder $query): Builder => $query->whereIn('sender_type', ['customer', 'guest']));
@@ -310,10 +308,9 @@ class SupportChatSessionResource extends Resource
     protected static function unreadCustomerMessageQuery(): Builder
     {
         return SupportChatSession::query()
-            ->whereNotNull('user_id')
             ->whereNotIn('status', [SupportChatSession::STATUS_ENDED, SupportChatSession::STATUS_CLOSED])
             ->whereHas('messages', fn (Builder $query): Builder => $query
-                ->where('sender_type', SupportChatMessage::SENDER_CUSTOMER)
+                ->whereIn('sender_type', [SupportChatMessage::SENDER_CUSTOMER, SupportChatMessage::SENDER_GUEST])
                 ->whereNull('read_at'));
     }
 }

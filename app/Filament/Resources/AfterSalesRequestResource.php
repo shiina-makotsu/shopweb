@@ -233,6 +233,15 @@ class AfterSalesRequestResource extends Resource
                                 }
                             }
                         }
+
+                        if ($resolutionType === AfterSalesRequest::RESOLUTION_REFUND && $record->order) {
+                            app(\App\Services\WalletService::class)->refundOrderPayment(
+                                $record->order,
+                                (int) ($data['refund_amount_cents'] ?? 0),
+                                auth()->user(),
+                                '售后退款退回钱包',
+                            );
+                        }
                     }),
             ]);
     }

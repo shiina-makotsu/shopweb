@@ -123,116 +123,130 @@
         </a>
     </section>
 
-    @if($featuredProducts->isNotEmpty())
-        <section class="mb-4 rounded-sm border border-slate-300 bg-white">
-            <div class="flex items-center justify-between border-b border-slate-200 bg-slate-100 px-4 py-2">
-                <h2 class="text-base font-semibold">推荐商品</h2>
-                <a class="text-sm text-blue-700 hover:text-blue-900" href="{{ route('products.index', ['featured' => 1]) }}">查看全部</a>
-            </div>
-            <div class="grid grid-cols-2 gap-px bg-slate-200 xl:grid-cols-4">
-                @foreach($featuredProducts as $product)
-                    <x-product-card :product="$product" />
-                @endforeach
-            </div>
-        </section>
-    @endif
+    @foreach($homeProductSectionOrder as $homeProductSection)
+        @switch($homeProductSection)
+            @case('featured')
+                @if($featuredProducts->isNotEmpty())
+                    <section class="mb-4 rounded-sm border border-slate-300 bg-white">
+                        <div class="flex items-center justify-between border-b border-slate-200 bg-slate-100 px-4 py-2">
+                            <h2 class="text-base font-semibold">推荐商品</h2>
+                            <a class="text-sm text-blue-700 hover:text-blue-900" href="{{ route('products.index', ['featured' => 1]) }}">查看全部</a>
+                        </div>
+                        <div class="grid grid-cols-2 gap-px bg-slate-200 xl:grid-cols-4">
+                            @foreach($featuredProducts as $product)
+                                <x-product-card :product="$product" />
+                            @endforeach
+                        </div>
+                    </section>
+                @endif
+                @break
 
-    @if($discountProducts->isNotEmpty())
-        <section class="mb-4 rounded-sm border border-slate-300 bg-white">
-            <div class="flex items-center justify-between border-b border-slate-200 bg-slate-100 px-4 py-2">
-                <h2 class="text-base font-semibold">折扣商品</h2>
-                <a class="text-sm text-blue-700 hover:text-blue-900" href="{{ route('products.index', ['discount' => 1]) }}">查看全部</a>
-            </div>
-            <div class="grid grid-cols-2 gap-px bg-slate-200 xl:grid-cols-4">
-                @foreach($discountProducts as $product)
-                    <x-product-card :product="$product" />
-                @endforeach
-            </div>
-        </section>
-    @endif
+            @case('discount')
+                @if($discountProducts->isNotEmpty())
+                    <section class="mb-4 rounded-sm border border-slate-300 bg-white">
+                        <div class="flex items-center justify-between border-b border-slate-200 bg-slate-100 px-4 py-2">
+                            <h2 class="text-base font-semibold">折扣商品</h2>
+                            <a class="text-sm text-blue-700 hover:text-blue-900" href="{{ route('products.index', ['discount' => 1]) }}">查看全部</a>
+                        </div>
+                        <div class="grid grid-cols-2 gap-px bg-slate-200 xl:grid-cols-4">
+                            @foreach($discountProducts as $product)
+                                <x-product-card :product="$product" />
+                            @endforeach
+                        </div>
+                    </section>
+                @endif
+                @break
 
-    <section class="mb-4 rounded-sm border border-slate-300 bg-white">
-        <div class="flex items-center justify-between border-b border-slate-200 bg-slate-100 px-4 py-2">
-            <h2 class="text-base font-semibold">默认商品</h2>
-            <a class="text-sm text-blue-700 hover:text-blue-900" href="{{ route('products.index') }}">商品列表</a>
-        </div>
-        <div class="grid grid-cols-2 gap-px bg-slate-200 xl:grid-cols-4">
-            @forelse($latestProducts as $product)
-                <x-product-card :product="$product" />
-            @empty
-                <div class="col-span-full bg-white px-4 py-8 text-sm text-slate-600">暂无商品，管理员可进入后台创建。</div>
-            @endforelse
-        </div>
-    </section>
-
-    <section class="mb-4 rounded-sm border border-slate-300 bg-white">
-        <div class="flex items-center justify-between border-b border-slate-200 bg-slate-100 px-4 py-2">
-            <h2 class="text-base font-semibold">秒杀商品</h2>
-            <a class="text-sm text-blue-700 hover:text-blue-900" href="{{ route('products.index') }}">查看全部</a>
-        </div>
-        <div class="grid grid-cols-2 gap-px bg-slate-200 xl:grid-cols-4">
-            @forelse($flashSales as $flashSale)
-                @php($product = $flashSale->product)
-                <article class="bg-white p-3">
-                    <a href="{{ $product->showUrl() }}" class="block">
-                        @if($product->coverMedia)
-                            @if($product->coverMedia->isVideo())
-                                <video src="{{ $product->coverMedia->url() }}" class="aspect-square w-full rounded-sm bg-black object-contain" muted preload="metadata"></video>
-                            @else
-                                <img src="{{ $product->coverMedia->url() }}" alt="{{ $product->coverMedia->alt ?? $product->title }}" class="aspect-square w-full rounded-sm object-cover">
-                            @endif
-                        @else
-                            <div class="flex aspect-square items-center justify-center rounded-sm bg-slate-100 text-sm text-slate-500">暂无图片</div>
-                        @endif
-                    </a>
-                    <div class="mt-3 space-y-2">
-                        <a href="{{ $product->showUrl() }}" class="block min-h-10 text-sm font-medium leading-5 hover:text-blue-800">{{ $product->title }}</a>
-                        <p class="text-base font-semibold text-red-700">@money($flashSale->sale_price_cents)</p>
-                        @if($flashSale->starts_at->isFuture())
-                            <p class="text-xs text-slate-600">下次秒杀：{{ $flashSale->starts_at->format('m-d H:i') }}</p>
-                        @else
-                            <p class="text-xs text-slate-600">本场剩余：{{ $flashSale->availableQuantity() }} 件</p>
-                        @endif
-                        @if($flashSale->starts_at->isFuture())
-                            <button class="w-full rounded-sm border border-slate-300 bg-slate-100 px-3 py-2 text-xs font-medium text-slate-600" type="button" disabled>未开始</button>
-                        @else
-                            @auth
-                                @if($flashSale->isAvailable())
-                                    <form method="post" action="{{ route('flash-sales.reserve', $flashSale) }}">
-                                        @csrf
-                                        <input type="hidden" name="quantity" value="1">
-                                        <button class="w-full rounded-sm border border-pink-600 bg-pink-600 px-3 py-2 text-xs font-medium text-white hover:bg-pink-700" type="submit">马上抢</button>
-                                    </form>
-                                @else
-                                    <button class="w-full rounded-sm border border-slate-300 bg-slate-100 px-3 py-2 text-xs font-medium text-slate-600" type="button" disabled>已抢完</button>
-                                @endif
-                            @else
-                                @if($flashSale->isAvailable())
-                                    <a class="block rounded-sm border border-pink-600 bg-pink-600 px-3 py-2 text-center text-xs font-medium text-white hover:bg-pink-700" href="{{ route('login') }}">登录后抢</a>
-                                @else
-                                    <button class="w-full rounded-sm border border-slate-300 bg-slate-100 px-3 py-2 text-xs font-medium text-slate-600" type="button" disabled>已抢完</button>
-                                @endif
-                            @endauth
-                        @endif
+            @case('default')
+                <section class="mb-4 rounded-sm border border-slate-300 bg-white">
+                    <div class="flex items-center justify-between border-b border-slate-200 bg-slate-100 px-4 py-2">
+                        <h2 class="text-base font-semibold">默认商品</h2>
+                        <a class="text-sm text-blue-700 hover:text-blue-900" href="{{ route('products.index') }}">商品列表</a>
                     </div>
-                </article>
-            @empty
-                <div class="col-span-full bg-white px-4 py-8 text-sm text-slate-600">暂无秒杀商品。</div>
-            @endforelse
-        </div>
-    </section>
+                    <div class="grid grid-cols-2 gap-px bg-slate-200 xl:grid-cols-4">
+                        @forelse($latestProducts as $product)
+                            <x-product-card :product="$product" />
+                        @empty
+                            <div class="col-span-full bg-white px-4 py-8 text-sm text-slate-600">暂无商品，管理员可进入后台创建。</div>
+                        @endforelse
+                    </div>
+                </section>
+                @break
 
-    <section class="mb-4 rounded-sm border border-slate-300 bg-white">
-        <div class="flex items-center justify-between border-b border-slate-200 bg-slate-100 px-4 py-2">
-            <h2 class="text-base font-semibold">概念商品</h2>
-            <a class="text-sm text-blue-700 hover:text-blue-900" href="{{ route('products.index', ['status' => \App\Models\Product::STATUS_CONCEPT]) }}">查看全部</a>
-        </div>
-        <div class="grid grid-cols-2 gap-px bg-slate-200 xl:grid-cols-4">
-            @forelse($conceptProducts as $product)
-                <x-product-card :product="$product" />
-            @empty
-                <div class="col-span-full bg-white px-4 py-8 text-sm text-slate-600">暂无概念商品。</div>
-            @endforelse
-        </div>
-    </section>
+            @case('flash')
+                <section class="mb-4 rounded-sm border border-slate-300 bg-white">
+                    <div class="flex items-center justify-between border-b border-slate-200 bg-slate-100 px-4 py-2">
+                        <h2 class="text-base font-semibold">秒杀商品</h2>
+                        <a class="text-sm text-blue-700 hover:text-blue-900" href="{{ route('products.index') }}">查看全部</a>
+                    </div>
+                    <div class="grid grid-cols-2 gap-px bg-slate-200 xl:grid-cols-4">
+                        @forelse($flashSales as $flashSale)
+                            @php($product = $flashSale->product)
+                            <article class="bg-white p-3">
+                                <a href="{{ $product->showUrl() }}" class="block">
+                                    @if($product->coverMedia)
+                                        @if($product->coverMedia->isVideo())
+                                            <video src="{{ $product->coverMedia->url() }}" class="aspect-square w-full rounded-sm bg-black object-contain" muted preload="metadata"></video>
+                                        @else
+                                            <img src="{{ $product->coverMedia->url() }}" alt="{{ $product->coverMedia->alt ?? $product->title }}" class="aspect-square w-full rounded-sm object-cover">
+                                        @endif
+                                    @else
+                                        <div class="flex aspect-square items-center justify-center rounded-sm bg-slate-100 text-sm text-slate-500">暂无图片</div>
+                                    @endif
+                                </a>
+                                <div class="mt-3 space-y-2">
+                                    <a href="{{ $product->showUrl() }}" class="block min-h-10 text-sm font-medium leading-5 hover:text-blue-800">{{ $product->title }}</a>
+                                    <p class="text-base font-semibold text-red-700">@money($flashSale->sale_price_cents)</p>
+                                    @if($flashSale->starts_at->isFuture())
+                                        <p class="text-xs text-slate-600">下次秒杀：{{ $flashSale->starts_at->format('m-d H:i') }}</p>
+                                    @else
+                                        <p class="text-xs text-slate-600">本场剩余：{{ $flashSale->availableQuantity() }} 件</p>
+                                    @endif
+                                    @if($flashSale->starts_at->isFuture())
+                                        <button class="w-full rounded-sm border border-slate-300 bg-slate-100 px-3 py-2 text-xs font-medium text-slate-600" type="button" disabled>未开始</button>
+                                    @else
+                                        @auth
+                                            @if($flashSale->isAvailable())
+                                                <form method="post" action="{{ route('flash-sales.reserve', $flashSale) }}">
+                                                    @csrf
+                                                    <input type="hidden" name="quantity" value="1">
+                                                    <button class="w-full rounded-sm border border-pink-600 bg-pink-600 px-3 py-2 text-xs font-medium text-white hover:bg-pink-700" type="submit">马上抢</button>
+                                                </form>
+                                            @else
+                                                <button class="w-full rounded-sm border border-slate-300 bg-slate-100 px-3 py-2 text-xs font-medium text-slate-600" type="button" disabled>已抢完</button>
+                                            @endif
+                                        @else
+                                            @if($flashSale->isAvailable())
+                                                <a class="block rounded-sm border border-pink-600 bg-pink-600 px-3 py-2 text-center text-xs font-medium text-white hover:bg-pink-700" href="{{ route('login') }}">登录后抢</a>
+                                            @else
+                                                <button class="w-full rounded-sm border border-slate-300 bg-slate-100 px-3 py-2 text-xs font-medium text-slate-600" type="button" disabled>已抢完</button>
+                                            @endif
+                                        @endauth
+                                    @endif
+                                </div>
+                            </article>
+                        @empty
+                            <div class="col-span-full bg-white px-4 py-8 text-sm text-slate-600">暂无秒杀商品。</div>
+                        @endforelse
+                    </div>
+                </section>
+                @break
+
+            @case('concept')
+                <section class="mb-4 rounded-sm border border-slate-300 bg-white">
+                    <div class="flex items-center justify-between border-b border-slate-200 bg-slate-100 px-4 py-2">
+                        <h2 class="text-base font-semibold">概念商品</h2>
+                        <a class="text-sm text-blue-700 hover:text-blue-900" href="{{ route('products.index', ['status' => \App\Models\Product::STATUS_CONCEPT]) }}">查看全部</a>
+                    </div>
+                    <div class="grid grid-cols-2 gap-px bg-slate-200 xl:grid-cols-4">
+                        @forelse($conceptProducts as $product)
+                            <x-product-card :product="$product" />
+                        @empty
+                            <div class="col-span-full bg-white px-4 py-8 text-sm text-slate-600">暂无概念商品。</div>
+                        @endforelse
+                    </div>
+                </section>
+                @break
+        @endswitch
+    @endforeach
 </x-layouts.app>

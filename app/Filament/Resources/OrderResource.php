@@ -91,6 +91,9 @@ class OrderResource extends Resource
                 TextInput::make('shipping_fee_cents')->label('邮费')->disabled()->formatStateUsing(fn ($state): string => Money::format((int) $state)),
                 TextInput::make('total_cents')->label('应付')->disabled()->formatStateUsing(fn ($state): string => Money::format((int) $state)),
                 TextInput::make('coupon_code')->label('优惠码')->disabled(),
+                Placeholder::make('private_shipping_requested_display')
+                    ->label('私密发货')
+                    ->content(fn (?Order $record): string => $record?->private_shipping_requested ? '需要私密发货（替换原产品包装）' : '不需要'),
                 TextInput::make('payment_proof_path')->label('付款凭证路径')->disabled()->columnSpanFull(),
                 Textarea::make('payment_text_proof')->label('口令红包 / 文字付款凭证')->disabled()->rows(3)->columnSpanFull(),
                 Placeholder::make('user_deleted_flag')
@@ -322,6 +325,7 @@ class OrderResource extends Resource
         $contactName = e($record->contact_name ?: '-');
         $contactPhone = e($record->contact_phone ?: '-');
         $contactEmail = e($record->contact_email ?: '-');
+        $privateShipping = e($record->private_shipping_requested ? '需要私密发货（替换原产品包装）' : '不需要');
         $copyAddress = e(implode("\n", array_filter([
             $record->contact_name,
             $record->contact_phone,
@@ -359,6 +363,8 @@ class OrderResource extends Resource
                         <div style="word-break:break-all;">{$contactPhone}</div>
                         <strong style="color:#475569;">邮箱</strong>
                         <div style="word-break:break-all;">{$contactEmail}</div>
+                        <strong style="color:#475569;">私密发货</strong>
+                        <div style="word-break:break-word;">{$privateShipping}</div>
                         <strong style="color:#475569;">收货地址</strong>
                         <div style="word-break:break-word;overflow-wrap:anywhere;white-space:normal;min-width:0;">{$address}</div>
                         <span></span>

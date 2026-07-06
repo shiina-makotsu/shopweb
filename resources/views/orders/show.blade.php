@@ -141,11 +141,12 @@
                             <div class="mb-3 rounded-sm border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
                                 当前支付方式：<span class="font-semibold">{{ $order->paymentMethodLabel() }}</span>
                             </div>
-                            @if($order->payment_method === \App\Models\Order::PAYMENT_METHOD_WALLET)
+                            @if((int) $order->wallet_payment_cents > 0)
                                 <div class="mb-4 rounded-sm border border-emerald-200 bg-emerald-50 px-3 py-3 text-emerald-900">
-                                    钱包已抵扣 @money((int) $order->wallet_payment_cents)。若仍有尾款，请继续选择二维码或口令红包补齐。
+                                    钱包已自动抵扣 @money((int) $order->wallet_payment_cents)；还需支付 @money((int) $order->total_cents)。
                                 </div>
-                            @elseif($order->payment_method === \App\Models\Order::PAYMENT_METHOD_PAYPAL && $paypalEmail)
+                            @endif
+                            @if($order->payment_method === \App\Models\Order::PAYMENT_METHOD_PAYPAL && $paypalEmail)
                                 <div class="mb-4 rounded-sm border border-blue-200 bg-blue-50 px-3 py-3 text-blue-900">
                                     <p class="font-medium">PayPal 收款邮箱</p>
                                     <p class="mt-1 break-all">{{ $paypalEmail }}</p>
@@ -165,7 +166,7 @@
                                 @endif
                             </div>
                             {{ \App\Support\Markdown::render($settings?->payment_instructions ?: "请按页面显示的付款备注单号完成转账，并上传付款截图。\n\n截图上传后系统会自动识别并显示付款成功。请联系管理员获取付款方式。") }}
-                            @if($fallbackQrUrl || $friendQrUrl || $paypalEmail || ($fallbackPayment['password_red_packet_enabled'] ?? false) || ($fallbackPayment['wallet_enabled'] ?? false) || ($fallbackPayment['support_enabled'] ?? true))
+                            @if($fallbackQrUrl || $friendQrUrl || $paypalEmail || ($fallbackPayment['password_red_packet_enabled'] ?? false) || ($fallbackPayment['support_enabled'] ?? true))
                                 <button class="mt-4 rounded-sm border border-amber-300 bg-white px-3 py-2 text-sm font-medium text-amber-900 hover:bg-amber-50" type="button" data-payment-fallback-toggle>
                                     支付失败 / 付款码不可用
                                 </button>
@@ -196,14 +197,6 @@
                                             @csrf
                                             <input type="hidden" name="payment_method" value="{{ \App\Models\Order::PAYMENT_METHOD_RED_PACKET }}">
                                             <button class="rounded-sm border border-amber-700 bg-white px-3 py-2 text-xs font-medium text-amber-900 hover:bg-amber-100" type="submit">改用口令红包支付</button>
-                                        </form>
-                                    @endif
-                                    @if($fallbackPayment['wallet_enabled'] ?? false)
-                                        <p class="mt-3 whitespace-pre-line text-sm">{{ $fallbackPayment['wallet_note'] ?? '钱包充值功能预留中，可使用兑换码或联系客服协助充值。' }}</p>
-                                        <form class="mt-2" method="post" action="{{ route('orders.payment-method', $order) }}">
-                                            @csrf
-                                            <input type="hidden" name="payment_method" value="{{ \App\Models\Order::PAYMENT_METHOD_WALLET }}">
-                                            <button class="rounded-sm border border-emerald-700 bg-white px-3 py-2 text-xs font-medium text-emerald-900 hover:bg-emerald-50" type="submit">使用钱包余额支付</button>
                                         </form>
                                     @endif
                                     @if($paypalEmail && $order->payment_method !== \App\Models\Order::PAYMENT_METHOD_PAYPAL)

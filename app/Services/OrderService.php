@@ -72,6 +72,7 @@ class OrderService
                 'contact_phone' => $data['contact_phone'],
                 'contact_email' => $data['contact_email'] ?? null,
                 'requires_shipping' => (bool) ($data['requires_shipping'] ?? false),
+                'private_shipping_requested' => (bool) ($data['private_shipping_requested'] ?? false),
                 'shipping_address' => $shippingAddress,
                 'shipping_province' => $shippingQuote['province'],
                 'shipping_city' => $data['shipping_city'] ?? null,
@@ -146,17 +147,7 @@ class OrderService
                 ]);
             }
 
-            if (($data['payment_method'] ?? Order::PAYMENT_METHOD_QR_CODE) === Order::PAYMENT_METHOD_WALLET) {
-                $walletPayment = app(WalletService::class)->applyAvailableBalanceToOrder($user, $order, $totalCents, $user);
-
-                if ($walletPayment) {
-                    $walletPaymentCents = abs((int) $walletPayment->amount_cents);
-                    $order->forceFill([
-                        'wallet_payment_cents' => $walletPaymentCents,
-                        'total_cents' => max(0, $totalCents - $walletPaymentCents),
-                    ])->save();
-                }
-            }
+            app(WalletService::class)->applyAvailableBalanceAndUpdateOrder($user, $order, $totalCents, $user);
 
             $this->cart->clear();
 
@@ -239,7 +230,7 @@ class OrderService
     {
         DB::transaction(function () use ($order, $actor): void {
             $order = Order::query()->whereKey($order->id)->lockForUpdate()->firstOrFail();
-            $order->loadMissing('items.product');
+            $order->loadMissing('items.product', 'user');
 
             if ($order->payment_status === Order::PAYMENT_CONFIRMED && $order->paid_at) {
                 return;
@@ -281,6 +272,35 @@ class OrderService
             $order->couponRedemptions()->update([
                 'status' => CouponRedemption::STATUS_CONFIRMED,
             ]);
+
+            if ($order->user) {
+                $productIds = $order->items
+                    ->pluck('product_id')
+                    ->map(fn ($id): int => (int) $id)
+                    ->filter()
+                    ->unique()
+                    ->values()
+                    ->all();
+
+                app(ReferralRewardService::class)->grantForEvent(
+                    $order->user,
+                    \App\Models\ReferralRewardRule::EVENT_ORDER_PAID_PRODUCT,
+                    $order,
+                    [
+                        'product_ids' => $productIds,
+                        'note' => '购买商品奖励：'.$order->order_number,
+                    ],
+                );
+
+                if ((int) $order->wallet_payment_cents > 0) {
+                    app(ReferralRewardService::class)->grantForEvent(
+                        $order->user,
+                        \App\Models\ReferralRewardRule::EVENT_WALLET_PAYMENT_USED,
+                        $order,
+                        ['note' => '使用钱包付款奖励：'.$order->order_number],
+                    );
+                }
+            }
 
             $this->activity->log('order_payment_confirmed', $order, $order->order_number, [
                 'status' => $nextStatus,
@@ -637,6 +657,13 @@ class OrderService
             $order->couponRedemptions()->update([
                 'status' => CouponRedemption::STATUS_RELEASED,
             ]);
+
+            app(WalletService::class)->refundOrderPayment(
+                $order,
+                (int) $order->wallet_payment_cents,
+                $actor,
+                '订单取消退回钱包：'.$order->order_number,
+            );
 
             if ($actor && $actor->role !== 'customer') {
                 $this->activity->log('order_cancelled', $order, $order->order_number, [

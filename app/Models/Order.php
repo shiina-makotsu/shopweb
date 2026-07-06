@@ -56,6 +56,7 @@ class Order extends Model
         'contact_phone',
         'contact_email',
         'requires_shipping',
+        'private_shipping_requested',
         'shipping_address',
         'shipping_province',
         'shipping_city',
@@ -91,6 +92,7 @@ class Order extends Model
     {
         return [
             'requires_shipping' => 'boolean',
+            'private_shipping_requested' => 'boolean',
             'is_wallet_recharge' => 'boolean',
             'shipment_plan' => 'array',
             'digital_delivery_attachment_paths' => 'array',

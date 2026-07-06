@@ -10,6 +10,7 @@ use App\Models\Category;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Resources\Resource;
@@ -42,6 +43,15 @@ class CategoryResource extends Resource
             TextInput::make('slug')->label('Slug')->required()->unique(ignoreRecord: true)->maxLength(255),
             TextInput::make('sort_order')->label('排序')->numeric()->default(0),
             Toggle::make('is_active')->label('启用')->default(true),
+            Select::make('private_shipping_default')
+                ->label('私密发货默认值')
+                ->options([
+                    '' => '未设置',
+                    '0' => '默认不选择私密发货',
+                    '1' => '默认选择私密发货',
+                ])
+                ->dehydrateStateUsing(fn ($state): ?bool => $state === '' || $state === null ? null : $state === '1')
+                ->formatStateUsing(fn ($state): string => $state === null ? '' : ((bool) $state ? '1' : '0')),
         ]);
     }
 

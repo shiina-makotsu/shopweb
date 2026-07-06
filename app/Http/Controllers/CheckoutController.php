@@ -53,6 +53,7 @@ class CheckoutController extends Controller
             'regionTree' => ChinaRegions::regionTreeForForms(),
             'shippingProvince' => $shippingQuote['province'],
             'shippingQuote' => $shippingQuote,
+            'privateShippingDefault' => $cart->items()->contains(fn (array $item): bool => $item['product']->defaultsToPrivateShipping()),
             'availableCouponsByVariant' => $coupons->availableForCart($request->user(), $cart->items()),
         ]);
     }
@@ -77,6 +78,7 @@ class CheckoutController extends Controller
             'shipping_district' => ['nullable', 'string', 'max:100'],
             'shipping_street' => ['nullable', 'string', 'max:100'],
             'shipping_detail' => [$requiresShipping ? 'required' : 'nullable', 'string', 'max:255'],
+            'private_shipping_requested' => ['nullable', 'boolean'],
             'customer_note' => ['nullable', 'string', 'max:1000'],
             'payment_method' => ['nullable', 'string', 'in:'.implode(',', [
                 Order::PAYMENT_METHOD_QR_CODE,
@@ -93,6 +95,7 @@ class CheckoutController extends Controller
         ])->validate();
 
         $data['requires_shipping'] = $requiresShipping;
+        $data['private_shipping_requested'] = $requiresShipping && (bool) ($data['private_shipping_requested'] ?? false);
         $data['payment_method'] ??= Order::PAYMENT_METHOD_QR_CODE;
 
         if ($data['payment_method'] === Order::PAYMENT_METHOD_PAYPAL && ! SiteSetting::query()->first()?->paypalEmail()) {

@@ -264,6 +264,25 @@ class Product extends Model
         return in_array($this->fulfillment_type, [self::FULFILLMENT_LOGISTICS, self::FULFILLMENT_SHIPPING_LEGACY], true);
     }
 
+    public function defaultsToPrivateShipping(): bool
+    {
+        $this->loadMissing(['category', 'tags']);
+
+        $tagDefaults = $this->tags
+            ->map(fn (ProductTag $tag): ?bool => $tag->private_shipping_default)
+            ->filter(fn (?bool $value): bool => $value !== null);
+
+        if ($tagDefaults->contains(true)) {
+            return true;
+        }
+
+        if ($tagDefaults->contains(false)) {
+            return false;
+        }
+
+        return (bool) ($this->category?->private_shipping_default ?? false);
+    }
+
     public function hasUnlimitedStock(): bool
     {
         return in_array($this->fulfillment_type, [self::FULFILLMENT_ONLINE, self::FULFILLMENT_CONTACT_LEGACY], true)

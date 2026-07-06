@@ -3,9 +3,11 @@
 namespace App\Filament\Pages;
 
 use App\Models\WalletRechargeOption;
+use App\Filament\Resources\WalletRedeemCodeResource;
 use App\Support\AdminAccess;
 use App\Support\CurrencyUnit;
 use App\Support\MoneyInput;
+use Filament\Actions\Action;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\TextInput;
@@ -21,7 +23,7 @@ class WalletSettingsPage extends Page implements HasSchemas
 {
     use \Filament\Schemas\Concerns\InteractsWithSchemas;
 
-    protected static ?string $navigationLabel = '钱包设置';
+    protected static ?string $navigationLabel = '钱包';
     protected static string|\UnitEnum|null $navigationGroup = '交易';
     protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedBanknotes;
     protected static ?int $navigationSort = 9;
@@ -55,7 +57,16 @@ class WalletSettingsPage extends Page implements HasSchemas
 
     public function getTitle(): string
     {
-        return '钱包设置';
+        return '钱包';
+    }
+
+    protected function getHeaderActions(): array
+    {
+        return [
+            Action::make('redeemCodes')
+                ->label('兑换码管理')
+                ->url(WalletRedeemCodeResource::getUrl('index')),
+        ];
     }
 
     public static function canAccess(): bool

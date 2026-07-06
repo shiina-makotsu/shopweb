@@ -45,6 +45,7 @@ class FlashSaleCheckoutController extends Controller
             'product' => $item->flashSale->product,
             'quantity' => $item->quantity,
             'variants' => $service->variantsFor($order),
+            'privateShippingDefault' => $item->flashSale->product->defaultsToPrivateShipping(),
         ]);
     }
 
@@ -63,6 +64,7 @@ class FlashSaleCheckoutController extends Controller
             'contact_phone' => ['required', 'string', 'max:50'],
             'contact_email' => ['nullable', 'email', 'max:255'],
             'shipping_address' => [$requiresShipping ? 'required' : 'nullable', 'string', 'max:500'],
+            'private_shipping_requested' => ['nullable', 'boolean'],
             'customer_note' => ['nullable', 'string', 'max:1000'],
             'payment_method' => ['nullable', 'string', 'in:'.implode(',', [
                 Order::PAYMENT_METHOD_QR_CODE,
@@ -73,6 +75,7 @@ class FlashSaleCheckoutController extends Controller
         ]);
 
         $data['payment_method'] ??= Order::PAYMENT_METHOD_QR_CODE;
+        $data['private_shipping_requested'] = $requiresShipping && (bool) ($data['private_shipping_requested'] ?? false);
 
         if ($data['payment_method'] === Order::PAYMENT_METHOD_PAYPAL && ! SiteSetting::query()->first()?->paypalEmail()) {
             throw ValidationException::withMessages(['payment_method' => 'PayPal 收款邮箱未配置，暂不能使用 PayPal 支付。']);

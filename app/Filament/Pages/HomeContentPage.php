@@ -4,8 +4,10 @@ namespace App\Filament\Pages;
 
 use App\Models\MediaAsset;
 use App\Models\SiteSetting;
+use App\Services\StorefrontCache;
 use App\Support\AdminAccess;
 use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\MarkdownEditor;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -13,6 +15,8 @@ use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Tabs;
+use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Contracts\HasSchemas;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
@@ -33,11 +37,17 @@ class HomeContentPage extends Page implements HasSchemas
 
     public function mount(): void
     {
-        $this->form->fill($this->settings()->only([
+        $settings = $this->settings();
+
+        $this->form->fill(array_merge($settings->only([
             'home_welcome_enabled',
             'home_title',
             'home_welcome_image_path',
             'home_content',
+        ]), [
+            'home_product_section_order' => collect($settings->homeProductSectionOrder())
+                ->map(fn (string $section): array => ['section' => $section])
+                ->all(),
         ]));
     }
 
@@ -56,35 +66,70 @@ class HomeContentPage extends Page implements HasSchemas
         return $schema
             ->statePath('data')
             ->components([
-                Section::make('首页欢迎区')->schema([
-                    Toggle::make('home_welcome_enabled')
-                        ->label('显示首页欢迎区')
-                        ->default(true),
-                    TextInput::make('home_title')->label('欢迎区标题')->maxLength(255),
-                    self::imagePathSelect('home_welcome_image_path', '欢迎区图片', '可从资源管理选择已有图片；也可以点击加号直接上传新图片。'),
-                    MarkdownEditor::make('home_content')
-                        ->label('欢迎区正文')
-                        ->fileAttachmentsDisk('public_uploads')
-                        ->fileAttachmentsDirectory('site')
-                        ->fileAttachmentsAcceptedFileTypes(['image/png', 'image/jpeg', 'image/gif', 'image/webp'])
-                        ->fileAttachmentsMaxSize(5120)
-                        ->toolbarButtons([
-                            ['bold', 'italic', 'strike', 'link'],
-                            ['heading', 'blockquote', 'codeBlock'],
-                            ['bulletList', 'orderedList', 'table'],
-                            ['attachFiles'],
-                            ['undo', 'redo'],
-                        ])
-                        ->minHeight('24rem')
-                        ->helperText('支持 Markdown，可用附件按钮插入图片。关闭欢迎区后，该区块不会显示在首页。')
-                        ->columnSpanFull(),
-                ])->columns(2)->columnSpanFull(),
+                Tabs::make('首页设置')
+                    ->tabs([
+                        Tab::make('欢迎区')
+                            ->schema([
+                                Section::make('首页欢迎区')->schema([
+                                    Toggle::make('home_welcome_enabled')
+                                        ->label('显示首页欢迎区')
+                                        ->default(true),
+                                    TextInput::make('home_title')->label('欢迎区标题')->maxLength(255),
+                                    self::imagePathSelect('home_welcome_image_path', '欢迎区图片', '可从资源管理选择已有图片；也可以点击加号直接上传新图片。'),
+                                    MarkdownEditor::make('home_content')
+                                        ->label('欢迎区正文')
+                                        ->fileAttachmentsDisk('public_uploads')
+                                        ->fileAttachmentsDirectory('site')
+                                        ->fileAttachmentsAcceptedFileTypes(['image/png', 'image/jpeg', 'image/gif', 'image/webp'])
+                                        ->fileAttachmentsMaxSize(5120)
+                                        ->toolbarButtons([
+                                            ['bold', 'italic', 'strike', 'link'],
+                                            ['heading', 'blockquote', 'codeBlock'],
+                                            ['bulletList', 'orderedList', 'table'],
+                                            ['attachFiles'],
+                                            ['undo', 'redo'],
+                                        ])
+                                        ->minHeight('24rem')
+                                        ->helperText('支持 Markdown，可用附件按钮插入图片。关闭欢迎区后，该区块不会显示在首页。')
+                                        ->columnSpanFull(),
+                                ])->columns(2)->columnSpanFull(),
+                            ]),
+                        Tab::make('商品栏顺序')
+                            ->schema([
+                                Section::make('首页商品栏顺序')
+                                    ->description('拖动下方条目即可调整首页商品栏显示顺序。折扣商品为空时不会显示；其他栏目按配置顺序渲染。')
+                                    ->schema([
+                                        Repeater::make('home_product_section_order')
+                                            ->label('商品栏')
+                                            ->addable(false)
+                                            ->deletable(false)
+                                            ->reorderable()
+                                            ->itemLabel(fn (array $state): ?string => SiteSetting::homeProductSectionLabels()[$state['section'] ?? ''] ?? '商品栏')
+                                            ->schema([
+                                                Select::make('section')
+                                                    ->label('商品栏')
+                                                    ->options(SiteSetting::homeProductSectionLabels())
+                                                    ->disabled()
+                                                    ->dehydrated()
+                                                    ->required(),
+                                            ])
+                                            ->columns(1)
+                                            ->columnSpanFull(),
+                                    ])
+                                    ->columnSpanFull(),
+                            ]),
+                    ])
+                    ->columnSpanFull(),
             ]);
     }
 
     public function save(): void
     {
-        $this->settings()->update($this->form->getState());
+        $state = $this->form->getState();
+        $state['home_product_section_order'] = $this->normalizeProductSectionOrder($state['home_product_section_order'] ?? []);
+
+        $this->settings()->update($state);
+        app(StorefrontCache::class)->clear();
 
         Notification::make()->title('首页已保存')->success()->send();
     }
@@ -92,6 +137,32 @@ class HomeContentPage extends Page implements HasSchemas
     private function settings(): SiteSetting
     {
         return SiteSetting::query()->firstOrCreate([], ['site_name' => config('app.name', 'ShopWeb')]);
+    }
+
+    /**
+     * @param  array<int, mixed>  $sections
+     * @return array<int, string>
+     */
+    private function normalizeProductSectionOrder(array $sections): array
+    {
+        $allowed = array_keys(SiteSetting::homeProductSectionLabels());
+        $ordered = [];
+
+        foreach ($sections as $item) {
+            $section = is_array($item) ? ($item['section'] ?? null) : $item;
+
+            if (is_string($section) && in_array($section, $allowed, true) && ! in_array($section, $ordered, true)) {
+                $ordered[] = $section;
+            }
+        }
+
+        foreach (SiteSetting::defaultHomeProductSectionOrder() as $section) {
+            if (! in_array($section, $ordered, true)) {
+                $ordered[] = $section;
+            }
+        }
+
+        return $ordered;
     }
 
     private static function imagePathSelect(string $name, string $label, string $helperText): Select

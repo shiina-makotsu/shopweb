@@ -138,6 +138,55 @@ class WalletService
         });
     }
 
+    public function applyAvailableBalanceAndUpdateOrder(User $user, Order $order, int $payableCents, ?User $actor = null): ?WalletTransaction
+    {
+        $walletPayment = $this->applyAvailableBalanceToOrder($user, $order, $payableCents, $actor);
+
+        if (! $walletPayment) {
+            return null;
+        }
+
+        $walletPaymentCents = abs((int) $walletPayment->amount_cents);
+        $order->forceFill([
+            'wallet_payment_cents' => (int) $order->wallet_payment_cents + $walletPaymentCents,
+            'total_cents' => max(0, (int) $order->total_cents - $walletPaymentCents),
+        ])->save();
+
+        return $walletPayment;
+    }
+
+    public function refundOrderPayment(Order $order, int $refundAmountCents, ?User $actor = null, ?string $note = null): ?WalletTransaction
+    {
+        $walletPaidCents = (int) $order->wallet_payment_cents;
+
+        if ($walletPaidCents <= 0 || $refundAmountCents <= 0) {
+            return null;
+        }
+
+        $alreadyRefunded = (int) WalletTransaction::query()
+            ->where('order_id', $order->id)
+            ->where('source', WalletTransaction::SOURCE_ORDER_REFUND)
+            ->sum('amount_cents');
+        $refundableCents = max(0, $walletPaidCents - $alreadyRefunded);
+        $amountCents = min($refundableCents, $refundAmountCents);
+
+        if ($amountCents <= 0) {
+            return null;
+        }
+
+        $order->loadMissing('user');
+
+        return $this->credit(
+            $order->user,
+            $amountCents,
+            WalletTransaction::SOURCE_ORDER_REFUND,
+            $note ?: '订单退款退回钱包：'.$order->order_number,
+            $actor,
+            null,
+            $order,
+        );
+    }
+
     public function creditForRechargeOrder(Order $order, ?User $actor = null): ?WalletTransaction
     {
         if (! $order->isWalletRecharge() || (int) $order->wallet_recharge_cents <= 0) {

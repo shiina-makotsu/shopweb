@@ -18,12 +18,14 @@ class ProductTag extends Model
         'meta_description',
         'sort_order',
         'is_active',
+        'private_shipping_default',
     ];
 
     protected function casts(): array
     {
         return [
             'is_active' => 'boolean',
+            'private_shipping_default' => 'boolean',
         ];
     }
 

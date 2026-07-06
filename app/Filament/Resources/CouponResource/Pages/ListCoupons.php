@@ -25,7 +25,7 @@ class ListCoupons extends ListRecords
     {
         return [
             Action::make('referralRewards')
-                ->label('邀请奖励设置')
+                ->label('奖励规则')
                 ->url(\App\Filament\Resources\ReferralRewardRuleResource::getUrl('index')),
             CouponResource::issueCouponHeaderAction(),
             CreateAction::make(),

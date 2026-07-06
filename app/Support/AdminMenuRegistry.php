@@ -143,6 +143,10 @@ class AdminMenuRegistry
 
             foreach ($this->navigationClasses() as $class) {
                 if (! $this->shouldRegister($class)) {
+                    AdminMenuItem::query()
+                        ->where('item_key', $this->classKey($class))
+                        ->update(['is_active' => false]);
+
                     continue;
                 }
 
@@ -181,6 +185,7 @@ class AdminMenuRegistry
         });
 
         $this->syncedDefaults = true;
+        $this->clearCache();
     }
 
     /**

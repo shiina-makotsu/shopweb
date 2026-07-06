@@ -43,6 +43,13 @@
                                 <span class="text-sm font-medium">收货地址</span>
                                 <textarea class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2 text-sm" name="shipping_address" rows="3" required>{{ old('shipping_address') }}</textarea>
                             </label>
+                            <label class="md:col-span-2 flex gap-3 rounded-sm border border-slate-200 bg-white px-3 py-3 text-sm">
+                                <input class="mt-1" type="checkbox" name="private_shipping_requested" value="1" @checked((bool) old('private_shipping_requested', $privateShippingDefault ?? false))>
+                                <span>
+                                    <span class="block font-medium">私密发货</span>
+                                    <span class="mt-1 block text-xs leading-5 text-slate-600">选择后会替换原产品包装，后台订单会标记该笔订单需要私密发货。</span>
+                                </span>
+                            </label>
                         @endif
                     </div>
                 </section>
@@ -76,13 +83,6 @@
                                 <span class="mt-1 block text-xs leading-5 text-slate-600">提交口令红包内容，由后台人工确认。</span>
                             </span>
                         </label>
-                        <label class="flex cursor-pointer gap-3 rounded-sm border border-slate-300 bg-white px-3 py-3 text-sm hover:bg-slate-50">
-                            <input class="mt-1" type="radio" name="payment_method" value="{{ \App\Models\Order::PAYMENT_METHOD_WALLET }}" @checked($selectedPaymentMethod === \App\Models\Order::PAYMENT_METHOD_WALLET)>
-                            <span>
-                                <span class="block font-medium">钱包余额支付</span>
-                                <span class="mt-1 block text-xs leading-5 text-slate-600">当前余额：@money((int) auth()->user()->wallet_balance_cents)。</span>
-                            </span>
-                        </label>
                         @if($paypalEmail)
                             <label class="flex cursor-pointer gap-3 rounded-sm border border-slate-300 bg-white px-3 py-3 text-sm hover:bg-slate-50">
                                 <input class="mt-1" type="radio" name="payment_method" value="{{ \App\Models\Order::PAYMENT_METHOD_PAYPAL }}" @checked($selectedPaymentMethod === \App\Models\Order::PAYMENT_METHOD_PAYPAL)>
@@ -93,6 +93,11 @@
                             </label>
                         @endif
                     </div>
+                    @if((int) auth()->user()->wallet_balance_cents > 0)
+                        <div class="mx-4 mb-4 rounded-sm border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm text-emerald-900">
+                            钱包余额 @money((int) auth()->user()->wallet_balance_cents) 会在提交订单时自动优先抵扣，余额不足时再使用上方付款方式补齐尾款。
+                        </div>
+                    @endif
                 </section>
 
                 <button class="rounded-sm border border-pink-600 bg-pink-600 px-5 py-2 text-sm font-medium text-white hover:bg-pink-700" type="submit">提交订单信息</button>

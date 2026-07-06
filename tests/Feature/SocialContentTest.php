@@ -9,12 +9,14 @@ use App\Models\PrivateMessage;
 use App\Models\Product;
 use App\Models\ProductComment;
 use App\Models\ProductVariant;
+use App\Models\ReferralRewardRule;
 use App\Models\SupportChatMessage;
 use App\Models\SupportChatSession;
 use App\Models\SupportTicket;
 use App\Models\SiteSetting;
 use App\Models\SupportQuickReply;
 use App\Models\User;
+use App\Models\WalletTransaction;
 use App\Support\ForumThreadTemplate;
 use App\Support\Url;
 use Illuminate\Http\UploadedFile;
@@ -99,6 +101,12 @@ it('lets users create forum threads and replies', function (): void {
         'slug' => 'general',
         'is_active' => true,
     ]);
+    ReferralRewardRule::query()->create([
+        'name' => 'Forum post reward',
+        'trigger_events' => [ReferralRewardRule::EVENT_FORUM_THREAD_CREATED],
+        'wallet_amount_cents' => 150,
+        'is_active' => true,
+    ]);
 
     $this->actingAs($user)
         ->post(route('forum.threads.store', $section), [
@@ -124,6 +132,11 @@ it('lets users create forum threads and replies', function (): void {
         'forum_thread_id' => $thread->id,
         'user_id' => $user->id,
         'body' => '欢迎。',
+    ]);
+    $this->assertDatabaseHas('wallet_transactions', [
+        'user_id' => $user->id,
+        'amount_cents' => 150,
+        'source' => WalletTransaction::SOURCE_EVENT_REWARD,
     ]);
 });
 

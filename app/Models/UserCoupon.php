@@ -15,6 +15,7 @@ class UserCoupon extends Model
     public const SOURCE_ADMIN = 'admin';
     public const SOURCE_AFTER_SALES = 'after_sales';
     public const SOURCE_REFERRAL = 'referral';
+    public const SOURCE_EVENT_REWARD = 'event_reward';
 
     protected $fillable = [
         'user_id',

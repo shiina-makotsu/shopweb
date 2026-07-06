@@ -41,6 +41,7 @@ class SiteSetting extends Model
         'home_welcome_image_path',
         'welcome_message',
         'home_content',
+        'home_product_section_order',
         'contact_info',
         'copyright_text',
         'payment_instructions',
@@ -114,6 +115,7 @@ class SiteSetting extends Model
             'currency_rates_updated_at' => 'datetime',
             'currency_gold_price' => 'decimal:4',
             'home_welcome_enabled' => 'boolean',
+            'home_product_section_order' => 'array',
             'page_music_enabled' => 'boolean',
             'guide_pet_enabled' => 'boolean',
             'support_ai_enabled' => 'boolean',
@@ -170,6 +172,54 @@ class SiteSetting extends Model
         $email = trim((string) ($this->payment_gateway_config['paypal_email'] ?? ''));
 
         return filter_var($email, FILTER_VALIDATE_EMAIL) ? $email : null;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public static function defaultHomeProductSectionOrder(): array
+    {
+        return ['featured', 'discount', 'default', 'flash', 'concept'];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function homeProductSectionLabels(): array
+    {
+        return [
+            'featured' => '推荐商品',
+            'discount' => '折扣商品',
+            'default' => '默认商品',
+            'flash' => '秒杀商品',
+            'concept' => '概念商品',
+        ];
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function homeProductSectionOrder(): array
+    {
+        $allowed = array_keys(self::homeProductSectionLabels());
+        $configured = is_array($this->home_product_section_order) ? $this->home_product_section_order : [];
+        $ordered = [];
+
+        foreach ($configured as $item) {
+            $key = is_array($item) ? ($item['section'] ?? null) : $item;
+
+            if (is_string($key) && in_array($key, $allowed, true) && ! in_array($key, $ordered, true)) {
+                $ordered[] = $key;
+            }
+        }
+
+        foreach (self::defaultHomeProductSectionOrder() as $key) {
+            if (! in_array($key, $ordered, true)) {
+                $ordered[] = $key;
+            }
+        }
+
+        return $ordered;
     }
 
     public function guidePetAssetUrl(): ?string

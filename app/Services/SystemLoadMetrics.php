@@ -70,6 +70,13 @@ class SystemLoadMetrics
             $counts[$scope] = (int) ($counts[$scope] ?? 0) + 1;
             Cache::put('shop:system-load:requests:last-minute', $minute, 180);
             Cache::put($key, $counts, 180);
+
+            $snapshotKey = 'shop:system-load:requests:snapshot:'.$minute;
+            if (! Cache::add($snapshotKey, true, 180)) {
+                return;
+            }
+
+            $this->record();
         } catch (Throwable) {
             //
         }

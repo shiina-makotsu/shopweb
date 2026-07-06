@@ -10,6 +10,7 @@ use App\Models\ForumThreadRead;
 use App\Models\MediaAsset;
 use App\Models\User;
 use App\Services\ForumActivityLogger;
+use App\Services\ReferralRewardService;
 use App\Support\ForumThreadTemplate;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -194,6 +195,12 @@ class ForumController extends Controller
         ]);
 
         $logger->log('thread_created', $request->user(), $thread, "发布帖子：{$thread->title}");
+        app(ReferralRewardService::class)->grantForEvent(
+            $request->user(),
+            \App\Models\ReferralRewardRule::EVENT_FORUM_THREAD_CREATED,
+            $thread,
+            ['note' => '论坛发帖奖励：'.$thread->title],
+        );
 
         return redirect()->route('forum.threads.show', [$section, $thread])->with('status', '帖子已发布。');
     }

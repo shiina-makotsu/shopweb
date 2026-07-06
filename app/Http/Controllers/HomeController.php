@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\NavigationMenuItem;
 use App\Models\AnalyticsEvent;
+use App\Models\SiteSetting;
 use App\Services\AnalyticsTracker;
 use App\Services\StorefrontCache;
 use Illuminate\Http\Request;
@@ -18,6 +19,7 @@ class HomeController extends Controller
         }
 
         $analytics->track($request, AnalyticsEvent::PAGE_VIEW, ['source' => 'home']);
+        $settings = $cache->settings();
         $featuredProducts = $cache->homeProducts('featured');
         $discountProducts = $cache->homeProducts('discount');
         $latestProducts = $cache->homeProducts('latest');
@@ -29,7 +31,8 @@ class HomeController extends Controller
         $analytics->trackProductImpressions($request, $conceptProducts, 'home_concept');
 
         return view('home', [
-            'settings' => $cache->settings(),
+            'settings' => $settings,
+            'homeProductSectionOrder' => $settings?->homeProductSectionOrder() ?? SiteSetting::defaultHomeProductSectionOrder(),
             'featuredProducts' => $featuredProducts,
             'discountProducts' => $discountProducts,
             'latestProducts' => $latestProducts,

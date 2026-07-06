@@ -115,7 +115,7 @@ class AdminSearchPage extends Page
             ['group' => '交易', 'label' => '钱包设置', 'keywords' => '钱包 充值 充值选项 折扣 赠送余额 钱包余额', 'url' => WalletSettingsPage::getUrl()],
             ['group' => '交易', 'label' => '付款校验日志', 'keywords' => '付款凭证 截图 自动校验 人工复核 订单号 金额', 'url' => PaymentVerificationLogResource::getUrl()],
             ['group' => '交易', 'label' => '优惠码', 'keywords' => '折扣 优惠码 满减 百分比', 'url' => CouponResource::getUrl()],
-            ['group' => '交易', 'label' => '邀请奖励设置', 'keywords' => '邀请 邀请码 邀请链接 优惠券 钱包余额 奖励', 'url' => ReferralRewardRuleResource::getUrl()],
+            ['group' => '交易', 'label' => '奖励规则', 'keywords' => '事件 邀请 购买商品 发帖 钱包付款 优惠券 钱包余额 奖励', 'url' => ReferralRewardRuleResource::getUrl()],
             ['group' => '交易', 'label' => '商品折扣', 'keywords' => '批量折扣 SKU 折扣价 折扣时间', 'url' => ProductDiscountPage::getUrl()],
             ['group' => '交易', 'label' => '秒杀', 'keywords' => '秒杀 抢购 限时 名额 下次秒杀', 'url' => FlashSaleResource::getUrl()],
             ['group' => '交易', 'label' => '订单状态', 'keywords' => '待付款 待发货 运输 收货 完成', 'url' => OrderStatusSettingResource::getUrl()],

@@ -18,6 +18,11 @@ class GuestSupportChatSessionResource extends SupportChatSessionResource
     protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedChatBubbleOvalLeftEllipsis;
     protected static ?int $navigationSort = 11;
 
+    public static function shouldRegisterNavigation(): bool
+    {
+        return false;
+    }
+
     public static function getEloquentQuery(): Builder
     {
         return SupportChatSession::query()

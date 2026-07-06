@@ -2,7 +2,9 @@
 
 namespace App\Filament\Pages;
 
+use App\Models\Product;
 use App\Models\ProductVariant;
+use App\Support\Money;
 use App\Services\StorefrontCache;
 use App\Support\AdminAccess;
 use App\Support\MoneyInput;
@@ -27,14 +29,18 @@ class ProductDiscountPage extends Page implements HasSchemas
     protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedReceiptPercent;
     protected static ?int $navigationSort = 22;
     protected static ?string $slug = 'product-discounts';
-    protected string $view = 'filament.pages.settings-form';
+    protected string $view = 'filament.pages.product-discount-page';
 
     /** @var array<string, mixed> */
     public array $data = [];
 
+    /** @var array<int, array<string, mixed>> */
+    public array $discountRows = [];
+
     public function mount(): void
     {
         $this->form->fill();
+        $this->syncDiscountRows();
     }
 
     public function getTitle(): string
@@ -68,7 +74,7 @@ class ProductDiscountPage extends Page implements HasSchemas
                             ->limit(200)
                             ->get()
                             ->mapWithKeys(fn (ProductVariant $variant): array => [
-                                $variant->id => ($variant->product?->title ?? '商品').' / '.$variant->sku.' / '.$variant->specLabel(),
+                                $variant->id => ($variant->product?->title ?? '商品').' / '.$this->statusLabel($variant->product?->status).' / '.$variant->sku.' / '.$variant->specLabel(),
                             ])
                             ->all()),
                     Toggle::make('discount_enabled')
@@ -132,10 +138,83 @@ class ProductDiscountPage extends Page implements HasSchemas
             app(StorefrontCache::class)->clear();
         }
 
+        $this->syncDiscountRows();
+
         Notification::make()
             ->title($discountEnabled ? '商品折扣已保存' : '商品折扣已关闭')
             ->body('已更新 '.count($ids).' 个 SKU。')
             ->success()
             ->send();
+    }
+
+    public function updateDiscount(int $variantId): void
+    {
+        $row = $this->discountRows[$variantId] ?? [];
+        $variant = ProductVariant::query()->with('product')->findOrFail($variantId);
+        $priceCents = MoneyInput::toCents($row['discount_price'] ?? null);
+
+        if ($priceCents <= 0) {
+            Notification::make()
+                ->title('折扣价必须大于 0')
+                ->danger()
+                ->send();
+
+            return;
+        }
+
+        $variant->forceFill(['discount_price_cents' => $priceCents])->save();
+        $variant->product?->touch();
+        app(StorefrontCache::class)->clear();
+        $this->syncDiscountRows();
+
+        Notification::make()
+            ->title('折扣价已更新')
+            ->body($variant->product?->title.' / '.$variant->displayName().'：'.Money::format($priceCents))
+            ->success()
+            ->send();
+    }
+
+    public function cancelDiscount(int $variantId): void
+    {
+        $variant = ProductVariant::query()->with('product')->findOrFail($variantId);
+        $variant->forceFill([
+            'discount_price_cents' => null,
+            'discount_starts_at' => null,
+            'discount_ends_at' => null,
+        ])->save();
+        $variant->product?->touch();
+        app(StorefrontCache::class)->clear();
+        $this->syncDiscountRows();
+
+        Notification::make()
+            ->title('折扣已取消')
+            ->body($variant->product?->title.' / '.$variant->displayName())
+            ->success()
+            ->send();
+    }
+
+    public function discountedVariants()
+    {
+        return ProductVariant::query()
+            ->with('product')
+            ->whereNotNull('discount_price_cents')
+            ->orderByDesc('updated_at')
+            ->get();
+    }
+
+    public function statusLabel(?string $status): string
+    {
+        return Product::statusOptions()[$status] ?? (string) ($status ?: '-');
+    }
+
+    private function syncDiscountRows(): void
+    {
+        $this->discountRows = $this->discountedVariants()
+            ->mapWithKeys(fn (ProductVariant $variant): array => [
+                $variant->id => [
+                    'discount_price' => MoneyInput::fromCents($variant->discount_price_cents),
+                ],
+            ])
+            ->all();
     }
 }

@@ -7,6 +7,7 @@ use App\Filament\Resources\ReferralRewardRuleResource\Pages\CreateReferralReward
 use App\Filament\Resources\ReferralRewardRuleResource\Pages\EditReferralRewardRule;
 use App\Filament\Resources\ReferralRewardRuleResource\Pages\ListReferralRewardRules;
 use App\Models\ReferralRewardRule;
+use App\Models\Product;
 use App\Support\CurrencyUnit;
 use App\Support\Money;
 use App\Support\MoneyInput;
@@ -19,6 +20,7 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
@@ -31,9 +33,9 @@ class ReferralRewardRuleResource extends Resource
 
     protected static ?string $model = ReferralRewardRule::class;
     protected static string $permissionArea = 'coupons';
-    protected static ?string $navigationLabel = '邀请奖励设置';
-    protected static ?string $modelLabel = '邀请奖励规则';
-    protected static ?string $pluralModelLabel = '邀请奖励规则';
+    protected static ?string $navigationLabel = '奖励规则';
+    protected static ?string $modelLabel = '事件奖励规则';
+    protected static ?string $pluralModelLabel = '事件奖励规则';
     protected static string|\UnitEnum|null $navigationGroup = '交易';
     protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedGift;
     protected static ?int $navigationSort = 21;
@@ -41,11 +43,31 @@ class ReferralRewardRuleResource extends Resource
     public static function form(Schema $schema): Schema
     {
         return $schema->components([
-            Section::make('邀请奖励')
-                ->description('用户通过邀请码注册成功后，系统会按启用的规则给邀请人发放优惠码、钱包余额，或同时发放两项。')
+            Section::make('添加事件奖励规则')
+                ->description('选择一个或多个触发事件后，用户完成对应行为即可获得同一组优惠券或钱包余额奖励。')
                 ->schema([
                     TextInput::make('name')->label('规则名称')->required()->maxLength(255),
                     Toggle::make('is_active')->label('启用')->default(true),
+                    Select::make('trigger_events')
+                        ->label('触发事件')
+                        ->multiple()
+                        ->options(ReferralRewardRule::eventOptions())
+                        ->default([ReferralRewardRule::EVENT_REFERRAL_REGISTERED])
+                        ->required()
+                        ->live(),
+                    Select::make('product_ids')
+                        ->label('指定商品')
+                        ->multiple()
+                        ->options(fn (): array => Product::query()
+                            ->orderBy('sort_order')
+                            ->orderByDesc('id')
+                            ->limit(200)
+                            ->pluck('title', 'id')
+                            ->all())
+                        ->searchable()
+                        ->preload()
+                        ->helperText('仅“购买指定商品”事件使用；留空表示购买任意商品都可触发。')
+                        ->visible(fn (Get $get): bool => in_array(ReferralRewardRule::EVENT_ORDER_PAID_PRODUCT, $get('trigger_events') ?? [], true)),
                     Select::make('coupon_id')
                         ->label('自动发放优惠码')
                         ->options(fn (): array => CouponResource::couponOptions())
@@ -79,6 +101,10 @@ class ReferralRewardRuleResource extends Resource
         return $table
             ->columns([
                 TextColumn::make('name')->label('规则名称')->searchable()->sortable(),
+                TextColumn::make('event_labels')
+                    ->label('触发事件')
+                    ->badge()
+                    ->separator(','),
                 TextColumn::make('coupon.code')->label('优惠码')->placeholder('-'),
                 TextColumn::make('wallet_amount_cents')
                     ->label('钱包余额')

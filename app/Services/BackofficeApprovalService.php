@@ -110,6 +110,13 @@ class BackofficeApprovalService
             'resolved_at' => now(),
         ]);
 
+        app(WalletService::class)->refundOrderPayment(
+            $request->order,
+            $amountCents,
+            $reviewer,
+            '售后退款退回钱包',
+        );
+
         $this->addSystemMessage($session, '已登记直接退款。');
 
         return $request;
@@ -175,6 +182,17 @@ class BackofficeApprovalService
             'admin_note' => $this->appendNote($request->admin_note, $this->operatorNote($reviewer, $note)),
             'resolved_at' => now(),
         ]);
+
+        $request->loadMissing('order');
+
+        if ($request->order) {
+            app(WalletService::class)->refundOrderPayment(
+                $request->order,
+                (int) $request->refund_amount_cents,
+                $reviewer,
+                '售后退款退回钱包',
+            );
+        }
     }
 
     public function rejectRefundRequest(AfterSalesRequest $request, User $reviewer, ?string $note = null): void

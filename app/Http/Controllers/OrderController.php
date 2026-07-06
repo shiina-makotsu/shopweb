@@ -7,7 +7,6 @@ use App\Models\SiteSetting;
 use App\Services\AlertBotService;
 use App\Services\OrderService;
 use App\Services\PaymentProofStorage;
-use App\Services\WalletService;
 use App\Support\OrderPrivacy;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -147,7 +146,7 @@ class OrderController extends Controller
         return back()->with('payment_success', true);
     }
 
-    public function switchPaymentMethod(Request $request, Order $order, OrderService $orders, WalletService $wallet): RedirectResponse
+    public function switchPaymentMethod(Request $request, Order $order, OrderService $orders): RedirectResponse
     {
         $this->authorizeVisibleOrder($request, $order);
 
@@ -158,7 +157,6 @@ class OrderController extends Controller
                 Order::PAYMENT_METHOD_QR_CODE,
                 Order::PAYMENT_METHOD_FALLBACK_QR,
                 Order::PAYMENT_METHOD_RED_PACKET,
-                Order::PAYMENT_METHOD_WALLET,
                 Order::PAYMENT_METHOD_PAYPAL,
             ])],
         ]);
@@ -167,7 +165,7 @@ class OrderController extends Controller
             throw ValidationException::withMessages(['payment_method' => 'PayPal 收款邮箱未配置，暂不能使用 PayPal 支付。']);
         }
 
-        return DB::transaction(function () use ($request, $order, $orders, $wallet, $data): RedirectResponse {
+        return DB::transaction(function () use ($order, $data): RedirectResponse {
             /** @var Order $order */
             $order = Order::query()->whereKey($order->id)->lockForUpdate()->firstOrFail();
 
@@ -177,29 +175,6 @@ class OrderController extends Controller
 
             if ($order->payment_status === Order::PAYMENT_SUBMITTED) {
                 return back()->with('status', '付款信息已提交，不能再切换支付方式。');
-            }
-
-            if ($data['payment_method'] === Order::PAYMENT_METHOD_WALLET && (int) $order->total_cents > 0) {
-                $walletPayment = $wallet->applyAvailableBalanceToOrder($request->user(), $order, (int) $order->total_cents, $request->user());
-
-                if (! $walletPayment) {
-                    throw ValidationException::withMessages(['payment_method' => '钱包余额不足，无法使用钱包支付。']);
-                }
-
-                $walletPaymentCents = abs((int) $walletPayment->amount_cents);
-                $order->forceFill([
-                    'payment_method' => Order::PAYMENT_METHOD_WALLET,
-                    'wallet_payment_cents' => (int) $order->wallet_payment_cents + $walletPaymentCents,
-                    'total_cents' => max(0, (int) $order->total_cents - $walletPaymentCents),
-                ])->save();
-
-                if ((int) $order->fresh()->total_cents === 0) {
-                    $orders->confirmPayment($order->fresh(), $request->user());
-
-                    return back()->with('status', '钱包余额已完成支付，订单已确认付款。');
-                }
-
-                return back()->with('status', '已使用钱包余额抵扣，剩余金额请继续选择其他方式支付。');
             }
 
             $order->forceFill([

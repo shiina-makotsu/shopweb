@@ -90,23 +90,12 @@ class FlashSaleService
                 'contact_email' => $data['contact_email'] ?? null,
                 'payment_method' => $data['payment_method'] ?? Order::PAYMENT_METHOD_QR_CODE,
                 'shipping_address' => $data['shipping_address'] ?? null,
+                'private_shipping_requested' => (bool) ($data['private_shipping_requested'] ?? false),
                 'customer_note' => $data['customer_note'] ?? null,
             ]);
 
-            if (
-                ($data['payment_method'] ?? Order::PAYMENT_METHOD_QR_CODE) === Order::PAYMENT_METHOD_WALLET
-                && (int) $order->wallet_payment_cents <= 0
-                && $order->payment_status === Order::PAYMENT_PENDING
-            ) {
-                $walletPayment = app(WalletService::class)->applyAvailableBalanceToOrder($order->user, $order, (int) $order->total_cents, $order->user);
-
-                if ($walletPayment) {
-                    $walletPaymentCents = abs((int) $walletPayment->amount_cents);
-                    $order->forceFill([
-                        'wallet_payment_cents' => $walletPaymentCents,
-                        'total_cents' => max(0, (int) $order->total_cents - $walletPaymentCents),
-                    ])->save();
-                }
+            if ((int) $order->wallet_payment_cents <= 0 && $order->payment_status === Order::PAYMENT_PENDING) {
+                app(WalletService::class)->applyAvailableBalanceAndUpdateOrder($order->user, $order, (int) $order->total_cents, $order->user);
             }
 
             return $order->fresh(['items']);

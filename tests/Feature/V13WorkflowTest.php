@@ -378,7 +378,7 @@ it('preloads payment codes and accepts red packet text as a manual payment fallb
         ->assertSee('data-payment-countdown', false)
         ->assertSee('支付受限时的备选方案')
         ->assertSee('支付失败时请提交口令红包。')
-        ->assertSee('可联系客服充值钱包。');
+        ->assertDontSee('可联系客服充值钱包。');
 
     $this->actingAs($user)
         ->post(route('orders.payment-proof', $order), [

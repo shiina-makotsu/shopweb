@@ -35,6 +35,11 @@ class WalletRedeemCodeResource extends Resource
     protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedBanknotes;
     protected static ?int $navigationSort = 8;
 
+    public static function shouldRegisterNavigation(): bool
+    {
+        return false;
+    }
+
     public static function canCreate(): bool
     {
         return static::canAccess();

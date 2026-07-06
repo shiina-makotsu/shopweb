@@ -21,6 +21,8 @@ class ListSupportChatSessions extends ListRecords
     public function getTabs(): array
     {
         return [
+            'all' => Tab::make('全部会话')
+                ->badge(fn (): string => (string) static::getResource()::getEloquentQuery()->count()),
             'unread' => Tab::make('未读会话')
                 ->badge(fn (): string => (string) $this->unreadQuery(static::getResource()::getEloquentQuery())->count())
                 ->badgeColor('danger')
@@ -28,6 +30,12 @@ class ListSupportChatSessions extends ListRecords
             'active' => Tab::make('接待中会话')
                 ->badge(fn (): string => (string) $this->activeQuery(static::getResource()::getEloquentQuery())->count())
                 ->query(fn (Builder $query): Builder => $this->activeQuery($query)),
+            'customers' => Tab::make('前台用户')
+                ->badge(fn (): string => (string) static::getResource()::getEloquentQuery()->whereNotNull('user_id')->count())
+                ->query(fn (Builder $query): Builder => $query->whereNotNull('user_id')),
+            'guests' => Tab::make('游客')
+                ->badge(fn (): string => (string) static::getResource()::getEloquentQuery()->whereNull('user_id')->whereNotNull('guest_id')->count())
+                ->query(fn (Builder $query): Builder => $query->whereNull('user_id')->whereNotNull('guest_id')),
             'ended' => Tab::make('已结束会话')
                 ->badge(fn (): string => (string) $this->endedQuery(static::getResource()::getEloquentQuery())->count())
                 ->query(fn (Builder $query): Builder => $this->endedQuery($query)),
@@ -39,7 +47,7 @@ class ListSupportChatSessions extends ListRecords
         return $query
             ->whereNotIn('status', [SupportChatSession::STATUS_ENDED, SupportChatSession::STATUS_CLOSED])
             ->whereHas('messages', fn (Builder $messageQuery): Builder => $messageQuery
-                ->where('sender_type', $this->customerSenderType())
+                ->whereIn('sender_type', $this->customerSenderTypes())
                 ->whereNull('read_at'));
     }
 
@@ -50,7 +58,7 @@ class ListSupportChatSessions extends ListRecords
             ->whereHas('messages', fn (Builder $messageQuery): Builder => $messageQuery
                 ->where('sender_type', SupportChatMessage::SENDER_ADMIN))
             ->whereDoesntHave('messages', fn (Builder $messageQuery): Builder => $messageQuery
-                ->where('sender_type', $this->customerSenderType())
+                ->whereIn('sender_type', $this->customerSenderTypes())
                 ->whereNull('read_at'));
     }
 
@@ -67,5 +75,15 @@ class ListSupportChatSessions extends ListRecords
         return static::getResource() === \App\Filament\Resources\GuestSupportChatSessionResource::class
             ? SupportChatMessage::SENDER_GUEST
             : SupportChatMessage::SENDER_CUSTOMER;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    protected function customerSenderTypes(): array
+    {
+        return static::getResource() === \App\Filament\Resources\GuestSupportChatSessionResource::class
+            ? [SupportChatMessage::SENDER_GUEST]
+            : [SupportChatMessage::SENDER_CUSTOMER, SupportChatMessage::SENDER_GUEST];
     }
 }

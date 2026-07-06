@@ -2,6 +2,7 @@
 
 use App\Filament\Resources\ProductResource\Pages\EditProduct;
 use App\Filament\Resources\FlashSaleCampaignResource\Pages\CreateFlashSaleCampaign;
+use App\Filament\Pages\HomeContentPage;
 use App\Filament\Pages\ProductDiscountPage;
 use App\Models\Category;
 use App\Models\Coupon;
@@ -200,7 +201,7 @@ it('lets customers redeem wallet codes and recharge wallet through payment confi
             ->count())->toBe(1);
 });
 
-it('uses wallet balance only when the customer selects wallet checkout', function (): void {
+it('automatically uses wallet balance before the selected checkout method', function (): void {
     $user = User::factory()->create(['role' => 'customer', 'wallet_balance_cents' => 3000]);
     $category = Category::query()->create(['name' => 'Wallet', 'slug' => 'wallet', 'is_active' => true]);
     $product = Product::query()->create([
@@ -232,25 +233,6 @@ it('uses wallet balance only when the customer selects wallet checkout', functio
     $order = Order::query()->whereBelongsTo($user)->latest('id')->firstOrFail();
 
     expect($order->payment_method)->toBe(Order::PAYMENT_METHOD_QR_CODE)
-        ->and($order->wallet_payment_cents)->toBe(0)
-        ->and($order->total_cents)->toBe(10000)
-        ->and($user->fresh()->wallet_balance_cents)->toBe(3000);
-
-    $this->post(route('cart.items.store'), [
-        'variant_id' => $variant->id,
-        'quantity' => 1,
-    ])->assertRedirect(route('cart.show'));
-
-    $this->actingAs($user)->post(route('checkout.store'), [
-        'contact_name' => 'Wallet User',
-        'contact_phone' => '13800000000',
-        'contact_email' => 'wallet@example.com',
-        'payment_method' => Order::PAYMENT_METHOD_WALLET,
-    ])->assertRedirect();
-
-    $order = Order::query()->whereBelongsTo($user)->latest('id')->firstOrFail();
-
-    expect($order->payment_method)->toBe(Order::PAYMENT_METHOD_WALLET)
         ->and($order->wallet_payment_cents)->toBe(3000)
         ->and($order->total_cents)->toBe(7000)
         ->and($user->fresh()->wallet_balance_cents)->toBe(0);
@@ -261,6 +243,45 @@ it('uses wallet balance only when the customer selects wallet checkout', functio
         'type' => WalletTransaction::TYPE_DEBIT,
         'amount_cents' => -3000,
         'source' => WalletTransaction::SOURCE_ORDER_PAYMENT,
+    ]);
+});
+
+it('refunds wallet-paid amounts when an order is cancelled', function (): void {
+    $user = User::factory()->create(['role' => 'customer', 'wallet_balance_cents' => 3000]);
+    $category = Category::query()->create(['name' => 'Wallet Refund', 'slug' => 'wallet-refund', 'is_active' => true]);
+    $product = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => 'Wallet refund product',
+        'slug' => 'wallet-refund-product',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_IN_PERSON,
+    ]);
+    $variant = ProductVariant::query()->create([
+        'product_id' => $product->id,
+        'sku' => 'WALLET-REFUND',
+        'price_cents' => 5000,
+        'stock' => 5,
+        'is_active' => true,
+    ]);
+
+    $this->post(route('cart.items.store'), ['variant_id' => $variant->id, 'quantity' => 1]);
+    $this->actingAs($user)->post(route('checkout.store'), [
+        'contact_name' => 'Wallet Refund User',
+        'contact_phone' => '13800000000',
+    ])->assertRedirect();
+
+    $order = Order::query()->whereBelongsTo($user)->firstOrFail();
+    app(OrderService::class)->cancel($order, $user);
+
+    expect($user->fresh()->wallet_balance_cents)->toBe(3000)
+        ->and($order->fresh()->status)->toBe(Order::STATUS_CANCELLED);
+
+    $this->assertDatabaseHas('wallet_transactions', [
+        'user_id' => $user->id,
+        'order_id' => $order->id,
+        'type' => WalletTransaction::TYPE_CREDIT,
+        'amount_cents' => 3000,
+        'source' => WalletTransaction::SOURCE_ORDER_REFUND,
     ]);
 });
 
@@ -339,6 +360,7 @@ it('attributes referral registrations and issues configured coupon and wallet re
     ]);
     ReferralRewardRule::query()->create([
         'name' => 'Invite reward',
+        'trigger_events' => [ReferralRewardRule::EVENT_REFERRAL_REGISTERED],
         'coupon_id' => $coupon->id,
         'wallet_amount_cents' => 500,
         'is_active' => true,
@@ -375,6 +397,80 @@ it('attributes referral registrations and issues configured coupon and wallet re
         'amount_cents' => 500,
         'source' => WalletTransaction::SOURCE_REFERRAL,
     ]);
+    $this->assertDatabaseHas('event_reward_grants', [
+        'user_id' => $inviter->id,
+        'event' => ReferralRewardRule::EVENT_REFERRAL_REGISTERED,
+        'subject_type' => User::class,
+        'subject_id' => $invitee->id,
+    ]);
+});
+
+it('grants configured event rewards for product purchases and wallet payments once', function (): void {
+    $user = User::factory()->create(['role' => 'customer', 'wallet_balance_cents' => 500]);
+    $category = Category::query()->create(['name' => 'Reward Product Category', 'slug' => 'reward-product-category', 'is_active' => true]);
+    $product = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => 'Reward Product',
+        'slug' => 'reward-product',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_IN_PERSON,
+    ]);
+    $variant = ProductVariant::query()->create([
+        'product_id' => $product->id,
+        'sku' => 'REWARD-SKU',
+        'price_cents' => 1000,
+        'stock' => 5,
+        'is_active' => true,
+    ]);
+    $coupon = Coupon::query()->create([
+        'code' => 'EVENT10',
+        'name' => 'Event reward',
+        'type' => Coupon::TYPE_FIXED,
+        'value' => 100,
+        'scope' => Coupon::SCOPE_GLOBAL,
+        'minimum_order_cents' => 0,
+        'is_active' => true,
+    ]);
+
+    ReferralRewardRule::query()->create([
+        'name' => 'Product event reward',
+        'trigger_events' => [ReferralRewardRule::EVENT_ORDER_PAID_PRODUCT],
+        'product_ids' => [$product->id],
+        'coupon_id' => $coupon->id,
+        'wallet_amount_cents' => 200,
+        'is_active' => true,
+    ]);
+    ReferralRewardRule::query()->create([
+        'name' => 'Wallet event reward',
+        'trigger_events' => [ReferralRewardRule::EVENT_WALLET_PAYMENT_USED],
+        'wallet_amount_cents' => 300,
+        'is_active' => true,
+    ]);
+
+    $this->post(route('cart.items.store'), ['variant_id' => $variant->id, 'quantity' => 1]);
+    $this->actingAs($user)->post(route('checkout.store'), [
+        'contact_name' => 'Event Reward User',
+        'contact_phone' => '13800000000',
+        'payment_method' => Order::PAYMENT_METHOD_QR_CODE,
+    ])->assertRedirect();
+
+    $order = Order::query()->whereBelongsTo($user)->firstOrFail();
+
+    expect($order->wallet_payment_cents)->toBe(500)
+        ->and($order->total_cents)->toBe(500)
+        ->and($user->fresh()->wallet_balance_cents)->toBe(0);
+
+    app(OrderService::class)->confirmPayment($order, $user);
+    app(OrderService::class)->confirmPayment($order->fresh(), $user);
+
+    expect($user->fresh()->wallet_balance_cents)->toBe(500);
+
+    $this->assertDatabaseHas('user_coupons', [
+        'user_id' => $user->id,
+        'coupon_id' => $coupon->id,
+        'source' => UserCoupon::SOURCE_EVENT_REWARD,
+    ]);
+    $this->assertDatabaseCount('event_reward_grants', 2);
 });
 
 it('renders referral copy links with an absolute local-aware host', function (): void {
@@ -460,7 +556,7 @@ it('uses wallet balance when completing a flash sale order selection', function 
             'contact_name' => 'Flash Wallet User',
             'contact_phone' => '13800000000',
             'contact_email' => 'flash-wallet@example.com',
-            'payment_method' => Order::PAYMENT_METHOD_WALLET,
+            'payment_method' => Order::PAYMENT_METHOD_QR_CODE,
         ])
         ->assertRedirect(route('orders.show', $order));
 
@@ -472,7 +568,7 @@ it('uses wallet balance when completing a flash sale order selection', function 
         ->and($user->fresh()->wallet_balance_cents)->toBe(0);
 });
 
-it('lets customers switch pending orders to fallback or wallet payment methods', function (): void {
+it('lets customers switch pending orders to fallback payment methods only', function (): void {
     $user = User::factory()->create(['role' => 'customer', 'wallet_balance_cents' => 5000]);
     $order = Order::query()->create([
         'user_id' => $user->id,
@@ -498,16 +594,15 @@ it('lets customers switch pending orders to fallback or wallet payment methods',
         ->post(route('orders.payment-method', $order), [
             'payment_method' => Order::PAYMENT_METHOD_WALLET,
         ])
-        ->assertRedirect()
-        ->assertSessionHas('status', '钱包余额已完成支付，订单已确认付款。');
+        ->assertSessionHasErrors('payment_method');
 
     $order->refresh();
 
-    expect($order->payment_method)->toBe(Order::PAYMENT_METHOD_WALLET)
-        ->and($order->wallet_payment_cents)->toBe(5000)
-        ->and($order->total_cents)->toBe(0)
-        ->and($order->payment_status)->toBe(Order::PAYMENT_CONFIRMED)
-        ->and($user->fresh()->wallet_balance_cents)->toBe(0);
+    expect($order->payment_method)->toBe(Order::PAYMENT_METHOD_FALLBACK_QR)
+        ->and($order->wallet_payment_cents)->toBe(0)
+        ->and($order->total_cents)->toBe(5000)
+        ->and($order->payment_status)->toBe(Order::PAYMENT_PENDING)
+        ->and($user->fresh()->wallet_balance_cents)->toBe(5000);
 });
 
 it('requires login before voting', function (): void {
@@ -1133,6 +1228,88 @@ it('orders home product sections and places store pages in the welcome header', 
         ->and(strpos($html, '默认商品'))->toBeLessThan(strpos($html, '秒杀商品'))
         ->and(strpos($html, '秒杀商品'))->toBeLessThan(strpos($html, '概念商品'))
         ->and(strpos($html, '折扣商品'))->toBeLessThan(strpos($html, '概念商品'));
+});
+
+it('lets admins customize the home product section order from the home page settings', function (): void {
+    $this->seed();
+
+    $admin = User::factory()->create(['role' => 'admin']);
+    $category = Category::query()->firstOrFail();
+
+    $featuredProduct = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => '自定义顺序推荐商品',
+        'slug' => 'custom-order-featured-product',
+        'status' => Product::STATUS_PUBLISHED,
+        'is_featured' => true,
+        'fulfillment_type' => Product::FULFILLMENT_ONLINE,
+    ]);
+    ProductVariant::query()->create([
+        'product_id' => $featuredProduct->id,
+        'sku' => 'CUSTOM-HOME-FEATURED',
+        'price_cents' => 1000,
+        'stock' => 5,
+        'is_active' => true,
+    ]);
+
+    $discountProduct = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => '自定义顺序折扣商品',
+        'slug' => 'custom-order-discount-product',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_ONLINE,
+    ]);
+    ProductVariant::query()->create([
+        'product_id' => $discountProduct->id,
+        'sku' => 'CUSTOM-HOME-DISCOUNT',
+        'price_cents' => 2000,
+        'discount_price_cents' => 1200,
+        'stock' => 5,
+        'is_active' => true,
+    ]);
+
+    Product::query()->create([
+        'category_id' => $category->id,
+        'title' => '自定义顺序概念商品',
+        'slug' => 'custom-order-concept-product',
+        'status' => Product::STATUS_CONCEPT,
+        'fulfillment_type' => Product::FULFILLMENT_ONLINE,
+    ]);
+
+    $this->actingAs($admin);
+
+    Livewire::test(HomeContentPage::class)
+        ->fillForm([
+            'home_welcome_enabled' => true,
+            'home_title' => '首页',
+            'home_welcome_image_path' => null,
+            'home_content' => null,
+            'home_product_section_order' => [
+                ['section' => 'default'],
+                ['section' => 'concept'],
+                ['section' => 'discount'],
+                ['section' => 'flash'],
+                ['section' => 'featured'],
+            ],
+        ])
+        ->call('save')
+        ->assertHasNoFormErrors();
+
+    expect(SiteSetting::query()->firstOrFail()->homeProductSectionOrder())
+        ->toBe(['default', 'concept', 'discount', 'flash', 'featured']);
+
+    $html = $this->get(route('home'))
+        ->assertOk()
+        ->getContent();
+
+    expect(strpos($html, '<h2 class="text-base font-semibold">默认商品</h2>'))
+        ->toBeLessThan(strpos($html, '<h2 class="text-base font-semibold">概念商品</h2>'))
+        ->and(strpos($html, '<h2 class="text-base font-semibold">概念商品</h2>'))
+        ->toBeLessThan(strpos($html, '<h2 class="text-base font-semibold">折扣商品</h2>'))
+        ->and(strpos($html, '<h2 class="text-base font-semibold">折扣商品</h2>'))
+        ->toBeLessThan(strpos($html, '<h2 class="text-base font-semibold">秒杀商品</h2>'))
+        ->and(strpos($html, '<h2 class="text-base font-semibold">秒杀商品</h2>'))
+        ->toBeLessThan(strpos($html, '<h2 class="text-base font-semibold">推荐商品</h2>'));
 });
 
 it('shows default home products by sort order when there are no discount products', function (): void {
@@ -2064,6 +2241,21 @@ it('refreshes cached storefront prices when the discount page updates a sku', fu
         ->assertSee('Cache Discount Product')
         ->assertSee(Money::format(1000), false)
         ->assertSee(Money::format(500), false);
+
+    Livewire::test(ProductDiscountPage::class)
+        ->assertSee('当前折扣商品')
+        ->assertSee('Cache Discount Product')
+        ->set("discountRows.{$lowVariant->id}.discount_price", '4.00')
+        ->call('updateDiscount', $lowVariant->id);
+
+    expect($lowVariant->fresh()->discount_price_cents)->toBe(400);
+
+    Livewire::test(ProductDiscountPage::class)
+        ->call('cancelDiscount', $lowVariant->id);
+
+    expect($lowVariant->fresh()->discount_price_cents)->toBeNull()
+        ->and($lowVariant->fresh()->discount_starts_at)->toBeNull()
+        ->and($lowVariant->fresh()->discount_ends_at)->toBeNull();
 });
 
 it('lets users claim coupons and apply one coupon per cart sku', function (): void {
@@ -2951,6 +3143,59 @@ it('calculates checkout shipping from warehouse province rates and product extra
         ->and($order->total_cents)->toBe(31700)
         ->and($order->shipment_notice)->toBeNull()
         ->and($order->items()->where('warehouse_id', $warehouse->id)->count())->toBe(2);
+});
+
+it('stores private shipping requests and resolves category or tag defaults', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+    $category = Category::query()->create([
+        'name' => 'Private Shipping',
+        'slug' => 'private-shipping',
+        'is_active' => true,
+        'private_shipping_default' => true,
+    ]);
+    $tag = ProductTag::query()->create([
+        'name' => 'No Private',
+        'slug' => 'no-private',
+        'is_active' => true,
+        'private_shipping_default' => false,
+    ]);
+    $product = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => 'Private Shipping Product',
+        'slug' => 'private-shipping-product',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_LOGISTICS,
+    ]);
+    $variant = ProductVariant::query()->create([
+        'product_id' => $product->id,
+        'sku' => 'PRIVATE-SHIP',
+        'price_cents' => 1000,
+        'stock' => 5,
+        'is_active' => true,
+    ]);
+
+    expect($product->fresh()->defaultsToPrivateShipping())->toBeTrue();
+
+    $product->tags()->attach($tag);
+    expect($product->fresh()->defaultsToPrivateShipping())->toBeFalse();
+
+    $tag->update(['private_shipping_default' => true]);
+    expect($product->fresh()->defaultsToPrivateShipping())->toBeTrue();
+
+    $this->post(route('cart.items.store'), ['variant_id' => $variant->id, 'quantity' => 1]);
+    $this->actingAs($user)->post(route('checkout.store'), [
+        'contact_name' => 'Private User',
+        'contact_phone' => '13800000000',
+        'shipping_country' => '中国',
+        'shipping_province' => '北京',
+        'shipping_city' => '北京市',
+        'shipping_detail' => 'Private Address',
+        'private_shipping_requested' => '1',
+    ])->assertRedirect();
+
+    $order = Order::query()->whereBelongsTo($user)->firstOrFail();
+
+    expect($order->private_shipping_requested)->toBeTrue();
 });
 
 it('charges shipping for presale logistics products without requiring stock', function (): void {
