@@ -12,10 +12,11 @@
         <div class="content-body px-4 py-4 text-sm text-slate-700">
             {{ \App\Support\Markdown::render($announcement->body) }}
         </div>
-        @if($announcement->comments_enabled)
-            <div class="border-t border-slate-200 px-4 py-4 text-sm text-slate-600">
-                公告评论功能已预留，后续会与站内评论体系统一。
-            </div>
-        @endif
     </article>
+
+    @include('pages.partials.comments', [
+        'comments' => $announcement->relationLoaded('topLevelComments') ? $announcement->topLevelComments : collect(),
+        'enabled' => $announcement->comments_enabled,
+        'action' => route('announcement-comments.store', $announcement),
+    ])
 </x-layouts.app>

@@ -10,6 +10,11 @@ class EditAnnouncement extends EditRecord
 {
     protected static string $resource = AnnouncementResource::class;
 
+    protected function mutateFormDataBeforeSave(array $data): array
+    {
+        return \App\Models\Announcement::normalizePublicationData($data);
+    }
+
     protected function getHeaderActions(): array
     {
         return [

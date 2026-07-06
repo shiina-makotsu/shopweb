@@ -35,11 +35,35 @@ class Announcement extends Model
         return $this->hasMany(AnnouncementRead::class);
     }
 
+    public function comments(): HasMany
+    {
+        return $this->hasMany(AnnouncementComment::class);
+    }
+
+    public function topLevelComments(): HasMany
+    {
+        return $this->hasMany(AnnouncementComment::class)
+            ->whereNull('parent_id')
+            ->whereNull('deleted_at')
+            ->latest();
+    }
+
     public function scopePublished(Builder $query): Builder
     {
-        return $query
-            ->where('is_published', true)
-            ->where(fn (Builder $query) => $query->whereNull('published_at')->orWhere('published_at', '<=', now()));
+        return $query->where('is_published', true);
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     * @return array<string, mixed>
+     */
+    public static function normalizePublicationData(array $data): array
+    {
+        if (($data['is_published'] ?? false) && blank($data['published_at'] ?? null)) {
+            $data['published_at'] = now();
+        }
+
+        return $data;
     }
 
     public function getRouteKeyName(): string

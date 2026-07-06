@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Announcement;
 use App\Models\AnnouncementRead;
 use Illuminate\Http\Request;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
 
 class AnnouncementController extends Controller
@@ -29,6 +30,7 @@ class AnnouncementController extends Controller
     public function show(Request $request, Announcement $announcement): View
     {
         abort_unless($announcement->is_published, 404);
+        $announcement->loadMissing(['topLevelComments.user', 'topLevelComments.replies.user']);
 
         if ($request->user()) {
             AnnouncementRead::query()->updateOrCreate([
@@ -42,5 +44,19 @@ class AnnouncementController extends Controller
         return view('announcements.show', [
             'announcement' => $announcement,
         ]);
+    }
+
+    public function markRead(Request $request, Announcement $announcement): RedirectResponse
+    {
+        abort_unless($announcement->is_published, 404);
+
+        AnnouncementRead::query()->updateOrCreate([
+            'announcement_id' => $announcement->id,
+            'user_id' => $request->user()->id,
+        ], [
+            'read_at' => now(),
+        ]);
+
+        return back()->with('status', '公告已标记为已读。');
     }
 }

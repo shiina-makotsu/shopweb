@@ -200,6 +200,11 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
         return $this->hasMany(PageComment::class);
     }
 
+    public function announcementComments(): HasMany
+    {
+        return $this->hasMany(AnnouncementComment::class);
+    }
+
     public function forumThreads(): HasMany
     {
         return $this->hasMany(ForumThread::class);

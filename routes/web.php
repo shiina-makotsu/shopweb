@@ -9,6 +9,7 @@ use App\Http\Controllers\Admin\ReportExportController;
 use App\Http\Controllers\AfterSalesController;
 use App\Http\Controllers\AiImageController;
 use App\Http\Controllers\AnnouncementController;
+use App\Http\Controllers\AnnouncementCommentController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\CartController;
@@ -138,6 +139,8 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/orders/{order}/digital-delivery/copied', [OrderController::class, 'markDigitalCopied'])->name('orders.digital-delivery.copied');
     Route::get('/orders/{order}/digital-delivery/{index}', [OrderController::class, 'downloadDigitalAttachment'])->name('orders.digital-delivery.download');
     Route::post('/p/{page:slug}/comments', [PageCommentController::class, 'store'])->name('page-comments.store');
+    Route::post('/announcements/{announcement:slug}/read', [AnnouncementController::class, 'markRead'])->name('announcements.read');
+    Route::post('/announcements/{announcement:slug}/comments', [AnnouncementCommentController::class, 'store'])->name('announcement-comments.store');
     Route::post('/products/{statusSlug}/{productSlug}/comments', [ProductCommentController::class, 'storeByStatus'])->name('product-comments.status.store');
     Route::post('/products/{statusSlug}/{productSlug}/wishlist', [ProductPreferenceController::class, 'toggleWishlistByStatus'])->name('products.wishlist.status.toggle');
     Route::post('/products/{statusSlug}/{productSlug}/favorite', [ProductPreferenceController::class, 'toggleFavoriteByStatus'])->name('products.favorite.status.toggle');

@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Announcement;
+use App\Models\AnnouncementComment;
 use App\Models\ForumActivityLog;
 use App\Models\ForumSection;
 use App\Models\MediaAsset;
@@ -49,6 +50,99 @@ it('renders announcements and marks them read when viewed', function (): void {
         'announcement_id' => $announcement->id,
         'user_id' => $user->id,
     ]);
+});
+
+it('shows published announcements in storefront badges popups and lists regardless of display time', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+
+    $announcement = Announcement::query()->create([
+        'title' => 'Immediate Notice',
+        'slug' => 'immediate-notice',
+        'body' => 'Published announcements should be visible.',
+        'is_published' => true,
+        'popup_when_unread' => true,
+        'published_at' => now()->addHours(8),
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('home'))
+        ->assertOk()
+        ->assertSee('Immediate Notice')
+        ->assertSee('Published announcements should be visible.')
+        ->assertSee(route('announcements.read', $announcement, false));
+
+    $this->actingAs($user)
+        ->get(route('announcements.index'))
+        ->assertOk()
+        ->assertSee('Immediate Notice')
+        ->assertSee('未读');
+
+    $this->actingAs($user)
+        ->post(route('announcements.read', $announcement))
+        ->assertRedirect();
+
+    $this->assertDatabaseHas('announcement_reads', [
+        'announcement_id' => $announcement->id,
+        'user_id' => $user->id,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('home'))
+        ->assertOk()
+        ->assertDontSee('Immediate Notice');
+});
+
+it('fills the publish time when publishing an announcement without one', function (): void {
+    $data = Announcement::normalizePublicationData([
+        'title' => 'Publish Now',
+        'is_published' => true,
+        'published_at' => null,
+    ]);
+
+    expect($data['published_at'])->not->toBeNull();
+});
+
+it('lets users comment and reply on announcements when comments are enabled', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+    $announcement = Announcement::query()->create([
+        'title' => 'Commentable Notice',
+        'slug' => 'commentable-notice',
+        'body' => 'Announcement body.',
+        'is_published' => true,
+        'comments_enabled' => true,
+    ]);
+
+    $this->actingAs($user)
+        ->post(route('announcement-comments.store', $announcement), [
+            'body' => 'First announcement comment',
+        ])
+        ->assertRedirect();
+
+    $comment = AnnouncementComment::query()->where('announcement_id', $announcement->id)->firstOrFail();
+
+    $this->actingAs($user)
+        ->post(route('announcement-comments.store', $announcement), [
+            'parent_id' => $comment->id,
+            'body' => 'Announcement reply',
+        ])
+        ->assertRedirect();
+
+    $this->assertDatabaseHas('announcement_comments', [
+        'announcement_id' => $announcement->id,
+        'user_id' => $user->id,
+        'body' => 'First announcement comment',
+    ]);
+    $this->assertDatabaseHas('announcement_comments', [
+        'announcement_id' => $announcement->id,
+        'parent_id' => $comment->id,
+        'body' => 'Announcement reply',
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('announcements.show', $announcement))
+        ->assertOk()
+        ->assertSee('First announcement comment')
+        ->assertSee('Announcement reply');
 });
 
 it('lets authenticated users comment on products with images disabled from backend setting', function (): void {

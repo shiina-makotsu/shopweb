@@ -7,6 +7,7 @@ use App\Filament\Resources\AdminLoginLogResource;
 use App\Filament\Resources\AdminUserResource;
 use App\Filament\Resources\AiWorkflowResource;
 use App\Filament\Resources\AnnouncementResource;
+use App\Filament\Resources\AnnouncementCommentResource;
 use App\Filament\Resources\AfterSalesRequestResource;
 use App\Filament\Resources\CatalogAttributeResource;
 use App\Filament\Resources\CategoryResource;
@@ -137,6 +138,7 @@ class AdminSearchPage extends Page
             ['group' => 'AI', 'label' => '客服 AI 设置', 'keywords' => 'AI 安抚 等待时间 接口 key 模型 预设 工作流', 'url' => SupportAiSettingsPage::getUrl()],
             ['group' => '内容', 'label' => '首页', 'keywords' => '首页 Markdown 首页标题', 'url' => HomeContentPage::getUrl()],
             ['group' => '内容', 'label' => '公告', 'keywords' => '铃铛 未读 弹窗 置顶 发布 删除 评论', 'url' => AnnouncementResource::getUrl()],
+            ['group' => '内容', 'label' => '公告评论', 'keywords' => '公告 回复 评论 删除', 'url' => AnnouncementCommentResource::getUrl()],
             ['group' => '内容', 'label' => '自定义页面', 'keywords' => '页面 markdown 关于我们 说明', 'url' => PageResource::getUrl()],
             ['group' => '内容', 'label' => '资源管理', 'keywords' => '图片 文件 logo 上传 媒体', 'url' => MediaAssetResource::getUrl()],
             ['group' => '论坛', 'label' => '论坛分区', 'keywords' => '分区 版块 创建 删除', 'url' => ForumSectionResource::getUrl()],
