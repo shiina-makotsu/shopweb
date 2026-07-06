@@ -4,10 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Models\FlashSale;
 use App\Models\Order;
+use App\Models\SiteSetting;
 use App\Services\FlashSaleService;
 use App\Services\OrderService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class FlashSaleCheckoutController extends Controller
@@ -66,10 +68,15 @@ class FlashSaleCheckoutController extends Controller
                 Order::PAYMENT_METHOD_QR_CODE,
                 Order::PAYMENT_METHOD_RED_PACKET,
                 Order::PAYMENT_METHOD_WALLET,
+                Order::PAYMENT_METHOD_PAYPAL,
             ])],
         ]);
 
         $data['payment_method'] ??= Order::PAYMENT_METHOD_QR_CODE;
+
+        if ($data['payment_method'] === Order::PAYMENT_METHOD_PAYPAL && ! SiteSetting::query()->first()?->paypalEmail()) {
+            throw ValidationException::withMessages(['payment_method' => 'PayPal 收款邮箱未配置，暂不能使用 PayPal 支付。']);
+        }
 
         $order = $service->completeOrderSelection($order, $data);
 

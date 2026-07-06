@@ -8,6 +8,7 @@ use Filament\Models\Contracts\HasAvatar;
 use Filament\Panel;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -25,6 +26,8 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
     protected $fillable = [
         'name',
         'public_id',
+        'referral_code',
+        'referred_by_user_id',
         'email',
         'password',
         'role',
@@ -88,6 +91,7 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
 
         static::created(function (User $user): void {
             $user->ensurePublicId();
+            $user->ensureReferralCode();
         });
     }
 
@@ -169,6 +173,16 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
     public function coupons(): HasMany
     {
         return $this->hasMany(UserCoupon::class);
+    }
+
+    public function inviter(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'referred_by_user_id');
+    }
+
+    public function referrals(): HasMany
+    {
+        return $this->hasMany(User::class, 'referred_by_user_id');
     }
 
     public function walletTransactions(): HasMany
@@ -281,6 +295,24 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
         return $this->name;
     }
 
+    public function ensureReferralCode(): void
+    {
+        if (filled($this->referral_code)) {
+            return;
+        }
+
+        $this->forceFill([
+            'referral_code' => static::uniqueReferralCode($this),
+        ])->saveQuietly();
+    }
+
+    public function referralLink(): string
+    {
+        $this->ensureReferralCode();
+
+        return rtrim($this->referralBaseUrl(), '/').'/?invite='.rawurlencode((string) $this->referral_code);
+    }
+
     public function isForumModeratorFor(ForumSection $section): bool
     {
         return $this->role === 'admin'
@@ -332,6 +364,57 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
         $base = 'user_'.($user->id ?: Str::lower(Str::random(8)));
 
         return static::uniquePublicIdFromBase($base, $user);
+    }
+
+    private static function uniqueReferralCode(User $user): string
+    {
+        $base = strtoupper(Str::replace('_', '', (string) ($user->public_id ?: Str::random(8))));
+        $base = preg_replace('/[^A-Z0-9]/', '', $base) ?: strtoupper(Str::random(8));
+        $base = substr($base, 0, 12);
+
+        return static::uniqueReferralCodeFromBase($base, $user);
+    }
+
+    private static function uniqueReferralCodeFromBase(string $base, User $user): string
+    {
+        $candidate = $base;
+        $suffix = 1;
+
+        while (static::query()
+            ->where('referral_code', $candidate)
+            ->when($user->exists, fn ($query) => $query->whereKeyNot($user->id))
+            ->exists()) {
+            $candidate = substr($base, 0, 10).$suffix;
+            $suffix++;
+        }
+
+        return $candidate;
+    }
+
+    private function referralBaseUrl(): string
+    {
+        $request = request();
+        $host = trim((string) $request->getHost());
+
+        if ($host === '') {
+            $host = trim((string) ($request->server->get('SERVER_NAME') ?: $request->server->get('SERVER_ADDR')));
+        }
+
+        if ($host === '') {
+            $host = parse_url((string) config('app.url'), PHP_URL_HOST) ?: 'localhost';
+        }
+
+        $normalizedHost = strtolower(trim($host, '[]'));
+
+        if (in_array($normalizedHost, ['127.0.0.1', '::1', '0.0.0.0'], true)) {
+            $host = 'localhost';
+        }
+
+        $scheme = $request->isSecure() ? 'https' : 'http';
+        $port = (int) $request->getPort();
+        $portSuffix = in_array($port, [0, 80, 443], true) ? '' : ':'.$port;
+
+        return $scheme.'://'.$host.$portSuffix;
     }
 
     private static function uniquePublicIdFromBase(string $base, User $user): string

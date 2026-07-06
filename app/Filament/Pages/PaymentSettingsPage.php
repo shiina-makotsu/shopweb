@@ -105,6 +105,7 @@ class PaymentSettingsPage extends Page implements HasSchemas
                     TextInput::make('payment_gateway_config.api_endpoint')->label('接口地址')->maxLength(500),
                     TextInput::make('payment_gateway_config.client_id')->label('Client ID / 商户号')->maxLength(255),
                     TextInput::make('payment_gateway_config.secret_key_hint')->label('密钥备注')->maxLength(255),
+                    TextInput::make('payment_gateway_config.paypal_email')->label('PayPal 收款邮箱')->email()->maxLength(255),
                     Textarea::make('payment_gateway_notes')->label('接口备注')->rows(3)->columnSpanFull(),
                 ])->columns(2)->columnSpanFull(),
                 Section::make('备用付款方案')

@@ -70,7 +70,6 @@ class SystemLoadMetrics
             $counts[$scope] = (int) ($counts[$scope] ?? 0) + 1;
             Cache::put('shop:system-load:requests:last-minute', $minute, 180);
             Cache::put($key, $counts, 180);
-            $this->recordOncePerMinute($minute);
         } catch (Throwable) {
             //
         }
@@ -143,6 +142,28 @@ class SystemLoadMetrics
     }
 
     /**
+     * @return array<string, mixed>
+     */
+    public function latestCachedSnapshot(): array
+    {
+        $samples = Cache::get('shop:system-load:samples', []);
+        $samples = is_array($samples) ? $samples : [];
+        $latest = is_array(end($samples)) ? end($samples) : null;
+
+        if (is_array($latest)) {
+            return $this->withSnapshotDefaults($latest);
+        }
+
+        $timeline = $this->databaseTimeline(1);
+
+        if ($timeline !== []) {
+            return $this->withSnapshotDefaults($timeline[array_key_last($timeline)]);
+        }
+
+        return $this->withSnapshotDefaults($this->emptyTimelineSample(now()->startOfMinute()));
+    }
+
+    /**
      * @param  array<string, mixed>  $snapshot
      */
     private function rememberCacheSample(array $snapshot): void
@@ -159,17 +180,6 @@ class SystemLoadMetrics
         }
 
         Cache::put('shop:system-load:samples', array_slice($samples, -1440), 90000);
-    }
-
-    private function recordOncePerMinute(string $minute): void
-    {
-        if (! (bool) config('shop.server_monitor.enabled', true)) {
-            return;
-        }
-
-        if (Cache::add('shop:system-load:recorded:'.$minute, true, 120)) {
-            $this->record();
-        }
     }
 
     /**
@@ -281,11 +291,25 @@ class SystemLoadMetrics
             'minute_key' => $minute->format('Y-m-d H:i'),
             'sampled' => false,
             'db_ms' => 0,
+            'db_ok' => false,
             'redis_ms' => 0,
+            'redis_ok' => false,
             'php_memory_percent' => 0,
+            'php_memory_mb' => 0,
+            'php_peak_memory_mb' => 0,
+            'server_memory_free_mb' => 0,
+            'server_memory_source' => 'none',
             'server_memory_used_percent' => 0,
+            'server_cpu_source' => 'none',
             'server_cpu_percent' => 0,
+            'cpu_cores' => 1,
+            'storage_free_gb' => 0,
+            'storage_used_percent' => 0,
             'requests_per_minute' => 0,
+            'frontend_requests_per_minute' => 0,
+            'admin_requests_per_minute' => 0,
+            'queue_connection' => config('queue.default'),
+            'cache_store' => config('cache.default'),
         ];
     }
 
@@ -408,7 +432,9 @@ class SystemLoadMetrics
             'server_memory_total_mb' => $snapshot->server_memory_total_mb,
             'server_memory_free_mb' => $snapshot->server_memory_free_mb,
             'server_memory_used_percent' => $snapshot->server_memory_used_percent ?? 0,
+            'server_memory_source' => $snapshot->server_memory_source ?? 'snapshot',
             'server_cpu_percent' => $snapshot->server_cpu_percent ?? 0,
+            'server_cpu_source' => $snapshot->server_cpu_source ?? 'snapshot',
             'load_1m' => $snapshot->load_1m,
             'load_5m' => $snapshot->load_5m,
             'load_15m' => $snapshot->load_15m,
@@ -417,11 +443,45 @@ class SystemLoadMetrics
             'db_ok' => $snapshot->db_ok,
             'redis_ms' => $snapshot->redis_ms ?? 0,
             'redis_ok' => $snapshot->redis_ok,
+            'cache_store' => $snapshot->cache_store ?? config('cache.default'),
+            'queue_connection' => $snapshot->queue_connection ?? config('queue.default'),
+            'storage_free_gb' => $snapshot->storage_free_gb ?? 0,
+            'storage_used_percent' => $snapshot->storage_used_percent ?? 0,
             'requests_per_minute' => $snapshot->requests_per_minute,
             'frontend_requests_per_minute' => $snapshot->frontend_requests_per_minute,
             'admin_requests_per_minute' => $snapshot->admin_requests_per_minute,
             'request_ms' => $snapshot->request_ms ?? 0,
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $snapshot
+     * @return array<string, mixed>
+     */
+    private function withSnapshotDefaults(array $snapshot): array
+    {
+        return array_merge([
+            'server_cpu_percent' => null,
+            'server_cpu_source' => 'snapshot',
+            'cpu_cores' => 1,
+            'server_memory_used_percent' => null,
+            'server_memory_free_mb' => 0,
+            'server_memory_source' => 'snapshot',
+            'db_ok' => false,
+            'db_ms' => 0,
+            'redis_ok' => false,
+            'redis_ms' => 0,
+            'requests_per_minute' => 0,
+            'frontend_requests_per_minute' => 0,
+            'admin_requests_per_minute' => 0,
+            'storage_free_gb' => 0,
+            'storage_used_percent' => 0,
+            'php_memory_mb' => 0,
+            'php_memory_percent' => null,
+            'php_peak_memory_mb' => 0,
+            'queue_connection' => config('queue.default'),
+            'cache_store' => config('cache.default'),
+        ], $snapshot);
     }
 
     /**

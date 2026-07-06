@@ -19,6 +19,7 @@ use App\Filament\Pages\StoreInfoPage;
 use App\Filament\Pages\SupportAiSettingsPage;
 use App\Filament\Pages\SystemInfoPage;
 use App\Filament\Pages\UserAiPage;
+use App\Filament\Pages\WalletSettingsPage;
 use App\Filament\Resources\AiWorkflowResource;
 use App\Models\AdminMenuItem;
 use Filament\Navigation\NavigationGroup;
@@ -82,6 +83,7 @@ class AdminMenuRegistry
             SupportAiSettingsPage::class,
             SystemInfoPage::class,
             UserAiPage::class,
+            WalletSettingsPage::class,
         ];
     }
 
@@ -90,12 +92,12 @@ class AdminMenuRegistry
      */
     public function resourceClasses(): array
     {
-        return collect(File::glob(app_path('Filament/Resources/*Resource.php')) ?: [])
+        return Cache::remember(self::CACHE_TAG.'resource-classes', now()->addMinutes(30), fn (): array => collect(File::glob(app_path('Filament/Resources/*Resource.php')) ?: [])
             ->map(fn (string $path): string => 'App\\Filament\\Resources\\'.pathinfo($path, PATHINFO_FILENAME))
             ->filter(fn (string $class): bool => class_exists($class))
             ->sort()
             ->values()
-            ->all();
+            ->all());
     }
 
     /**
@@ -310,6 +312,7 @@ class AdminMenuRegistry
     {
         Cache::forget(self::CACHE_TAG.'navigation-groups');
         Cache::forget(self::CACHE_TAG.'browser-config');
+        Cache::forget(self::CACHE_TAG.'resource-classes');
     }
 
     public function tableReady(): bool

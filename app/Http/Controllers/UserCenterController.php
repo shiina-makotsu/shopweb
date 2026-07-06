@@ -6,6 +6,7 @@ use App\Models\PrivateMessage;
 use App\Models\User;
 use App\Models\UserAddress;
 use App\Models\UserProfileChangeLog;
+use App\Models\WalletRechargeOption;
 use App\Services\AiUsageService;
 use App\Services\CouponService;
 use App\Services\WalletService;
@@ -29,7 +30,7 @@ class UserCenterController extends Controller
         $orders = $orderSummary->forUser($user);
 
         return view('user.center', [
-            'user' => $user->loadCount(['wishlists', 'favorites']),
+            'user' => $user->load('inviter')->loadCount(['wishlists', 'favorites', 'referrals']),
             'recentHistories' => $user->browsingHistories()
                 ->with('product.coverMedia')
                 ->latest('viewed_at')
@@ -48,7 +49,7 @@ class UserCenterController extends Controller
         $user = $request->user();
         $user->ensurePublicId();
 
-        $allowed = ['profile', 'wishlists', 'favorites', 'addresses', 'coupons', 'wallet', 'chat', 'ai', 'privacy', 'interface', 'membership'];
+        $allowed = ['profile', 'wishlists', 'favorites', 'addresses', 'coupons', 'invitations', 'wallet', 'chat', 'ai', 'privacy', 'interface', 'membership'];
         abort_unless(in_array($section, $allowed, true), 404);
 
         $aiUsage = app(AiUsageService::class);
@@ -72,8 +73,17 @@ class UserCenterController extends Controller
             'coupons' => $section === 'coupons'
                 ? $user->coupons()->with(['coupon.products', 'coupon.product'])->latest()->get()
                 : null,
+            'referrals' => $section === 'invitations'
+                ? $user->referrals()->latest()->paginate(20)
+                : null,
+            'inviter' => $section === 'invitations'
+                ? $user->inviter
+                : null,
             'walletTransactions' => $section === 'wallet'
                 ? $user->walletTransactions()->latest()->limit(50)->get()
+                : collect(),
+            'walletRechargeOptions' => $section === 'wallet'
+                ? WalletRechargeOption::query()->active()->orderBy('sort_order')->orderBy('amount_cents')->get()
                 : collect(),
             'privateUnreadCount' => $this->privateUnreadCount($user),
             'chatThreads' => $section === 'chat'
@@ -121,7 +131,10 @@ class UserCenterController extends Controller
             'addressProvinceOptions' => ChinaRegions::provinceOptions(),
             'addressRegionTree' => ChinaRegions::regionTreeForForms(),
             'coupons' => null,
+            'referrals' => null,
+            'inviter' => null,
             'walletTransactions' => collect(),
+            'walletRechargeOptions' => collect(),
             'privateUnreadCount' => $this->privateUnreadCount($user),
             'chatThreads' => collect(),
             'aiQuota' => null,
@@ -215,6 +228,20 @@ class UserCenterController extends Controller
         ]);
 
         $order = $wallet->createRechargeOrder($request->user(), $data['wallet_recharge_amount']);
+
+        return redirect()
+            ->route('orders.show', $order)
+            ->with('status', '钱包充值订单已创建，请按页面说明付款并上传凭证。');
+    }
+
+    public function rechargeWalletOption(Request $request, WalletService $wallet): RedirectResponse
+    {
+        $data = $request->validate([
+            'wallet_recharge_option_id' => ['required', 'integer', 'exists:wallet_recharge_options,id'],
+        ]);
+
+        $option = WalletRechargeOption::query()->active()->findOrFail($data['wallet_recharge_option_id']);
+        $order = $wallet->createRechargeOptionOrder($request->user(), $option);
 
         return redirect()
             ->route('orders.show', $order)

@@ -5,6 +5,7 @@
         'favorites' => '收藏商品',
         'addresses' => '地址设置',
         'coupons' => '优惠码',
+        'invitations' => '邀请',
         'chat' => '聊天',
         'ai' => 'AI 配额',
         'privacy' => '隐私设置',
@@ -715,9 +716,57 @@
                     </div>
                 </section>
             </div>
+        @elseif($section === 'invitations')
+            @php
+                $referrals = $referrals ?? collect();
+                $user->ensureReferralCode();
+            @endphp
+            <div class="space-y-5 px-4 py-5">
+                <section class="rounded-sm border border-slate-300">
+                    <h2 class="border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold">我的邀请</h2>
+                    <div class="grid gap-4 p-4 md:grid-cols-2">
+                        <label class="block">
+                            <span class="text-sm font-medium text-slate-700">邀请码</span>
+                            <input class="mt-1 w-full rounded-sm border border-slate-300 bg-slate-50 px-3 py-2 text-sm font-semibold" value="{{ $user->referral_code }}" readonly>
+                        </label>
+                        <label class="block">
+                            <span class="text-sm font-medium text-slate-700">邀请链接</span>
+                            <input class="mt-1 w-full rounded-sm border border-slate-300 bg-slate-50 px-3 py-2 text-sm" value="{{ $user->referralLink() }}" data-absolute-url readonly>
+                        </label>
+                        <div class="md:col-span-2 text-sm text-slate-600">
+                            @if($inviter)
+                                注册时使用的邀请码来自：{{ $inviter->displayName() }} / {{ $inviter->public_id }}
+                            @else
+                                注册时未使用邀请码。
+                            @endif
+                        </div>
+                    </div>
+                </section>
+
+                <section class="rounded-sm border border-slate-300">
+                    <h2 class="border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold">我邀请的人</h2>
+                    <div class="divide-y divide-slate-100">
+                        @forelse($referrals as $referral)
+                            <article class="grid gap-1 px-4 py-3 text-sm md:grid-cols-[1fr_auto]">
+                                <div>
+                                    <p class="font-medium">{{ $referral->displayName() }}</p>
+                                    <p class="text-slate-600">{{ $referral->public_id }} / {{ $referral->email }}</p>
+                                </div>
+                                <p class="text-slate-500 md:text-right">{{ $referral->created_at?->format('Y-m-d H:i') }}</p>
+                            </article>
+                        @empty
+                            <p class="px-4 py-8 text-sm text-slate-600">还没有邀请记录。</p>
+                        @endforelse
+                    </div>
+                    @if(method_exists($referrals, 'links'))
+                        <div class="border-t border-slate-200 px-4 py-3">{{ $referrals->links() }}</div>
+                    @endif
+                </section>
+            </div>
         @elseif($section === 'wallet')
             @php
                 $walletTransactions = collect($walletTransactions ?? []);
+                $walletRechargeOptions = collect($walletRechargeOptions ?? []);
             @endphp
             <div class="space-y-5 px-4 py-5">
                 @if(session('status'))
@@ -762,6 +811,30 @@
                         </div>
                     </div>
                 </section>
+
+                @if($walletRechargeOptions->isNotEmpty())
+                    <section class="rounded-sm border border-slate-300">
+                        <h2 class="border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold">充值选项</h2>
+                        <div class="grid gap-3 p-4 md:grid-cols-3">
+                            @foreach($walletRechargeOptions as $option)
+                                <form class="rounded-sm border border-slate-200 bg-white p-4 text-sm" method="POST" action="{{ route('user.wallet.recharge-option') }}">
+                                    @csrf
+                                    <input type="hidden" name="wallet_recharge_option_id" value="{{ $option->id }}">
+                                    <h3 class="font-semibold">{{ $option->displayName() }}</h3>
+                                    <p class="mt-2 text-2xl font-semibold text-red-700">@money($option->payableCents())</p>
+                                    <p class="mt-1 text-slate-600">到账：@money($option->creditCents())</p>
+                                    @if($option->discount_percent !== null)
+                                        <p class="mt-1 text-xs text-red-700">按 {{ $option->discount_percent }}% 付款</p>
+                                    @endif
+                                    @if((int) $option->bonus_cents > 0)
+                                        <p class="mt-1 text-xs text-red-700">赠送 @money((int) $option->bonus_cents)</p>
+                                    @endif
+                                    <button class="mt-3 w-full rounded-sm border border-blue-700 bg-blue-700 px-3 py-2 text-sm font-medium text-white hover:bg-blue-800" type="submit">选择充值</button>
+                                </form>
+                            @endforeach
+                        </div>
+                    </section>
+                @endif
 
                 <section class="rounded-sm border border-slate-300">
                     <h2 class="border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold">钱包流水</h2>

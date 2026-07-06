@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Schema;
 
 class ActionRequiredList extends Widget
 {
-    protected static bool $isLazy = false;
+    protected static bool $isLazy = true;
 
     protected string $view = 'filament.widgets.action-required-list';
 

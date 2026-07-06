@@ -43,11 +43,29 @@ class RelativeUrlRewriter
 
     public function rewriteLocalUrls(string $content, Request $request): string
     {
-        return preg_replace_callback(
+        $masked = [];
+        $content = preg_replace_callback(
+            '~<[^>]*\sdata-absolute-url(?:=(["\']).*?\1|[^\s>]*)?[^>]*>~is',
+            function (array $matches) use (&$masked): string {
+                $key = '___SHOPWEB_ABSOLUTE_URL_'.count($masked).'___';
+                $masked[$key] = $matches[0];
+
+                return $key;
+            },
+            $content,
+        ) ?? $content;
+
+        $content = preg_replace_callback(
             '~(?<![A-Za-z0-9+.-])(?:https?:)?//[^\s"\'<>()]+~i',
             fn (array $matches): string => $this->toRelativeIfLocal($matches[0], $request),
             $content,
         ) ?? $content;
+
+        if ($masked !== []) {
+            $content = strtr($content, $masked);
+        }
+
+        return $content;
     }
 
     public function toRelativeIfLocal(string $url, Request $request): string

@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Builder;
 
 class PendingPaymentOrders extends TableWidget
 {
-    protected static bool $isLazy = false;
+    protected static bool $isLazy = true;
 
     protected static ?string $heading = '待确认付款';
 

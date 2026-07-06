@@ -9,7 +9,7 @@ use Filament\Widgets\StatsOverviewWidget\Stat;
 
 class SystemLoadStats extends StatsOverviewWidget
 {
-    protected static bool $isLazy = false;
+    protected static bool $isLazy = true;
 
     protected ?string $pollingInterval = '15s';
 
@@ -17,7 +17,7 @@ class SystemLoadStats extends StatsOverviewWidget
 
     protected function getStats(): array
     {
-        $snapshot = app(SystemLoadMetrics::class)->record();
+        $snapshot = app(SystemLoadMetrics::class)->latestCachedSnapshot();
 
         return [
             Stat::make('服务器 CPU', $snapshot['server_cpu_percent'] === null ? '未知' : $snapshot['server_cpu_percent'].'%')

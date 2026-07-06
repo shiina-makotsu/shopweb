@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Order;
 use App\Models\User;
+use App\Models\WalletRechargeOption;
 use App\Models\WalletRedeemCode;
 use App\Models\WalletTransaction;
 use App\Support\MoneyInput;
@@ -82,6 +83,32 @@ class WalletService
             'contact_email' => $user->email,
             'requires_shipping' => false,
             'customer_note' => '钱包充值',
+        ]);
+    }
+
+    public function createRechargeOptionOrder(User $user, WalletRechargeOption $option): Order
+    {
+        if (! $option->is_active || $option->payableCents() <= 0 || $option->creditCents() <= 0) {
+            throw ValidationException::withMessages(['wallet_recharge_option_id' => '该充值选项不可用。']);
+        }
+
+        return Order::query()->create([
+            'user_id' => $user->id,
+            'order_number' => $this->nextOrderNumber(),
+            'status' => Order::STATUS_PENDING_PAYMENT,
+            'payment_status' => Order::PAYMENT_PENDING,
+            'subtotal_cents' => 0,
+            'discount_cents' => max(0, (int) $option->amount_cents - $option->payableCents()),
+            'shipping_fee_cents' => 0,
+            'wallet_payment_cents' => 0,
+            'wallet_recharge_cents' => $option->creditCents(),
+            'is_wallet_recharge' => true,
+            'total_cents' => $option->payableCents(),
+            'contact_name' => $user->displayName(),
+            'contact_phone' => (string) ($user->phone ?? $user->public_id ?? $user->id),
+            'contact_email' => $user->email,
+            'requires_shipping' => false,
+            'customer_note' => '钱包充值选项：'.$option->displayName(),
         ]);
     }
 

@@ -17,6 +17,7 @@ class WalletTransaction extends Model
     public const SOURCE_WALLET_RECHARGE = 'wallet_recharge';
     public const SOURCE_ADMIN = 'admin';
     public const SOURCE_SYSTEM = 'system';
+    public const SOURCE_REFERRAL = 'referral';
 
     protected $fillable = [
         'user_id',

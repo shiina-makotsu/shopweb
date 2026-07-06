@@ -13,7 +13,7 @@ class UserOrderStatusPresenter
         }
 
         return match ($order->payment_status) {
-            Order::PAYMENT_SUBMITTED => '待确认收款',
+            Order::PAYMENT_SUBMITTED => '付款凭证已提交',
             Order::PAYMENT_REJECTED => '待支付',
             default => '待支付',
         };
@@ -22,7 +22,7 @@ class UserOrderStatusPresenter
     public function orderLabel(Order $order, ?string $fallback = null): string
     {
         if ($order->status === Order::STATUS_PENDING_PAYMENT && $order->payment_status === Order::PAYMENT_SUBMITTED) {
-            return '待确认收款';
+            return '待发货';
         }
 
         return $fallback ?? $order->status;

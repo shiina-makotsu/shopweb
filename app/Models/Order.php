@@ -30,6 +30,7 @@ class Order extends Model
     public const PAYMENT_METHOD_FALLBACK_QR = 'fallback_qr';
     public const PAYMENT_METHOD_RED_PACKET = 'red_packet';
     public const PAYMENT_METHOD_WALLET = 'wallet';
+    public const PAYMENT_METHOD_PAYPAL = 'paypal';
     public const AUTO_CHECK_PENDING = 'pending';
     public const AUTO_CHECK_PASSED = 'passed';
     public const AUTO_CHECK_FAILED = 'failed';
@@ -174,6 +175,7 @@ class Order extends Model
             self::PAYMENT_METHOD_FALLBACK_QR => '备用二维码支付',
             self::PAYMENT_METHOD_RED_PACKET => '口令红包支付',
             self::PAYMENT_METHOD_WALLET => '钱包余额支付',
+            self::PAYMENT_METHOD_PAYPAL => 'PayPal 支付',
             default => '二维码支付',
         };
     }

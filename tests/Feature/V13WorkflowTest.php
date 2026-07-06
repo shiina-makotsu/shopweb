@@ -98,8 +98,8 @@ it('auto checks payment proof for user display while keeping backend payment sub
 
     expect($order->fresh()->payment_status)->toBe(Order::PAYMENT_SUBMITTED)
         ->and($order->fresh()->payment_auto_check_status)->toBe(Order::AUTO_CHECK_PASSED)
-        ->and($order->fresh()->userPaymentLabel())->toBe('待确认收款')
-        ->and($order->fresh()->userStatusLabel())->toBe('待确认收款');
+        ->and($order->fresh()->userPaymentLabel())->toBe('付款凭证已提交')
+        ->and($order->fresh()->userStatusLabel())->toBe('待发货');
 
     $this->assertDatabaseHas('payment_verification_logs', [
         'order_id' => $order->id,
@@ -221,13 +221,15 @@ it('shows payment proof images to admins and a payment success state to customer
     expect($order->fresh()->payment_proof_path)->not->toBeNull()
         ->and($order->fresh()->payment_status)->toBe(Order::PAYMENT_SUBMITTED)
         ->and($order->fresh()->payment_auto_check_status)->toBe(Order::AUTO_CHECK_PASSED)
-        ->and($order->fresh()->userPaymentLabel())->toBe('待确认收款');
+        ->and($order->fresh()->userPaymentLabel())->toBe('付款凭证已提交');
 
     $this->actingAs($user)
         ->get(route('orders.show', $order))
         ->assertOk()
         ->assertSee('付款成功')
-        ->assertSee('待确认收款')
+        ->assertSee('待发货')
+        ->assertSee('付款凭证已提交')
+        ->assertDontSee('待确认收款')
         ->assertSee('data-payment-redirect-url="/forum"', false)
         ->assertDontSee('待后台人工复核')
         ->assertDontSee('后台会继续人工复核');
@@ -274,7 +276,9 @@ it('does not count submitted payment proof orders as pending payment notices for
     $this->actingAs($user)
         ->get(route('orders.index'))
         ->assertOk()
-        ->assertSee('待确认收款')
+        ->assertSee('待发货')
+        ->assertSee('付款凭证已提交')
+        ->assertDontSee('待确认收款')
         ->assertDontSee('>待支付<', false);
 
     $this->actingAs($user)
@@ -283,8 +287,8 @@ it('does not count submitted payment proof orders as pending payment notices for
         ->assertSee('待付款')
         ->assertSee('>0<', false);
 
-    expect($order->fresh()->userPaymentLabel())->toBe('待确认收款')
-        ->and($order->fresh()->userStatusLabel())->toBe('待确认收款');
+    expect($order->fresh()->userPaymentLabel())->toBe('付款凭证已提交')
+        ->and($order->fresh()->userStatusLabel())->toBe('待发货');
 });
 
 it('stores payment proof files into an ensured private directory', function (): void {

@@ -6,6 +6,7 @@ use App\Filament\Resources\CouponResource;
 use App\Models\Coupon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\ListRecords;
 
@@ -23,6 +24,9 @@ class ListCoupons extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
+            Action::make('referralRewards')
+                ->label('邀请奖励设置')
+                ->url(\App\Filament\Resources\ReferralRewardRuleResource::getUrl('index')),
             CouponResource::issueCouponHeaderAction(),
             CreateAction::make(),
         ];

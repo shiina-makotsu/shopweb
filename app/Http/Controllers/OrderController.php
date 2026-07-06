@@ -159,8 +159,13 @@ class OrderController extends Controller
                 Order::PAYMENT_METHOD_FALLBACK_QR,
                 Order::PAYMENT_METHOD_RED_PACKET,
                 Order::PAYMENT_METHOD_WALLET,
+                Order::PAYMENT_METHOD_PAYPAL,
             ])],
         ]);
+
+        if ($data['payment_method'] === Order::PAYMENT_METHOD_PAYPAL && ! SiteSetting::query()->first()?->paypalEmail()) {
+            throw ValidationException::withMessages(['payment_method' => 'PayPal 收款邮箱未配置，暂不能使用 PayPal 支付。']);
+        }
 
         return DB::transaction(function () use ($request, $order, $orders, $wallet, $data): RedirectResponse {
             /** @var Order $order */

@@ -13,6 +13,10 @@ class HomeController extends Controller
 {
     public function index(Request $request, AnalyticsTracker $analytics, StorefrontCache $cache): View
     {
+        if ($request->filled('invite')) {
+            $request->session()->put('referral_code', strtoupper(trim((string) $request->query('invite'))));
+        }
+
         $analytics->track($request, AnalyticsEvent::PAGE_VIEW, ['source' => 'home']);
         $featuredProducts = $cache->homeProducts('featured');
         $discountProducts = $cache->homeProducts('discount');

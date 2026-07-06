@@ -18,10 +18,12 @@ use App\Models\Product;
 use App\Models\ProductMedia;
 use App\Models\ProductTag;
 use App\Models\ProductVariant;
+use App\Models\ReferralRewardRule;
 use App\Models\ShippingCarrier;
 use App\Models\SiteSetting;
 use App\Models\User;
 use App\Models\UserCoupon;
+use App\Models\WalletRechargeOption;
 use App\Models\WalletRedeemCode;
 use App\Models\WalletTransaction;
 use App\Models\Warehouse;
@@ -260,6 +262,162 @@ it('uses wallet balance only when the customer selects wallet checkout', functio
         'amount_cents' => -3000,
         'source' => WalletTransaction::SOURCE_ORDER_PAYMENT,
     ]);
+});
+
+it('shows paypal checkout only after a paypal receiver email is configured', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+    $category = Category::query()->create(['name' => 'Paypal', 'slug' => 'paypal', 'is_active' => true]);
+    $product = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => 'Paypal product',
+        'slug' => 'paypal-product',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_IN_PERSON,
+    ]);
+    $variant = ProductVariant::query()->create([
+        'product_id' => $product->id,
+        'sku' => 'PAYPAL-SKU',
+        'price_cents' => 1200,
+        'stock' => 5,
+        'is_active' => true,
+    ]);
+
+    SiteSetting::query()->create(['site_name' => 'ShopWeb']);
+
+    $this->actingAs($user)->post(route('cart.items.store'), [
+        'variant_id' => $variant->id,
+        'quantity' => 1,
+    ])->assertRedirect(route('cart.show'));
+
+    $this->actingAs($user)
+        ->get(route('checkout.create'))
+        ->assertOk()
+        ->assertDontSee('PayPal 支付');
+
+    $this->actingAs($user)
+        ->post(route('checkout.store'), [
+            'contact_name' => 'Paypal User',
+            'contact_phone' => '13800000000',
+            'payment_method' => Order::PAYMENT_METHOD_PAYPAL,
+        ])
+        ->assertSessionHasErrors('payment_method');
+
+    SiteSetting::query()->first()->update([
+        'payment_gateway_config' => ['paypal_email' => 'seller@example.com'],
+    ]);
+    Cache::flush();
+
+    $this->actingAs($user)
+        ->get(route('checkout.create'))
+        ->assertOk()
+        ->assertSee('PayPal 支付')
+        ->assertSee('seller@example.com');
+
+    $this->actingAs($user)
+        ->post(route('checkout.store'), [
+            'contact_name' => 'Paypal User',
+            'contact_phone' => '13800000000',
+            'payment_method' => Order::PAYMENT_METHOD_PAYPAL,
+        ])
+        ->assertRedirect();
+
+    expect(Order::query()->whereBelongsTo($user)->latest('id')->firstOrFail()->payment_method)
+        ->toBe(Order::PAYMENT_METHOD_PAYPAL);
+});
+
+it('attributes referral registrations and issues configured coupon and wallet rewards', function (): void {
+    $inviter = User::factory()->create(['role' => 'customer']);
+    $inviter->ensureReferralCode();
+    $coupon = Coupon::query()->create([
+        'code' => 'INVITE10',
+        'name' => 'Invite reward',
+        'type' => Coupon::TYPE_FIXED,
+        'value' => 1000,
+        'scope' => Coupon::SCOPE_GLOBAL,
+        'minimum_order_cents' => 0,
+        'is_active' => true,
+    ]);
+    ReferralRewardRule::query()->create([
+        'name' => 'Invite reward',
+        'coupon_id' => $coupon->id,
+        'wallet_amount_cents' => 500,
+        'is_active' => true,
+    ]);
+
+    $this->get(route('home', ['invite' => $inviter->referral_code]))
+        ->assertOk()
+        ->assertSessionHas('referral_code', $inviter->referral_code);
+
+    $this->withSession([
+        'register_captcha_answer' => 4,
+        'referral_code' => $inviter->referral_code,
+    ])->post(route('register'), [
+        'public_id' => 'invitee_user',
+        'name' => 'Invitee',
+        'email' => 'invitee@example.com',
+        'password' => 'password',
+        'password_confirmation' => 'password',
+        'captcha_answer' => 4,
+    ])->assertRedirect(route('home'));
+
+    $invitee = User::query()->where('email', 'invitee@example.com')->firstOrFail();
+
+    expect($invitee->referred_by_user_id)->toBe($inviter->id)
+        ->and($inviter->fresh()->wallet_balance_cents)->toBe(500);
+
+    $this->assertDatabaseHas('user_coupons', [
+        'user_id' => $inviter->id,
+        'coupon_id' => $coupon->id,
+        'source' => UserCoupon::SOURCE_REFERRAL,
+    ]);
+    $this->assertDatabaseHas('wallet_transactions', [
+        'user_id' => $inviter->id,
+        'amount_cents' => 500,
+        'source' => WalletTransaction::SOURCE_REFERRAL,
+    ]);
+});
+
+it('renders referral copy links with an absolute local-aware host', function (): void {
+    $user = User::factory()->create(['role' => 'customer', 'public_id' => 'local_inviter']);
+    $user->ensureReferralCode();
+
+    $this->actingAs($user)
+        ->get('http://127.0.0.1/user/invitations')
+        ->assertOk()
+        ->assertSee('data-absolute-url', false)
+        ->assertSee('value="http://localhost/?invite='.$user->referral_code.'"', false)
+        ->assertDontSee('value="/?invite='.$user->referral_code.'"', false);
+});
+
+it('creates wallet recharge orders from configured recharge options', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+    $option = WalletRechargeOption::query()->create([
+        'name' => '充值 10 送 2',
+        'currency_code' => 'CNY',
+        'currency_unit' => 'yuan',
+        'amount_cents' => 1000,
+        'discount_percent' => 90,
+        'bonus_cents' => 200,
+        'is_active' => true,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('user.section', 'wallet'))
+        ->assertOk()
+        ->assertSee('充值 10 送 2')
+        ->assertSee('按 90% 付款');
+
+    $this->actingAs($user)
+        ->post(route('user.wallet.recharge-option'), [
+            'wallet_recharge_option_id' => $option->id,
+        ])
+        ->assertRedirect();
+
+    $order = Order::query()->whereBelongsTo($user)->latest('id')->firstOrFail();
+
+    expect($order->total_cents)->toBe(900)
+        ->and($order->wallet_recharge_cents)->toBe(1200)
+        ->and($order->discount_cents)->toBe(100);
 });
 
 it('uses wallet balance when completing a flash sale order selection', function (): void {

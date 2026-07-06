@@ -22,6 +22,7 @@ use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Hidden;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -36,6 +37,7 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\HtmlString;
 
 class CustomerResource extends Resource
 {
@@ -71,6 +73,8 @@ class CustomerResource extends Resource
             ->where('role', 'customer')
             ->withCount(['orders as completed_orders_count' => fn (Builder $query): Builder => $query
                 ->where('status', Order::STATUS_FULFILLED)])
+            ->with(['inviter'])
+            ->withCount('referrals')
             ->withSum(['orders as completed_orders_total_cents' => fn (Builder $query): Builder => $query
                 ->where('status', Order::STATUS_FULFILLED)], 'total_cents');
     }
@@ -164,6 +168,11 @@ class CustomerResource extends Resource
                 Toggle::make('can_view_order_numbers')->label('允许查看订单号')->helperText('关闭则显示订单内部编号。'),
                 Toggle::make('can_view_tracking_numbers')->label('允许查看国际物流号')->helperText('国内物流默认可见；这里用于开放进货中/国际物流单号。'),
             ])->visible(fn (): bool => auth()->user()?->isSuperAdmin() ?? false)->columns(2)->columnSpanFull(),
+            Section::make('邀请关系')->schema([
+                Placeholder::make('referral_code')->label('邀请码')->content(fn (?User $record): string => $record?->referral_code ?: '-'),
+                Placeholder::make('inviter')->label('被谁邀请')->content(fn (?User $record): string => $record?->inviter ? static::userLabel($record->inviter) : '-'),
+                Placeholder::make('referrals_count')->label('邀请人数')->content(fn (?User $record): string => (string) ($record?->referrals()->count() ?? 0)),
+            ])->columns(3)->columnSpanFull(),
         ]);
     }
 
@@ -216,6 +225,15 @@ class CustomerResource extends Resource
                     ->badge()
                     ->toggleable(),
                 TextColumn::make('completed_orders_count')->label('完成订单数')->sortable(),
+                TextColumn::make('inviter.name')
+                    ->label('邀请人')
+                    ->formatStateUsing(fn ($state, User $record): string => $record->inviter ? static::userLabel($record->inviter) : '-')
+                    ->toggleable(),
+                TextColumn::make('referrals_count')
+                    ->label('邀请人数')
+                    ->badge()
+                    ->formatStateUsing(fn ($state): string => ((int) $state).' 人')
+                    ->sortable(),
                 TextColumn::make('completed_orders_total_cents')
                     ->label('完成累计金额')
                     ->formatStateUsing(fn ($state): string => Money::format((int) ($state ?? 0)))
@@ -251,6 +269,14 @@ class CustomerResource extends Resource
                             $data['note'] ?? null,
                         );
                     }),
+                Action::make('viewReferrals')
+                    ->label('查看邀请')
+                    ->icon(Heroicon::OutlinedUserGroup)
+                    ->modalHeading(fn (User $record): string => '邀请明细：'.static::userLabel($record))
+                    ->modalSubmitAction(false)
+                    ->modalCancelActionLabel('关闭')
+                    ->modalWidth('4xl')
+                    ->modalContent(fn (User $record): HtmlString => static::referralsHtml($record)),
                 EditAction::make()
                     ->url(fn (User $record): string => static::getUrl('edit', ['record' => $record->getKey()])),
             ])
@@ -326,5 +352,45 @@ class CustomerResource extends Resource
         }
 
         return (string) $value;
+    }
+
+    private static function userLabel(User $user): string
+    {
+        return $user->displayName().' / '.$user->public_id.' / '.$user->email;
+    }
+
+    private static function referralsHtml(User $user): HtmlString
+    {
+        $referrals = $user->referrals()->latest()->get();
+
+        if ($referrals->isEmpty()) {
+            return new HtmlString('<p style="margin:0;color:#64748b;">该用户暂未邀请其他用户。</p>');
+        }
+
+        $rows = $referrals->map(function (User $referral): string {
+            $label = e(static::userLabel($referral));
+            $registeredAt = e($referral->created_at?->format('Y-m-d H:i') ?? '-');
+
+            return <<<HTML
+                <tr>
+                    <td style="padding:10px 12px;border-top:1px solid #e2e8f0;">{$label}</td>
+                    <td style="padding:10px 12px;border-top:1px solid #e2e8f0;white-space:nowrap;">{$registeredAt}</td>
+                </tr>
+            HTML;
+        })->implode('');
+
+        return new HtmlString(<<<HTML
+            <div style="overflow-x:auto;">
+                <table style="width:100%;border-collapse:collapse;font-size:13px;line-height:1.5;">
+                    <thead>
+                        <tr style="background:#f8fafc;color:#334155;">
+                            <th style="padding:10px 12px;text-align:left;">被邀请用户</th>
+                            <th style="padding:10px 12px;text-align:left;">注册时间</th>
+                        </tr>
+                    </thead>
+                    <tbody>{$rows}</tbody>
+                </table>
+            </div>
+        HTML);
     }
 }

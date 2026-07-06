@@ -117,6 +117,7 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/user/coupons', [UserCenterController::class, 'storeCoupon'])->name('user.coupons.store');
     Route::post('/user/wallet/redeem', [UserCenterController::class, 'redeemWalletCode'])->name('user.wallet.redeem');
     Route::post('/user/wallet/recharge', [UserCenterController::class, 'rechargeWallet'])->name('user.wallet.recharge');
+    Route::post('/user/wallet/recharge-option', [UserCenterController::class, 'rechargeWalletOption'])->name('user.wallet.recharge-option');
     Route::get('/user/addresses/create', [UserCenterController::class, 'createAddress'])->name('user.addresses.create');
     Route::get('/user/addresses/{address}/edit', [UserCenterController::class, 'editAddress'])->name('user.addresses.edit');
     Route::post('/user/addresses', [UserCenterController::class, 'storeAddress'])->name('user.addresses.store');

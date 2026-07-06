@@ -165,6 +165,13 @@ class SiteSetting extends Model
         return $this->assetUrl($this->payment_fallback_config['friend_qr_path'] ?? null);
     }
 
+    public function paypalEmail(): ?string
+    {
+        $email = trim((string) ($this->payment_gateway_config['paypal_email'] ?? ''));
+
+        return filter_var($email, FILTER_VALIDATE_EMAIL) ? $email : null;
+    }
+
     public function guidePetAssetUrl(): ?string
     {
         return $this->assetUrl($this->guide_pet_asset_path);

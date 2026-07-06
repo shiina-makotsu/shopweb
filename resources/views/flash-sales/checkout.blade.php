@@ -61,6 +61,7 @@
                     <h2 class="border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold">支付方式</h2>
                     <div class="grid gap-3 p-4 md:grid-cols-3">
                         @php($selectedPaymentMethod = old('payment_method', \App\Models\Order::PAYMENT_METHOD_QR_CODE))
+                        @php($paypalEmail = ($siteSettings ?? null)?->paypalEmail())
                         <label class="flex cursor-pointer gap-3 rounded-sm border border-slate-300 bg-white px-3 py-3 text-sm hover:bg-slate-50">
                             <input class="mt-1" type="radio" name="payment_method" value="{{ \App\Models\Order::PAYMENT_METHOD_QR_CODE }}" @checked($selectedPaymentMethod === \App\Models\Order::PAYMENT_METHOD_QR_CODE)>
                             <span>
@@ -82,6 +83,15 @@
                                 <span class="mt-1 block text-xs leading-5 text-slate-600">当前余额：@money((int) auth()->user()->wallet_balance_cents)。</span>
                             </span>
                         </label>
+                        @if($paypalEmail)
+                            <label class="flex cursor-pointer gap-3 rounded-sm border border-slate-300 bg-white px-3 py-3 text-sm hover:bg-slate-50">
+                                <input class="mt-1" type="radio" name="payment_method" value="{{ \App\Models\Order::PAYMENT_METHOD_PAYPAL }}" @checked($selectedPaymentMethod === \App\Models\Order::PAYMENT_METHOD_PAYPAL)>
+                                <span>
+                                    <span class="block font-medium">PayPal 支付</span>
+                                    <span class="mt-1 block break-all text-xs leading-5 text-slate-600">收款邮箱：{{ $paypalEmail }}</span>
+                                </span>
+                            </label>
+                        @endif
                     </div>
                 </section>
 

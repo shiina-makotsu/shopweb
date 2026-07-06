@@ -10,8 +10,10 @@ use App\Services\OrderService;
 use App\Services\ShippingQuoteService;
 use App\Support\ChinaRegions;
 use App\Models\Order;
+use App\Models\SiteSetting;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class CheckoutController extends Controller
@@ -81,6 +83,7 @@ class CheckoutController extends Controller
                 Order::PAYMENT_METHOD_FALLBACK_QR,
                 Order::PAYMENT_METHOD_RED_PACKET,
                 Order::PAYMENT_METHOD_WALLET,
+                Order::PAYMENT_METHOD_PAYPAL,
             ])],
             'coupon_code' => ['nullable', 'string', 'max:100'],
             'coupon_items' => ['nullable', 'array'],
@@ -91,6 +94,10 @@ class CheckoutController extends Controller
 
         $data['requires_shipping'] = $requiresShipping;
         $data['payment_method'] ??= Order::PAYMENT_METHOD_QR_CODE;
+
+        if ($data['payment_method'] === Order::PAYMENT_METHOD_PAYPAL && ! SiteSetting::query()->first()?->paypalEmail()) {
+            throw ValidationException::withMessages(['payment_method' => 'PayPal 收款邮箱未配置，暂不能使用 PayPal 支付。']);
+        }
 
         $order = $orders->createFromCart($request->user(), $data);
         $analytics->trackOrderCreated($request, $order);

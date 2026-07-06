@@ -31,6 +31,7 @@ use App\Filament\Pages\StoreInfoPage;
 use App\Filament\Pages\SupportAiSettingsPage;
 use App\Filament\Pages\SystemInfoPage;
 use App\Filament\Pages\UserAiPage;
+use App\Filament\Pages\WalletSettingsPage;
 use App\Models\Order;
 use App\Models\SiteSetting;
 use App\Models\SupportChatMessage;
@@ -105,6 +106,7 @@ class AdminPanelProvider extends PanelProvider
                 SupportAiSettingsPage::class,
                 SystemInfoPage::class,
                 UserAiPage::class,
+                WalletSettingsPage::class,
             ])
             ->widgets([
                 SystemLoadStats::class,

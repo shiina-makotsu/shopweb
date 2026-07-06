@@ -23,7 +23,7 @@
             </div>
         </div>
 
-        <div class="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-5">
+        <div class="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-6">
             <a class="rounded-sm border border-slate-200 bg-white px-4 py-3 hover:border-blue-300 hover:bg-blue-50" href="{{ route('orders.index') }}">
                 <p class="text-xs text-slate-500">待付款</p>
                 <p class="mt-1 text-2xl font-semibold">{{ $pendingPaymentCount }}</p>
@@ -43,6 +43,10 @@
             <a class="rounded-sm border border-slate-200 bg-white px-4 py-3 hover:border-blue-300 hover:bg-blue-50" href="{{ route('user.section', 'wallet') }}">
                 <p class="text-xs text-slate-500">钱包余额</p>
                 <p class="mt-1 text-2xl font-semibold">@money((int) $user->wallet_balance_cents)</p>
+            </a>
+            <a class="rounded-sm border border-slate-200 bg-white px-4 py-3 hover:border-blue-300 hover:bg-blue-50" href="{{ route('user.section', 'invitations') }}">
+                <p class="text-xs text-slate-500">已邀请</p>
+                <p class="mt-1 text-2xl font-semibold">{{ $user->referrals_count }}</p>
             </a>
         </div>
     </section>
@@ -82,6 +86,7 @@
                     <a class="flex justify-between rounded-sm px-2 py-2 hover:bg-blue-50" href="{{ route('user.section', 'wishlists') }}"><span>愿望单</span><span>{{ $user->wishlists_count }}</span></a>
                     <a class="flex justify-between rounded-sm px-2 py-2 hover:bg-blue-50" href="{{ route('user.section', 'favorites') }}"><span>收藏商品</span><span>{{ $user->favorites_count }}</span></a>
                     <a class="flex justify-between rounded-sm px-2 py-2 hover:bg-blue-50" href="{{ route('user.section', 'coupons') }}"><span>优惠码</span><span></span></a>
+                    <a class="flex justify-between rounded-sm px-2 py-2 hover:bg-blue-50" href="{{ route('user.section', 'invitations') }}"><span>邀请</span><span>{{ $user->referrals_count }}</span></a>
                     <a class="flex justify-between rounded-sm px-2 py-2 hover:bg-blue-50" href="{{ route('user.section', 'wallet') }}"><span>钱包</span><span>@money((int) $user->wallet_balance_cents)</span></a>
                     <a class="relative flex justify-between rounded-sm px-2 py-2 pr-12 hover:bg-blue-50" href="{{ route('user.section', 'chat') }}">
                         <span>聊天</span>
@@ -100,6 +105,7 @@
                 <div class="grid gap-2 px-4 py-4 text-sm">
                     <a class="rounded-sm border border-slate-200 px-3 py-2 text-slate-600 hover:bg-blue-50 hover:text-blue-800" href="{{ route('user.section', 'profile') }}">个人资料</a>
                     <a class="rounded-sm border border-slate-200 px-3 py-2 text-slate-600 hover:bg-blue-50 hover:text-blue-800" href="{{ route('user.section', 'coupons') }}">优惠码</a>
+                    <a class="rounded-sm border border-slate-200 px-3 py-2 text-slate-600 hover:bg-blue-50 hover:text-blue-800" href="{{ route('user.section', 'invitations') }}">邀请</a>
                     <a class="rounded-sm border border-slate-200 px-3 py-2 text-slate-600 hover:bg-blue-50 hover:text-blue-800" href="{{ route('user.section', 'wallet') }}">钱包</a>
                     <a class="relative rounded-sm border border-slate-200 px-3 py-2 pr-12 text-slate-600 hover:bg-blue-50 hover:text-blue-800" href="{{ route('user.section', 'chat') }}">
                         聊天

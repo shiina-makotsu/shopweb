@@ -9,7 +9,7 @@ use Illuminate\Support\Carbon;
 
 class SystemLoadChart extends Widget
 {
-    protected static bool $isLazy = false;
+    protected static bool $isLazy = true;
 
     protected ?string $pollingInterval = '15s';
 
@@ -26,7 +26,6 @@ class SystemLoadChart extends Widget
     protected function getViewData(): array
     {
         $metrics = app(SystemLoadMetrics::class);
-        $metrics->record();
 
         $rangeEnd = $this->parseRangeDate($this->rangeEnd)?->second(0) ?? now()->second(0);
         $rangeStart = $this->parseRangeDate($this->rangeStart)?->second(0) ?? $rangeEnd->copy()->subHours(24)->addMinute();
