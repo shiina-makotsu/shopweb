@@ -94,7 +94,17 @@ class FlashSaleService
                 'customer_note' => $data['customer_note'] ?? null,
             ]);
 
-            if ((int) $order->wallet_payment_cents <= 0 && $order->payment_status === Order::PAYMENT_PENDING) {
+            $paymentMethod = $data['payment_method'] ?? Order::PAYMENT_METHOD_QR_CODE;
+
+            if ($paymentMethod === Order::PAYMENT_METHOD_WALLET && (int) $order->wallet_payment_cents <= 0 && $order->payment_status === Order::PAYMENT_PENDING) {
+                $walletUser = User::query()->whereKey($order->user_id)->lockForUpdate()->firstOrFail();
+
+                if ((int) $walletUser->wallet_balance_cents < (int) $order->total_cents) {
+                    throw ValidationException::withMessages(['payment_method' => '钱包余额不足，请选择其他付款方式。']);
+                }
+
+                app(WalletService::class)->applyAvailableBalanceAndUpdateOrder($walletUser, $order, (int) $order->total_cents, $walletUser);
+            } elseif ((int) $order->user->wallet_balance_cents > 0 && (int) $order->user->wallet_balance_cents < (int) $order->total_cents && (int) $order->wallet_payment_cents <= 0 && $order->payment_status === Order::PAYMENT_PENDING) {
                 app(WalletService::class)->applyAvailableBalanceAndUpdateOrder($order->user, $order, (int) $order->total_cents, $order->user);
             }
 

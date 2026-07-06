@@ -12,7 +12,14 @@ class EditAnnouncement extends EditRecord
 
     protected function mutateFormDataBeforeSave(array $data): array
     {
-        return \App\Models\Announcement::normalizePublicationData($data);
+        return \App\Models\Announcement::normalizePublicationData($data, republish: true);
+    }
+
+    protected function afterSave(): void
+    {
+        if ($this->record->is_published) {
+            $this->record->reads()->delete();
+        }
     }
 
     protected function getHeaderActions(): array

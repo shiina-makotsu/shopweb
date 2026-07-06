@@ -147,7 +147,19 @@ class OrderService
                 ]);
             }
 
-            app(WalletService::class)->applyAvailableBalanceAndUpdateOrder($user, $order, $totalCents, $user);
+            $paymentMethod = $data['payment_method'] ?? Order::PAYMENT_METHOD_QR_CODE;
+
+            if ($paymentMethod === Order::PAYMENT_METHOD_WALLET) {
+                $walletUser = User::query()->whereKey($user->id)->lockForUpdate()->firstOrFail();
+
+                if ((int) $walletUser->wallet_balance_cents < $totalCents) {
+                    throw ValidationException::withMessages(['payment_method' => '钱包余额不足，请选择其他付款方式。']);
+                }
+
+                app(WalletService::class)->applyAvailableBalanceAndUpdateOrder($walletUser, $order, $totalCents, $walletUser);
+            } elseif ((int) $user->wallet_balance_cents > 0 && (int) $user->wallet_balance_cents < $totalCents) {
+                app(WalletService::class)->applyAvailableBalanceAndUpdateOrder($user, $order, $totalCents, $user);
+            }
 
             $this->cart->clear();
 

@@ -57,9 +57,9 @@ class Announcement extends Model
      * @param array<string, mixed> $data
      * @return array<string, mixed>
      */
-    public static function normalizePublicationData(array $data): array
+    public static function normalizePublicationData(array $data, bool $republish = false): array
     {
-        if (($data['is_published'] ?? false) && blank($data['published_at'] ?? null)) {
+        if (($data['is_published'] ?? false) && ($republish || blank($data['published_at'] ?? null))) {
             $data['published_at'] = now();
         }
 

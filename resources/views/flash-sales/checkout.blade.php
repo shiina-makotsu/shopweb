@@ -69,6 +69,17 @@
                     <div class="grid gap-3 p-4 md:grid-cols-3">
                         @php($selectedPaymentMethod = old('payment_method', \App\Models\Order::PAYMENT_METHOD_QR_CODE))
                         @php($paypalEmail = ($siteSettings ?? null)?->paypalEmail())
+                        @php($flashSalePayableCents = (int) $flash_sale->sale_price_cents * (int) $quantity)
+                        @php($walletCanCoverFlashSale = (int) auth()->user()->wallet_balance_cents >= $flashSalePayableCents && $flashSalePayableCents > 0)
+                        @if($walletCanCoverFlashSale)
+                            <label class="flex cursor-pointer gap-3 rounded-sm border border-emerald-300 bg-emerald-50 px-3 py-3 text-sm hover:bg-emerald-100">
+                                <input class="mt-1" type="radio" name="payment_method" value="{{ \App\Models\Order::PAYMENT_METHOD_WALLET }}" @checked($selectedPaymentMethod === \App\Models\Order::PAYMENT_METHOD_WALLET)>
+                                <span>
+                                    <span class="block font-medium">钱包余额支付</span>
+                                    <span class="mt-1 block text-xs leading-5 text-emerald-900">当前余额 @money((int) auth()->user()->wallet_balance_cents)，可直接支付本单。</span>
+                                </span>
+                            </label>
+                        @endif
                         <label class="flex cursor-pointer gap-3 rounded-sm border border-slate-300 bg-white px-3 py-3 text-sm hover:bg-slate-50">
                             <input class="mt-1" type="radio" name="payment_method" value="{{ \App\Models\Order::PAYMENT_METHOD_QR_CODE }}" @checked($selectedPaymentMethod === \App\Models\Order::PAYMENT_METHOD_QR_CODE)>
                             <span>
@@ -95,7 +106,11 @@
                     </div>
                     @if((int) auth()->user()->wallet_balance_cents > 0)
                         <div class="mx-4 mb-4 rounded-sm border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm text-emerald-900">
-                            钱包余额 @money((int) auth()->user()->wallet_balance_cents) 会在提交订单时自动优先抵扣，余额不足时再使用上方付款方式补齐尾款。
+                            @if($walletCanCoverFlashSale)
+                                钱包余额 @money((int) auth()->user()->wallet_balance_cents)。选择“钱包余额支付”会直接扣除余额并完成付款；选择其他付款方式不会使用钱包余额。
+                            @else
+                                钱包余额 @money((int) auth()->user()->wallet_balance_cents) 会先抵扣，剩余金额使用所选付款方式补齐，并由后台人工确认。
+                            @endif
                         </div>
                     @endif
                 </section>
@@ -115,9 +130,10 @@
                         <p class="mt-1 text-slate-600">结束 {{ $flash_sale->ends_at->format('Y-m-d H:i') }}</p>
                     @endif
                 </div>
-                <div class="border-t border-slate-200 bg-slate-50 px-4 py-4">
-                    @php($flashSaleTotalCents = (int) $flash_sale->sale_price_cents * (int) $quantity)
-                    @php($flashSaleWalletCents = min((int) auth()->user()->wallet_balance_cents, $flashSaleTotalCents))
+                @php($flashSaleTotalCents = (int) $flash_sale->sale_price_cents * (int) $quantity)
+                @php($flashSaleWalletBalanceCents = (int) auth()->user()->wallet_balance_cents)
+                @php($flashSaleWalletCents = $selectedPaymentMethod === \App\Models\Order::PAYMENT_METHOD_WALLET || ($flashSaleWalletBalanceCents > 0 && $flashSaleWalletBalanceCents < $flashSaleTotalCents) ? min($flashSaleWalletBalanceCents, $flashSaleTotalCents) : 0)
+                <div class="border-t border-slate-200 bg-slate-50 px-4 py-4" data-flash-payment-summary data-total-cents="{{ $flashSaleTotalCents }}" data-wallet-balance-cents="{{ $flashSaleWalletBalanceCents }}">
                     <div class="flex justify-between text-sm">
                         <span>秒杀小计</span>
                         <span class="font-semibold">@money($flashSaleTotalCents)</span>
@@ -128,14 +144,39 @@
                     </div>
                     <div class="mt-2 flex justify-between text-sm text-emerald-700">
                         <span>钱包支付金额</span>
-                        <span class="font-semibold">@money($flashSaleWalletCents)</span>
+                        <span class="font-semibold" data-flash-wallet-payment>@money($flashSaleWalletCents)</span>
                     </div>
                     <div class="mt-2 flex justify-between text-base font-semibold text-red-700">
                         <span>待支付金额</span>
-                        <span>@money(max(0, $flashSaleTotalCents - $flashSaleWalletCents))</span>
+                        <span data-flash-remaining-payment>@money(max(0, $flashSaleTotalCents - $flashSaleWalletCents))</span>
                     </div>
                 </div>
             </aside>
         </div>
     </section>
+    <script>
+        (() => {
+            const summary = document.querySelector('[data-flash-payment-summary]');
+            const walletNode = document.querySelector('[data-flash-wallet-payment]');
+            const remainingNode = document.querySelector('[data-flash-remaining-payment]');
+            const money = (cents) => new Intl.NumberFormat('zh-CN', {
+                style: 'currency',
+                currency: 'CNY',
+            }).format(Math.max(0, Number(cents || 0)) / 100);
+            const sync = () => {
+                if (! summary || ! walletNode || ! remainingNode) return;
+
+                const total = Number(summary.dataset.totalCents || 0);
+                const walletBalance = Number(summary.dataset.walletBalanceCents || 0);
+                const selectedPayment = document.querySelector('[name="payment_method"]:checked')?.value || '';
+                const shouldUseWallet = selectedPayment === '{{ \App\Models\Order::PAYMENT_METHOD_WALLET }}' || (walletBalance > 0 && walletBalance < total);
+                const walletPayment = shouldUseWallet ? Math.min(walletBalance, total) : 0;
+                walletNode.textContent = money(walletPayment);
+                remainingNode.textContent = money(total - walletPayment);
+            };
+
+            document.querySelectorAll('[name="payment_method"]').forEach((input) => input.addEventListener('change', sync));
+            sync();
+        })();
+    </script>
 </x-layouts.app>

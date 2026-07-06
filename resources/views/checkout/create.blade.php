@@ -182,6 +182,17 @@
                     <div class="grid gap-3 p-4 md:grid-cols-3">
                         @php($selectedPaymentMethod = old('payment_method', \App\Models\Order::PAYMENT_METHOD_QR_CODE))
                         @php($paypalEmail = ($siteSettings ?? null)?->paypalEmail())
+                        @php($checkoutPayableCents = (int) $subtotalCents + (int) $shippingQuote['shipping_fee_cents'])
+                        @php($walletCanCoverCheckout = (int) auth()->user()->wallet_balance_cents >= $checkoutPayableCents && $checkoutPayableCents > 0)
+                        @if($walletCanCoverCheckout)
+                            <label class="flex cursor-pointer gap-3 rounded-sm border border-emerald-300 bg-emerald-50 px-3 py-3 text-sm hover:bg-emerald-100">
+                                <input class="mt-1" type="radio" name="payment_method" value="{{ \App\Models\Order::PAYMENT_METHOD_WALLET }}" @checked($selectedPaymentMethod === \App\Models\Order::PAYMENT_METHOD_WALLET)>
+                                <span>
+                                    <span class="block font-medium">钱包余额支付</span>
+                                    <span class="mt-1 block text-xs leading-5 text-emerald-900">当前余额 @money((int) auth()->user()->wallet_balance_cents)，可直接支付本单。</span>
+                                </span>
+                            </label>
+                        @endif
                         <label class="flex cursor-pointer gap-3 rounded-sm border border-slate-300 bg-white px-3 py-3 text-sm hover:bg-slate-50">
                             <input class="mt-1" type="radio" name="payment_method" value="{{ \App\Models\Order::PAYMENT_METHOD_QR_CODE }}" @checked($selectedPaymentMethod === \App\Models\Order::PAYMENT_METHOD_QR_CODE)>
                             <span>
@@ -208,7 +219,11 @@
                     </div>
                     @if((int) auth()->user()->wallet_balance_cents > 0)
                         <div class="mx-4 mb-4 rounded-sm border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm text-emerald-900">
-                            钱包余额 @money((int) auth()->user()->wallet_balance_cents) 会在提交订单时自动优先抵扣，余额不足时再使用上方付款方式补齐尾款。
+                            @if($walletCanCoverCheckout)
+                                钱包余额 @money((int) auth()->user()->wallet_balance_cents)。选择“钱包余额支付”会直接扣除余额并完成付款；选择其他付款方式不会使用钱包余额。
+                            @else
+                                钱包余额 @money((int) auth()->user()->wallet_balance_cents) 会先抵扣，剩余金额使用所选付款方式补齐，并由后台人工确认。
+                            @endif
                         </div>
                     @endif
                     @error('payment_method')
@@ -231,7 +246,8 @@
                     @endforeach
                 </div>
                 @php($checkoutTotalCents = (int) $subtotalCents + (int) $shippingQuote['shipping_fee_cents'])
-                @php($checkoutWalletCents = min((int) auth()->user()->wallet_balance_cents, $checkoutTotalCents))
+                @php($checkoutWalletBalanceCents = (int) auth()->user()->wallet_balance_cents)
+                @php($checkoutWalletCents = $selectedPaymentMethod === \App\Models\Order::PAYMENT_METHOD_WALLET || ($checkoutWalletBalanceCents > 0 && $checkoutWalletBalanceCents < $checkoutTotalCents) ? min($checkoutWalletBalanceCents, $checkoutTotalCents) : 0)
                 <div class="border-t border-slate-200 bg-slate-50 px-4 py-4" data-checkout-summary data-subtotal-cents="{{ (int) $subtotalCents }}" data-wallet-balance-cents="{{ (int) auth()->user()->wallet_balance_cents }}">
                     <div class="flex justify-between text-sm">
                         <span>商品金额</span>
@@ -315,7 +331,9 @@
                     const subtotal = Number(summary.dataset.subtotalCents || 0);
                     const walletBalance = Number(summary.dataset.walletBalanceCents || 0);
                     const orderTotal = subtotal + shippingTotal;
-                    const walletPayment = Math.min(walletBalance, orderTotal);
+                    const selectedPayment = document.querySelector('[name="payment_method"]:checked')?.value || '';
+                    const shouldUseWallet = selectedPayment === '{{ \App\Models\Order::PAYMENT_METHOD_WALLET }}' || (walletBalance > 0 && walletBalance < orderTotal);
+                    const walletPayment = shouldUseWallet ? Math.min(walletBalance, orderTotal) : 0;
                     shippingTotalNode.textContent = money(shippingTotal);
                     orderTotalNode.textContent = money(orderTotal);
                     if (walletPaymentNode) walletPaymentNode.textContent = money(walletPayment);
@@ -324,6 +342,9 @@
 
                 document.querySelectorAll('[data-shipping-carrier-select]').forEach((select) => {
                     select.addEventListener('change', updateShippingTotals);
+                });
+                document.querySelectorAll('[name="payment_method"]').forEach((input) => {
+                    input.addEventListener('change', updateShippingTotals);
                 });
                 updateShippingTotals();
 

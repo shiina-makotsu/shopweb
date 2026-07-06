@@ -17,7 +17,11 @@
                         @endauth
                         <h2 class="text-base font-semibold">{{ $announcement->title }}</h2>
                     </div>
-                    <p class="mt-2 text-xs text-slate-500">{{ $announcement->published_at?->format('Y-m-d H:i') ?? $announcement->created_at->format('Y-m-d H:i') }}</p>
+                    <p class="mt-2 text-xs text-slate-500">
+                        发布时间：{{ $announcement->published_at?->format('Y-m-d H:i') ?? $announcement->created_at->format('Y-m-d H:i') }}
+                        <span class="mx-1">/</span>
+                        最后修改：{{ $announcement->updated_at?->format('Y-m-d H:i') ?? '-' }}
+                    </p>
                 </a>
             @empty
                 <p class="px-4 py-8 text-sm text-slate-600">暂无公告。</p>

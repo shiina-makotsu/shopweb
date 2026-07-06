@@ -1,5 +1,6 @@
 <?php
 
+use App\Filament\Resources\AnnouncementResource\Pages\EditAnnouncement;
 use App\Models\Announcement;
 use App\Models\AnnouncementComment;
 use App\Models\ForumActivityLog;
@@ -22,6 +23,7 @@ use App\Support\ForumThreadTemplate;
 use App\Support\Url;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use Livewire\Livewire;
 
 it('renders announcements and marks them read when viewed', function (): void {
     $user = User::factory()->create(['role' => 'customer']);
@@ -90,6 +92,62 @@ it('shows published announcements in storefront badges popups and lists regardle
         ->get(route('home'))
         ->assertOk()
         ->assertDontSee('Immediate Notice');
+});
+
+it('republishes edited announcements and makes them unread again', function (): void {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $user = User::factory()->create(['role' => 'customer']);
+    $publishedAt = now()->subDay();
+    $announcement = Announcement::query()->create([
+        'title' => 'Second Publish Notice',
+        'slug' => 'second-publish-notice',
+        'body' => 'Old body.',
+        'is_published' => true,
+        'popup_when_unread' => true,
+        'published_at' => $publishedAt,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('announcements.show', $announcement))
+        ->assertOk();
+
+    $this->assertDatabaseHas('announcement_reads', [
+        'announcement_id' => $announcement->id,
+        'user_id' => $user->id,
+    ]);
+
+    $this->actingAs($admin);
+
+    Livewire::test(EditAnnouncement::class, ['record' => $announcement->slug])
+        ->fillForm([
+            'title' => 'Second Publish Notice',
+            'slug' => 'second-publish-notice',
+            'body' => 'Updated body.',
+            'is_published' => true,
+            'is_pinned' => false,
+            'comments_enabled' => false,
+            'popup_when_unread' => true,
+            'published_at' => $publishedAt,
+        ])
+        ->call('save')
+        ->assertHasNoFormErrors();
+
+    $announcement->refresh();
+
+    expect($announcement->published_at->greaterThan($publishedAt))->toBeTrue();
+
+    $this->assertDatabaseMissing('announcement_reads', [
+        'announcement_id' => $announcement->id,
+        'user_id' => $user->id,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('home'))
+        ->assertOk()
+        ->assertSee('Second Publish Notice')
+        ->assertSee('Updated body.')
+        ->assertSee('发布时间')
+        ->assertSee('最后修改');
 });
 
 it('fills the publish time when publishing an announcement without one', function (): void {

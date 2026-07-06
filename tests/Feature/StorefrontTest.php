@@ -259,6 +259,64 @@ it('automatically uses wallet balance before the selected checkout method', func
     ]);
 });
 
+it('lets customers choose full wallet payment or keep their wallet balance for other methods', function (): void {
+    $category = Category::query()->create(['name' => 'Wallet Choice', 'slug' => 'wallet-choice', 'is_active' => true]);
+    $product = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => 'Wallet choice product',
+        'slug' => 'wallet-choice-product',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_IN_PERSON,
+    ]);
+    $variant = ProductVariant::query()->create([
+        'product_id' => $product->id,
+        'sku' => 'WALLET-CHOICE',
+        'price_cents' => 10000,
+        'stock' => 5,
+        'is_active' => true,
+    ]);
+
+    $qrUser = User::factory()->create(['role' => 'customer', 'wallet_balance_cents' => 15000]);
+
+    $this->actingAs($qrUser)->post(route('cart.items.store'), ['variant_id' => $variant->id, 'quantity' => 1]);
+    $this->actingAs($qrUser)
+        ->get(route('checkout.create'))
+        ->assertOk()
+        ->assertSee('value="'.Order::PAYMENT_METHOD_WALLET.'"', false)
+        ->assertSee('钱包余额支付');
+
+    $this->actingAs($qrUser)->post(route('checkout.store'), [
+        'contact_name' => 'Wallet Choice QR',
+        'contact_phone' => '13800000000',
+        'payment_method' => Order::PAYMENT_METHOD_QR_CODE,
+    ])->assertRedirect();
+
+    $qrOrder = Order::query()->whereBelongsTo($qrUser)->latest('id')->firstOrFail();
+
+    expect($qrOrder->payment_method)->toBe(Order::PAYMENT_METHOD_QR_CODE)
+        ->and($qrOrder->wallet_payment_cents)->toBe(0)
+        ->and($qrOrder->total_cents)->toBe(10000)
+        ->and($qrOrder->payment_status)->toBe(Order::PAYMENT_PENDING)
+        ->and($qrUser->fresh()->wallet_balance_cents)->toBe(15000);
+
+    $walletUser = User::factory()->create(['role' => 'customer', 'wallet_balance_cents' => 15000]);
+
+    $this->actingAs($walletUser)->post(route('cart.items.store'), ['variant_id' => $variant->id, 'quantity' => 1]);
+    $this->actingAs($walletUser)->post(route('checkout.store'), [
+        'contact_name' => 'Wallet Choice Full',
+        'contact_phone' => '13800000000',
+        'payment_method' => Order::PAYMENT_METHOD_WALLET,
+    ])->assertRedirect();
+
+    $walletOrder = Order::query()->whereBelongsTo($walletUser)->latest('id')->firstOrFail();
+
+    expect($walletOrder->payment_method)->toBe(Order::PAYMENT_METHOD_WALLET)
+        ->and($walletOrder->wallet_payment_cents)->toBe(10000)
+        ->and($walletOrder->total_cents)->toBe(0)
+        ->and($walletOrder->payment_status)->toBe(Order::PAYMENT_CONFIRMED)
+        ->and($walletUser->fresh()->wallet_balance_cents)->toBe(5000);
+});
+
 it('refunds wallet-paid amounts when an order is cancelled', function (): void {
     $user = User::factory()->create(['role' => 'customer', 'wallet_balance_cents' => 3000]);
     $category = Category::query()->create(['name' => 'Wallet Refund', 'slug' => 'wallet-refund', 'is_active' => true]);
@@ -584,7 +642,7 @@ it('uses wallet balance when completing a flash sale order selection', function 
             'contact_name' => 'Flash Wallet User',
             'contact_phone' => '13800000000',
             'contact_email' => 'flash-wallet@example.com',
-            'payment_method' => Order::PAYMENT_METHOD_QR_CODE,
+            'payment_method' => Order::PAYMENT_METHOD_WALLET,
         ])
         ->assertRedirect(route('orders.show', $order));
 

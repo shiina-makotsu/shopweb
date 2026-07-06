@@ -441,6 +441,11 @@
                     <div class="border-b border-blue-100 bg-gradient-to-r from-blue-50 via-white to-pink-50 px-5 py-4 sm:px-6">
                         <p class="text-xs font-semibold text-pink-700">未读公告</p>
                         <h2 id="announcement-popup-title" class="mt-1 text-xl font-semibold text-slate-950">{{ $popupAnnouncement->title }}</h2>
+                        <p class="mt-2 text-xs text-slate-500">
+                            发布时间：{{ $popupAnnouncement->published_at?->format('Y-m-d H:i') ?? $popupAnnouncement->created_at->format('Y-m-d H:i') }}
+                            <span class="mx-1">/</span>
+                            最后修改：{{ $popupAnnouncement->updated_at?->format('Y-m-d H:i') ?? '-' }}
+                        </p>
                     </div>
                     <div class="px-5 py-4 sm:px-6">
                         <div class="content-body max-h-[55vh] overflow-y-auto rounded-xl border border-slate-100 bg-white px-4 py-3 text-sm leading-6 text-slate-700">

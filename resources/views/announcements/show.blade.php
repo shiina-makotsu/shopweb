@@ -7,7 +7,11 @@
                 @endif
                 <h1 class="text-lg font-semibold">{{ $announcement->title }}</h1>
             </div>
-            <p class="mt-1 text-xs text-slate-500">{{ $announcement->published_at?->format('Y-m-d H:i') ?? $announcement->created_at->format('Y-m-d H:i') }}</p>
+            <p class="mt-1 text-xs text-slate-500">
+                发布时间：{{ $announcement->published_at?->format('Y-m-d H:i') ?? $announcement->created_at->format('Y-m-d H:i') }}
+                <span class="mx-1">/</span>
+                最后修改：{{ $announcement->updated_at?->format('Y-m-d H:i') ?? '-' }}
+            </p>
         </div>
         <div class="content-body px-4 py-4 text-sm text-slate-700">
             {{ \App\Support\Markdown::render($announcement->body) }}
