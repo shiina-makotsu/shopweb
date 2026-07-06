@@ -48,6 +48,7 @@ class Order extends Model
         'wallet_payment_cents',
         'wallet_recharge_cents',
         'is_wallet_recharge',
+        'wallet_recharge_option_id',
         'shipment_plan',
         'shipment_notice',
         'total_cents',
@@ -95,6 +96,7 @@ class Order extends Model
             'requires_shipping' => 'boolean',
             'private_shipping_requested' => 'boolean',
             'is_wallet_recharge' => 'boolean',
+            'wallet_recharge_option_id' => 'integer',
             'shipment_plan' => 'array',
             'digital_delivery_attachment_paths' => 'array',
             'digital_delivery_sent_at' => 'datetime',
@@ -125,6 +127,11 @@ class Order extends Model
     public function coupon(): BelongsTo
     {
         return $this->belongsTo(Coupon::class);
+    }
+
+    public function walletRechargeOption(): BelongsTo
+    {
+        return $this->belongsTo(WalletRechargeOption::class, 'wallet_recharge_option_id');
     }
 
     public function shippingCarrier(): BelongsTo

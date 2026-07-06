@@ -2,13 +2,16 @@
 
 namespace App\Services;
 
+use App\Models\Coupon;
 use App\Models\Order;
 use App\Models\User;
+use App\Models\UserCoupon;
 use App\Models\WalletRechargeOption;
 use App\Models\WalletRedeemCode;
 use App\Models\WalletTransaction;
 use App\Support\MoneyInput;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class WalletService
@@ -103,6 +106,7 @@ class WalletService
             'wallet_payment_cents' => 0,
             'wallet_recharge_cents' => $option->creditCents(),
             'is_wallet_recharge' => true,
+            'wallet_recharge_option_id' => $option->id,
             'total_cents' => $option->payableCents(),
             'contact_name' => $user->displayName(),
             'contact_phone' => (string) ($user->phone ?? $user->public_id ?? $user->id),
@@ -193,7 +197,7 @@ class WalletService
             return null;
         }
 
-        $order->loadMissing('user');
+        $order->loadMissing('user', 'walletRechargeOption');
 
         $alreadyCredited = WalletTransaction::query()
             ->where('order_id', $order->id)
@@ -204,7 +208,7 @@ class WalletService
             return null;
         }
 
-        return $this->credit(
+        $transaction = $this->credit(
             $order->user,
             (int) $order->wallet_recharge_cents,
             WalletTransaction::SOURCE_WALLET_RECHARGE,
@@ -213,6 +217,96 @@ class WalletService
             null,
             $order,
         );
+
+        $this->issueRechargeCoupons($order, $actor);
+
+        return $transaction;
+    }
+
+    public function issueRechargeCoupons(Order $order, ?User $actor = null): int
+    {
+        $order->loadMissing('user', 'walletRechargeOption');
+
+        $option = $order->walletRechargeOption;
+
+        if (! $order->user || ! $option?->couponRewardEnabled()) {
+            return 0;
+        }
+
+        $alreadyIssued = $order->user->coupons()
+            ->where('source', UserCoupon::SOURCE_WALLET_RECHARGE)
+            ->where('note', '钱包充值赠券：'.$order->order_number)
+            ->exists();
+
+        if ($alreadyIssued) {
+            return 0;
+        }
+
+        $quantity = max(1, (int) $option->coupon_reward_quantity);
+        $issued = 0;
+
+        for ($index = 1; $index <= $quantity; $index++) {
+            $coupon = $this->createRechargeRewardCoupon($option, $order, $index, $quantity);
+
+            app(CouponService::class)->issueToUser(
+                $coupon,
+                $order->user,
+                UserCoupon::SOURCE_WALLET_RECHARGE,
+                $actor,
+                null,
+                '钱包充值赠券：'.$order->order_number,
+            );
+
+            $issued++;
+        }
+
+        return $issued;
+    }
+
+    private function createRechargeRewardCoupon(WalletRechargeOption $option, Order $order, int $index, int $quantity): Coupon
+    {
+        $type = $option->coupon_reward_type === Coupon::TYPE_PERCENT ? Coupon::TYPE_PERCENT : Coupon::TYPE_FIXED;
+        $scope = $option->coupon_reward_scope === Coupon::SCOPE_PRODUCT ? Coupon::SCOPE_PRODUCT : Coupon::SCOPE_GLOBAL;
+        $value = max(1, (int) $option->coupon_reward_value);
+
+        if ($type === Coupon::TYPE_PERCENT) {
+            $value = min(100, $value);
+        }
+
+        $coupon = Coupon::query()->create([
+            'code' => $this->nextCouponCode(),
+            'name' => $this->rechargeRewardCouponName($option, $order, $index, $quantity),
+            'type' => $type,
+            'value' => $value,
+            'scope' => $scope,
+            'minimum_order_cents' => max(0, (int) $option->coupon_reward_minimum_order_cents),
+            'usage_limit' => max(1, (int) ($option->coupon_reward_usage_limit ?: 1)),
+            'per_user_limit' => 1,
+            'starts_at' => now(),
+            'ends_at' => (int) $option->coupon_reward_valid_days > 0 ? now()->addDays((int) $option->coupon_reward_valid_days) : null,
+            'is_active' => true,
+        ]);
+
+        if ($scope === Coupon::SCOPE_PRODUCT) {
+            $productIds = collect($option->coupon_reward_product_ids ?: [])
+                ->map(fn ($id): int => (int) $id)
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
+
+            $coupon->products()->sync($productIds);
+            $coupon->forceFill(['product_id' => $productIds[0] ?? null])->save();
+        }
+
+        return $coupon;
+    }
+
+    private function rechargeRewardCouponName(WalletRechargeOption $option, Order $order, int $index, int $quantity): string
+    {
+        $suffix = $quantity > 1 ? " {$index}/{$quantity}" : '';
+
+        return trim(($option->name ?: $option->displayName()).' 充值赠券'.$suffix.' '.$order->order_number);
     }
 
     public function credit(
@@ -287,5 +381,14 @@ class WalletService
         } while (Order::query()->where('order_number', $number)->exists());
 
         return $number;
+    }
+
+    private function nextCouponCode(): string
+    {
+        do {
+            $code = 'WR'.now()->format('ymd').Str::upper(Str::random(8));
+        } while (Coupon::query()->where('code', $code)->exists());
+
+        return $code;
     }
 }

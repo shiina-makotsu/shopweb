@@ -318,6 +318,7 @@ class CouponResource extends Resource
             UserCoupon::SOURCE_CLAIMED => '用户领取',
             UserCoupon::SOURCE_ADMIN => '后台发放',
             UserCoupon::SOURCE_AFTER_SALES => '售后补偿',
+            UserCoupon::SOURCE_WALLET_RECHARGE => '钱包充值赠送',
             default => $source ?: '-',
         };
     }

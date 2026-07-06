@@ -602,6 +602,78 @@ it('creates wallet recharge orders from configured recharge options', function (
         ->and($order->discount_cents)->toBe(100);
 });
 
+it('issues generated standard coupons after a configured wallet recharge is confirmed once', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+    $category = Category::query()->create(['name' => 'Recharge Coupon', 'slug' => 'recharge-coupon', 'is_active' => true]);
+    $product = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => 'Recharge coupon product',
+        'slug' => 'recharge-coupon-product',
+        'status' => Product::STATUS_PUBLISHED,
+    ]);
+    $option = WalletRechargeOption::query()->create([
+        'name' => '充值 50 赠券',
+        'currency_code' => 'CNY',
+        'currency_unit' => 'yuan',
+        'amount_cents' => 5000,
+        'bonus_cents' => 0,
+        'is_active' => true,
+        'coupon_reward_enabled' => true,
+        'coupon_reward_currency_code' => 'CNY',
+        'coupon_reward_currency_unit' => 'yuan',
+        'coupon_reward_type' => Coupon::TYPE_FIXED,
+        'coupon_reward_value' => 800,
+        'coupon_reward_valid_days' => 30,
+        'coupon_reward_scope' => Coupon::SCOPE_PRODUCT,
+        'coupon_reward_product_ids' => [$product->id],
+        'coupon_reward_minimum_order_cents' => 3000,
+        'coupon_reward_quantity' => 2,
+        'coupon_reward_usage_limit' => 1,
+    ]);
+
+    $this->actingAs($user)
+        ->post(route('user.wallet.recharge-option'), [
+            'wallet_recharge_option_id' => $option->id,
+        ])
+        ->assertRedirect();
+
+    $order = Order::query()->whereBelongsTo($user)->latest('id')->firstOrFail();
+
+    expect($order->wallet_recharge_option_id)->toBe($option->id);
+
+    app(OrderService::class)->confirmPayment($order);
+    app(OrderService::class)->confirmPayment($order->fresh());
+
+    expect($user->fresh()->wallet_balance_cents)->toBe(5000)
+        ->and(UserCoupon::query()->whereBelongsTo($user)->where('source', UserCoupon::SOURCE_WALLET_RECHARGE)->count())->toBe(2)
+        ->and(WalletTransaction::query()
+            ->where('order_id', $order->id)
+            ->where('source', WalletTransaction::SOURCE_WALLET_RECHARGE)
+            ->count())->toBe(1);
+
+    $issuedCoupons = Coupon::query()
+        ->whereIn('id', UserCoupon::query()
+            ->whereBelongsTo($user)
+            ->where('source', UserCoupon::SOURCE_WALLET_RECHARGE)
+            ->pluck('coupon_id'))
+        ->with('products')
+        ->get();
+
+    expect($issuedCoupons)->toHaveCount(2)
+        ->and($issuedCoupons->pluck('code')->unique())->toHaveCount(2);
+
+    foreach ($issuedCoupons as $coupon) {
+        expect($coupon->name)->toContain('充值 50 赠券')
+            ->and($coupon->type)->toBe(Coupon::TYPE_FIXED)
+            ->and($coupon->value)->toBe(800)
+            ->and($coupon->scope)->toBe(Coupon::SCOPE_PRODUCT)
+            ->and($coupon->minimum_order_cents)->toBe(3000)
+            ->and($coupon->usage_limit)->toBe(1)
+            ->and($coupon->ends_at)->not->toBeNull()
+            ->and($coupon->products->pluck('id')->all())->toBe([$product->id]);
+    }
+});
+
 it('uses wallet balance when completing a flash sale order selection', function (): void {
     $user = User::factory()->create(['role' => 'customer', 'wallet_balance_cents' => 1990]);
     $category = Category::query()->create(['name' => 'Wallet Flash', 'slug' => 'wallet-flash', 'is_active' => true]);

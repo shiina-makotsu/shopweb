@@ -6,6 +6,7 @@ use App\Support\Money;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class WalletRechargeOption extends Model
 {
@@ -20,6 +21,17 @@ class WalletRechargeOption extends Model
         'bonus_cents',
         'is_active',
         'sort_order',
+        'coupon_reward_enabled',
+        'coupon_reward_currency_code',
+        'coupon_reward_currency_unit',
+        'coupon_reward_type',
+        'coupon_reward_value',
+        'coupon_reward_valid_days',
+        'coupon_reward_scope',
+        'coupon_reward_product_ids',
+        'coupon_reward_minimum_order_cents',
+        'coupon_reward_quantity',
+        'coupon_reward_usage_limit',
     ];
 
     protected function casts(): array
@@ -30,7 +42,19 @@ class WalletRechargeOption extends Model
             'bonus_cents' => 'integer',
             'is_active' => 'boolean',
             'sort_order' => 'integer',
+            'coupon_reward_enabled' => 'boolean',
+            'coupon_reward_value' => 'integer',
+            'coupon_reward_valid_days' => 'integer',
+            'coupon_reward_product_ids' => 'array',
+            'coupon_reward_minimum_order_cents' => 'integer',
+            'coupon_reward_quantity' => 'integer',
+            'coupon_reward_usage_limit' => 'integer',
         ];
+    }
+
+    public function rechargeOrders(): HasMany
+    {
+        return $this->hasMany(Order::class, 'wallet_recharge_option_id');
     }
 
     public function scopeActive(Builder $query): Builder
@@ -53,5 +77,12 @@ class WalletRechargeOption extends Model
     public function displayName(): string
     {
         return $this->name ?: Money::format((int) $this->amount_cents).' 充值';
+    }
+
+    public function couponRewardEnabled(): bool
+    {
+        return (bool) $this->coupon_reward_enabled
+            && (int) $this->coupon_reward_value > 0
+            && (int) $this->coupon_reward_quantity > 0;
     }
 }
