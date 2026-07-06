@@ -1110,6 +1110,7 @@ it('orders home product sections and places store pages in the welcome header', 
         ->assertSee('商店信息')
         ->assertSee('关于我们')
         ->assertSee('推荐商品')
+        ->assertSee('默认商品')
         ->assertSee('折扣商品')
         ->assertSee('秒杀商品')
         ->assertSee('概念商品')
@@ -1127,7 +1128,8 @@ it('orders home product sections and places store pages in the welcome header', 
 
     $html = $response->getContent();
 
-    expect(strpos($html, '推荐商品'))->toBeLessThan(strpos($html, '折扣商品'))
+    expect(strpos($html, '推荐商品'))->toBeLessThan(strpos($html, '默认商品'))
+        ->and(strpos($html, '默认商品'))->toBeLessThan(strpos($html, '折扣商品'))
         ->and(strpos($html, '折扣商品'))->toBeLessThan(strpos($html, '秒杀商品'))
         ->and(strpos($html, '秒杀商品'))->toBeLessThan(strpos($html, '概念商品'))
         ->and(strpos($html, '折扣商品'))->toBeLessThan(strpos($html, '概念商品'));
