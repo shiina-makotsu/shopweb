@@ -137,20 +137,6 @@
         </section>
     @endif
 
-    <section class="mb-4 rounded-sm border border-slate-300 bg-white">
-        <div class="flex items-center justify-between border-b border-slate-200 bg-slate-100 px-4 py-2">
-            <h2 class="text-base font-semibold">默认商品</h2>
-            <a class="text-sm text-blue-700 hover:text-blue-900" href="{{ route('products.index') }}">商品列表</a>
-        </div>
-        <div class="grid grid-cols-2 gap-px bg-slate-200 xl:grid-cols-4">
-            @forelse($latestProducts as $product)
-                <x-product-card :product="$product" />
-            @empty
-                <div class="col-span-full bg-white px-4 py-8 text-sm text-slate-600">暂无商品，管理员可进入后台创建。</div>
-            @endforelse
-        </div>
-    </section>
-
     @if($discountProducts->isNotEmpty())
         <section class="mb-4 rounded-sm border border-slate-300 bg-white">
             <div class="flex items-center justify-between border-b border-slate-200 bg-slate-100 px-4 py-2">
@@ -164,6 +150,20 @@
             </div>
         </section>
     @endif
+
+    <section class="mb-4 rounded-sm border border-slate-300 bg-white">
+        <div class="flex items-center justify-between border-b border-slate-200 bg-slate-100 px-4 py-2">
+            <h2 class="text-base font-semibold">默认商品</h2>
+            <a class="text-sm text-blue-700 hover:text-blue-900" href="{{ route('products.index') }}">商品列表</a>
+        </div>
+        <div class="grid grid-cols-2 gap-px bg-slate-200 xl:grid-cols-4">
+            @forelse($latestProducts as $product)
+                <x-product-card :product="$product" />
+            @empty
+                <div class="col-span-full bg-white px-4 py-8 text-sm text-slate-600">暂无商品，管理员可进入后台创建。</div>
+            @endforelse
+        </div>
+    </section>
 
     <section class="mb-4 rounded-sm border border-slate-300 bg-white">
         <div class="flex items-center justify-between border-b border-slate-200 bg-slate-100 px-4 py-2">
