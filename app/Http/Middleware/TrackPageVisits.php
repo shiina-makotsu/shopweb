@@ -45,6 +45,10 @@ class TrackPageVisits
             return false;
         }
 
+        if ($request->is('admin', 'admin/*') && ! (bool) config('shop.analytics.track_admin_page_views', false)) {
+            return false;
+        }
+
         if (! $request->isMethod('GET') && ! $request->isMethod('HEAD')) {
             return false;
         }

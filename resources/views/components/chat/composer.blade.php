@@ -41,18 +41,12 @@
     <div class="flex items-end gap-2">
         <div class="relative shrink-0">
             <button class="{{ $iconButtonClass }}" style="{{ $iconButtonStyle }}" type="button" data-chat-attach-toggle title="添加附件" aria-label="添加附件" @disabled($disabled)>
-                <svg style="width:24px;height:24px;display:block;" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <path d="M21.44 11.05 12.2 20.29a6 6 0 0 1-8.49-8.48l9.9-9.9a4 4 0 0 1 5.66 5.66l-9.9 9.9a2 2 0 1 1-2.83-2.83l8.49-8.49" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
+                <i class="fa-solid fa-paperclip" style="font-size:22px;" aria-hidden="true"></i>
             </button>
 
             <div class="{{ $menuClass }}" data-chat-attach-panel>
                 <label class="{{ $menuItemClass }}">
-                    <svg style="width:22px;height:22px;display:block;" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                        <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/>
-                        <path d="m7 15 3-3 3 3 2-2 3 3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                        <circle cx="8.5" cy="9.5" r="1.2" fill="currentColor"/>
-                    </svg>
+                    <i class="fa-regular fa-image fa-fw" aria-hidden="true"></i>
                     <span>图片或视频</span>
                     @if($mode === 'livewire')
                         <input class="hidden" type="file" accept="image/*,video/*" @if($attachmentModel) wire:model="{{ $attachmentModel }}" @endif @disabled($disabled)>
@@ -62,10 +56,7 @@
                 </label>
 
                 <label class="{{ $menuItemClass }}">
-                    <svg style="width:22px;height:22px;display:block;" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                        <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
-                        <path d="M14 3v5h5" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
-                    </svg>
+                    <i class="fa-regular fa-file fa-fw" aria-hidden="true"></i>
                     <span>文件</span>
                     @if($mode === 'livewire')
                         <input class="hidden" type="file" @if($attachmentModel) wire:model="{{ $attachmentModel }}" @endif @disabled($disabled)>
@@ -75,10 +66,7 @@
                 </label>
 
                 <button class="{{ $menuItemClass }}" type="button" data-chat-location @disabled($disabled)>
-                    <svg style="width:22px;height:22px;display:block;" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                        <path d="M12 21s7-4.9 7-11a7 7 0 1 0-14 0c0 6.1 7 11 7 11Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
-                        <circle cx="12" cy="10" r="2.2" stroke="currentColor" stroke-width="1.8"/>
-                    </svg>
+                    <i class="fa-solid fa-location-dot fa-fw" aria-hidden="true"></i>
                     <span>位置</span>
                 </button>
             </div>
@@ -86,7 +74,7 @@
 
         <div class="relative shrink-0">
             <button class="{{ $iconButtonClass }}" style="{{ $iconButtonStyle }}" type="button" data-chat-emoji-toggle aria-label="选择表情" title="选择表情" @disabled($disabled)>
-                <span style="font-size:22px;line-height:1;">☺</span>
+                <i class="fa-regular fa-face-smile" style="font-size:22px;" aria-hidden="true"></i>
             </button>
             <div class="absolute bottom-12 left-0 z-30 hidden w-56 rounded-2xl border p-2 shadow-xl {{ $dark ? 'border-gray-700 bg-gray-950' : 'border-slate-200 bg-white' }}" data-chat-emoji-panel>
                 <div class="grid grid-cols-4 gap-1">
@@ -110,10 +98,7 @@
         >{{ $mode === 'livewire' ? '' : $value }}</textarea>
 
         <button class="{{ $sendClass }}" style="{{ $sendStyle }}" type="submit" title="{{ $submitLabel }}" aria-label="{{ $submitLabel }}" @disabled($disabled)>
-            <svg style="width:22px;height:22px;display:block;" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="m4 12 16-8-5 16-3-6-8-2Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
-                <path d="m12 14 8-10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-            </svg>
+            <i class="fa-solid fa-paper-plane" style="font-size:20px;" aria-hidden="true"></i>
         </button>
     </div>
 

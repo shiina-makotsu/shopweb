@@ -137,6 +137,7 @@ class AdminSearchPage extends Page
             ['group' => '客服', 'label' => '客服工单', 'keywords' => '投诉 反馈 工单 支持 提需求', 'url' => SupportTicketResource::getUrl()],
             ['group' => 'AI', 'label' => '客服 AI 设置', 'keywords' => 'AI 安抚 等待时间 接口 key 模型 预设 工作流', 'url' => SupportAiSettingsPage::getUrl()],
             ['group' => '内容', 'label' => '首页', 'keywords' => '首页 Markdown 首页标题', 'url' => HomeContentPage::getUrl()],
+            ['group' => '内容', 'label' => '加载等待页', 'keywords' => '首次访问 加载 鱼板 进度条 预览 拖拽 网格', 'url' => LoadingPageSettingsPage::getUrl()],
             ['group' => '内容', 'label' => '公告', 'keywords' => '铃铛 未读 弹窗 置顶 发布 删除 评论', 'url' => AnnouncementResource::getUrl()],
             ['group' => '内容', 'label' => '公告评论', 'keywords' => '公告 回复 评论 删除', 'url' => AnnouncementCommentResource::getUrl()],
             ['group' => '内容', 'label' => '自定义页面', 'keywords' => '页面 markdown 关于我们 说明', 'url' => PageResource::getUrl()],

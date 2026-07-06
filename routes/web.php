@@ -20,6 +20,7 @@ use App\Http\Controllers\FriendLinkController;
 use App\Http\Controllers\GuidePetController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\InstallController;
+use App\Http\Controllers\LoadingController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\PageCommentController;
 use App\Http\Controllers\PageController;
@@ -38,6 +39,8 @@ use Illuminate\Support\Facades\Route;
 Route::get('/install', [InstallController::class, 'show'])->name('install.show');
 Route::post('/install/check-database', [InstallController::class, 'checkDatabase'])->name('install.check-database');
 Route::post('/install', [InstallController::class, 'store'])->name('install.store');
+Route::get('/loading', [LoadingController::class, 'show'])->name('loading.show');
+Route::get('/loading/prepare', [LoadingController::class, 'prepare'])->name('loading.prepare');
 
 Route::middleware('guest')->group(function (): void {
     Route::get('/register', [RegisteredUserController::class, 'create'])->name('register');

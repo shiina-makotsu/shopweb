@@ -21,6 +21,7 @@ use App\Filament\Pages\CurrencySettingsPage;
 use App\Filament\Pages\Dashboard;
 use App\Filament\Pages\GuideAiSettingsPage;
 use App\Filament\Pages\HomeContentPage;
+use App\Filament\Pages\LoadingPageSettingsPage;
 use App\Filament\Pages\MailSettingsPage;
 use App\Filament\Pages\NotFoundContentPage;
 use App\Filament\Pages\PaymentSettingsPage;
@@ -96,6 +97,7 @@ class AdminPanelProvider extends PanelProvider
                 CurrencySettingsPage::class,
                 GuideAiSettingsPage::class,
                 HomeContentPage::class,
+                LoadingPageSettingsPage::class,
                 MailSettingsPage::class,
                 NotFoundContentPage::class,
                 PaymentSettingsPage::class,
@@ -350,6 +352,19 @@ class AdminPanelProvider extends PanelProvider
                                 .replaceAll('"', '&quot;')
                                 .replaceAll("'", '&#039;');
 
+                            const renderFontAwesomeShortcodes = (value) => String(value ?? '').replace(
+                                /\[fa:(?:(solid|regular|brands):)?([a-z0-9][a-z0-9-]*)(?:\s+([^\]]{1,80}))?\]/gi,
+                                (_, style = 'solid', icon, label = '') => {
+                                    const family = { solid: 'fa-solid', regular: 'fa-regular', brands: 'fa-brands' }[String(style).toLowerCase()] || 'fa-solid';
+                                    const classes = `${family} fa-${icon.toLowerCase()} fa-fw markdown-icon`;
+                                    const trimmedLabel = String(label || '').trim();
+
+                                    return trimmedLabel
+                                        ? `<i class="${classes}" role="img" aria-label="${escapeMarkdownHtml(trimmedLabel)}"></i>`
+                                        : `<i class="${classes}" aria-hidden="true"></i>`;
+                                },
+                            );
+
                             const renderSimpleMarkdownFallback = (markdown) => {
                                 const lines = String(markdown ?? '').replace(/\r\n?/g, '\n').split('\n');
                                 const blocks = [];
@@ -364,7 +379,8 @@ class AdminPanelProvider extends PanelProvider
                                     .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+|\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
                                     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
                                     .replace(/\*([^*]+)\*/g, '<em>$1</em>')
-                                    .replace(/`([^`]+)`/g, '<code>$1</code>');
+                                    .replace(/`([^`]+)`/g, '<code>$1</code>')
+                                    .replace(/\[fa:(?:(solid|regular|brands):)?([a-z0-9][a-z0-9-]*)(?:\s+([^\]]{1,80}))?\]/gi, (match) => renderFontAwesomeShortcodes(match));
 
                                 const flushParagraph = () => {
                                     if (paragraph.length) {
@@ -512,7 +528,7 @@ class AdminPanelProvider extends PanelProvider
                                     }
 
                                     if (rendered !== null && rendered !== undefined) {
-                                        preview.innerHTML = rendered;
+                                        preview.innerHTML = renderFontAwesomeShortcodes(rendered);
                                     }
                                 } catch (error) {
                                     console.error('Markdown preview rendering failed.', error);
@@ -696,17 +712,10 @@ class AdminPanelProvider extends PanelProvider
         $accent = '#F5A9B8';
         $canvas = '#FFF7FB';
 
-        try {
-            if (Schema::hasTable('site_settings')) {
-                $settings = SiteSetting::query()->first();
-
-                $primary = $this->validColor($settings?->primary_color, $primary);
-                $accent = $this->validColor($settings?->accent_color, $accent);
-                $canvas = $this->validColor($settings?->background_color, $canvas, allowLight: true);
-            }
-        } catch (Throwable) {
-            // Database may be unavailable during first install.
-        }
+        $settings = $this->siteSettings();
+        $primary = $this->validColor($settings?->primary_color, $primary);
+        $accent = $this->validColor($settings?->accent_color, $accent);
+        $canvas = $this->validColor($settings?->background_color, $canvas, allowLight: true);
 
         return <<<HTML
             <style>
@@ -819,7 +828,17 @@ class AdminPanelProvider extends PanelProvider
 
     private function siteSettings(): ?SiteSetting
     {
-        return app(StorefrontCache::class)->settings();
+        $request = request();
+        $key = 'shopweb.site_settings';
+
+        if ($request->attributes->has($key)) {
+            return $request->attributes->get($key);
+        }
+
+        $settings = app(StorefrontCache::class)->settings();
+        $request->attributes->set($key, $settings);
+
+        return $settings;
     }
 
     private function validColor(?string $color, string $fallback, bool $allowLight = false): string

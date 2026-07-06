@@ -130,7 +130,7 @@
                     <a class="hover:text-blue-700" href="{{ $path('support.demands') }}">工单</a>
                     @auth
                         <a class="relative inline-flex items-center hover:text-blue-700" href="{{ $path('announcements.index') }}" title="公告">
-                            <span aria-hidden="true">🔔</span>
+                            <i class="fa-solid fa-bell fa-fw" aria-hidden="true"></i>
                             @if(($unreadAnnouncementCount ?? 0) > 0)
                                 <span class="ml-1 rounded-full bg-red-600 px-1.5 text-[10px] font-semibold text-white">{{ $unreadAnnouncementCount }}</span>
                             @endif
@@ -191,7 +191,7 @@
                     aria-expanded="false"
                     aria-label="导航"
                 >
-                    <svg class="h-4 w-4" viewBox="0 0 20 20" aria-hidden="true" fill="currentColor"><path d="M3 5.75A.75.75 0 0 1 3.75 5h12.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 5.75Zm0 4A.75.75 0 0 1 3.75 9h12.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 9.75Zm.75 3.25a.75.75 0 0 0 0 1.5h12.5a.75.75 0 0 0 0-1.5H3.75Z"/></svg>
+                    <i class="fa-solid fa-bars fa-fw" aria-hidden="true"></i>
                     导航
                 </button>
                 @unless(request()->routeIs('home'))
@@ -587,7 +587,7 @@
         aria-expanded="false"
         aria-label="打开页面菜单"
     >
-        <svg class="h-5 w-5" viewBox="0 0 20 20" aria-hidden="true" fill="currentColor"><path d="M3 5.75A.75.75 0 0 1 3.75 5h12.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 5.75Zm0 4A.75.75 0 0 1 3.75 9h12.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 9.75Zm.75 3.25a.75.75 0 0 0 0 1.5h12.5a.75.75 0 0 0 0-1.5H3.75Z"/></svg>
+        <i class="fa-solid fa-bars text-lg" aria-hidden="true"></i>
     </button>
     @unless($hideFloatingCart)
     <button
@@ -599,7 +599,7 @@
         aria-expanded="false"
         aria-label="购物车 {{ $cartCount }} 件"
     >
-        <svg class="h-6 w-6" viewBox="0 0 20 20" aria-hidden="true" fill="currentColor"><path d="M2.5 3a.75.75 0 0 0 0 1.5h1.06l1.45 7.24A2.25 2.25 0 0 0 7.22 13.5h6.86a2.25 2.25 0 0 0 2.16-1.62l1.08-3.79A1.75 1.75 0 0 0 15.64 5.85H5.3l-.35-1.76A1.75 1.75 0 0 0 3.24 3H2.5Zm4.25 13.5a1.25 1.25 0 1 0 0-2.5 1.25 1.25 0 0 0 0 2.5Zm7.5 0a1.25 1.25 0 1 0 0-2.5 1.25 1.25 0 0 0 0 2.5Z"/></svg>
+        <i class="fa-solid fa-cart-shopping text-xl" aria-hidden="true"></i>
         <span class="absolute -right-1 -top-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-semibold leading-none text-white" data-cart-count>{{ $cartCount }}</span>
     </button>
     <div id="site-floating-cart" class="fixed bottom-36 right-5 z-40 hidden w-64 max-w-[calc(100vw-2rem)] rounded-sm border border-slate-300 bg-white p-4 text-sm text-slate-800 shadow-xl" data-floating-cart-panel>
@@ -652,7 +652,7 @@
             </button>
         </section>
     @endif
-    <a href="#top" onclick="window.scrollTo({ top: 0, behavior: 'smooth' }); return false;" class="fixed bottom-5 right-5 z-40 inline-flex h-10 w-10 items-center justify-center rounded-full border border-blue-700 bg-white text-blue-800 shadow hover:bg-blue-50" aria-label="回到顶部">↑</a>
+    <a href="#top" onclick="window.scrollTo({ top: 0, behavior: 'smooth' }); return false;" class="fixed bottom-5 right-5 z-40 inline-flex h-10 w-10 items-center justify-center rounded-full border border-blue-700 bg-white text-blue-800 shadow hover:bg-blue-50" aria-label="回到顶部"><i class="fa-solid fa-arrow-up" aria-hidden="true"></i></a>
     @auth
         @if(session('show_registration_onboarding'))
             <div class="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 px-4" data-registration-onboarding>

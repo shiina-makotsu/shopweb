@@ -109,6 +109,21 @@ it('summarizes today visitors by customer staff and guest ip', function (): void
         ->assertSee('游客');
 });
 
+it('does not write automatic admin page view logs unless enabled', function (): void {
+    config(['shop.analytics.track_admin_page_views' => false]);
+
+    $admin = User::factory()->create(['role' => 'admin']);
+
+    $this->actingAs($admin)
+        ->get('/admin')
+        ->assertOk();
+
+    expect(AnalyticsEvent::query()
+        ->where('event', AnalyticsEvent::PAGE_VIEW)
+        ->where('surface', 'admin')
+        ->exists())->toBeFalse();
+});
+
 it('excludes staff product detail visits from customer conversion metrics', function (): void {
     $category = Category::query()->create([
         'name' => 'Analytics',

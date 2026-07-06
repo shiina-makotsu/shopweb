@@ -29,7 +29,7 @@ class AppServiceProvider extends ServiceProvider
 
     public function register(): void
     {
-        //
+        $this->app->scoped(StorefrontViewData::class);
     }
 
     public function boot(): void
@@ -52,6 +52,7 @@ class AppServiceProvider extends ServiceProvider
 
         Event::listen(RequestHandled::class, function (RequestHandled $event): void {
             app(RelativeUrlRewriter::class)->rewriteResponse($event->response, $event->request);
+            $this->app->forgetInstance(StorefrontViewData::class);
         });
 
         foreach ([SiteSetting::class, Category::class, Page::class, NavigationMenuItem::class] as $model) {
@@ -64,20 +65,15 @@ class AppServiceProvider extends ServiceProvider
         }
 
         View::composer('*', function ($view): void {
+            if ($this->shouldSkipStorefrontViewData($view->getName())) {
+                return;
+            }
+
             if (! $this->canReadSettings()) {
                 return;
             }
 
-            $storefrontViewData = app(StorefrontViewData::class);
-            $siteSettings = $storefrontViewData->settings();
-
-            if (request()->is('admin*', 'livewire*')) {
-                $view->with('siteSettings', $siteSettings);
-
-                return;
-            }
-
-            $view->with($storefrontViewData->data());
+            $view->with(app(StorefrontViewData::class)->data());
         });
     }
 
@@ -105,8 +101,25 @@ class AppServiceProvider extends ServiceProvider
         }
     }
 
+    private function shouldSkipStorefrontViewData(string $viewName): bool
+    {
+        if (request()->is('admin*', 'livewire*')) {
+            return true;
+        }
+
+        foreach (['filament.', 'vendor.filament-', 'livewire.', 'emails.', 'errors.busy'] as $prefix) {
+            if (str_starts_with($viewName, $prefix)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private function supportUnreadMessageCount(): int
     {
+        $this->app->forgetInstance(StorefrontViewData::class);
+
         return (int) (app(StorefrontViewData::class)->data()['supportUnreadMessageCount'] ?? 0);
     }
 

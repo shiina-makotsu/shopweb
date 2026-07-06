@@ -104,7 +104,7 @@
                     <input type="hidden" name="variant_id" value="{{ $variant->id }}">
                     <input type="hidden" name="quantity" value="1">
                     <button class="inline-flex h-9 w-full items-center justify-center rounded-sm border border-blue-700 bg-blue-700 text-white hover:bg-blue-800" type="submit" aria-label="加入购物车" title="加入购物车">
-                        <svg class="h-4 w-4" viewBox="0 0 20 20" aria-hidden="true" fill="currentColor"><path d="M2.5 3a.75.75 0 0 0 0 1.5h1.06l1.45 7.24A2.25 2.25 0 0 0 7.22 13.5h6.86a2.25 2.25 0 0 0 2.16-1.62l1.08-3.79A1.75 1.75 0 0 0 15.64 5.85H5.3l-.35-1.76A1.75 1.75 0 0 0 3.24 3H2.5Zm4.25 13.5a1.25 1.25 0 1 0 0-2.5 1.25 1.25 0 0 0 0 2.5Zm7.5 0a1.25 1.25 0 1 0 0-2.5 1.25 1.25 0 0 0 0 2.5Z"/></svg>
+                        <i class="fa-solid fa-cart-shopping fa-fw" aria-hidden="true"></i>
                     </button>
                 </form>
             @elseif($product->allowsCrowdfunding())
@@ -128,21 +128,21 @@
                 <form method="post" action="{{ route('products.wishlist.status.toggle', $productRoute) }}" data-product-preference-form>
                     @csrf
                     <button class="inline-flex h-9 w-full items-center justify-center rounded-sm border {{ $wishlistActive ? 'border-pink-300 bg-pink-50 text-pink-800' : 'border-slate-300 bg-white text-slate-700 hover:bg-pink-50 hover:text-pink-800' }}" type="submit" aria-label="{{ $wishlistActive ? '已在愿望单' : '加入愿望单' }}" title="{{ $wishlistActive ? '已在愿望单' : '加入愿望单' }}" data-preference-active="{{ $wishlistActive ? 'true' : 'false' }}">
-                        <svg class="h-4 w-4" viewBox="0 0 20 20" aria-hidden="true" fill="currentColor"><path d="M5.5 2A2.5 2.5 0 0 0 3 4.5v11A2.5 2.5 0 0 0 5.5 18h9a2.5 2.5 0 0 0 2.5-2.5V7.62a2.5 2.5 0 0 0-.73-1.77l-3.12-3.12A2.5 2.5 0 0 0 11.38 2H5.5Zm5.75 1.5V6A1.75 1.75 0 0 0 13 7.75h2.5v7.75a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1h5.75Zm1.5.56 2.19 2.19H13a.25.25 0 0 1-.25-.25V4.06Z"/></svg>
+                        <i class="{{ $wishlistActive ? 'fa-solid' : 'fa-regular' }} fa-heart fa-fw" aria-hidden="true"></i>
                     </button>
                 </form>
                 <form method="post" action="{{ route('products.favorite.status.toggle', $productRoute) }}" data-product-preference-form>
                     @csrf
                     <button class="inline-flex h-9 w-full items-center justify-center rounded-sm border {{ $favoriteActive ? 'border-blue-300 bg-blue-50 text-blue-800' : 'border-slate-300 bg-white text-slate-700 hover:bg-blue-50 hover:text-blue-800' }}" type="submit" aria-label="{{ $favoriteActive ? '已收藏' : '收藏商品' }}" title="{{ $favoriteActive ? '已收藏' : '收藏商品' }}" data-preference-active="{{ $favoriteActive ? 'true' : 'false' }}">
-                        <svg class="h-4 w-4" viewBox="0 0 20 20" aria-hidden="true" fill="currentColor"><path d="M9.1 2.9a1 1 0 0 1 1.8 0l1.72 3.48 3.84.56a1 1 0 0 1 .55 1.7l-2.78 2.71.66 3.83a1 1 0 0 1-1.45 1.05L10 14.42l-3.44 1.81a1 1 0 0 1-1.45-1.05l.66-3.83-2.78-2.71a1 1 0 0 1 .55-1.7l3.84-.56L9.1 2.9Z"/></svg>
+                        <i class="{{ $favoriteActive ? 'fa-solid' : 'fa-regular' }} fa-star fa-fw" aria-hidden="true"></i>
                     </button>
                 </form>
             @else
                 <a class="inline-flex h-9 items-center justify-center rounded-sm border border-slate-300 bg-white text-slate-700 hover:bg-pink-50 hover:text-pink-800" href="{{ route('login') }}" aria-label="登录后加入愿望单" title="登录后加入愿望单">
-                    <svg class="h-4 w-4" viewBox="0 0 20 20" aria-hidden="true" fill="currentColor"><path d="M5.5 2A2.5 2.5 0 0 0 3 4.5v11A2.5 2.5 0 0 0 5.5 18h9a2.5 2.5 0 0 0 2.5-2.5V7.62a2.5 2.5 0 0 0-.73-1.77l-3.12-3.12A2.5 2.5 0 0 0 11.38 2H5.5Zm5.75 1.5V6A1.75 1.75 0 0 0 13 7.75h2.5v7.75a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1h5.75Zm1.5.56 2.19 2.19H13a.25.25 0 0 1-.25-.25V4.06Z"/></svg>
+                    <i class="fa-regular fa-heart fa-fw" aria-hidden="true"></i>
                 </a>
                 <a class="inline-flex h-9 items-center justify-center rounded-sm border border-slate-300 bg-white text-slate-700 hover:bg-blue-50 hover:text-blue-800" href="{{ route('login') }}" aria-label="登录后收藏商品" title="登录后收藏商品">
-                    <svg class="h-4 w-4" viewBox="0 0 20 20" aria-hidden="true" fill="currentColor"><path d="M9.1 2.9a1 1 0 0 1 1.8 0l1.72 3.48 3.84.56a1 1 0 0 1 .55 1.7l-2.78 2.71.66 3.83a1 1 0 0 1-1.45 1.05L10 14.42l-3.44 1.81a1 1 0 0 1-1.45-1.05l.66-3.83-2.78-2.71a1 1 0 0 1 .55-1.7l3.84-.56L9.1 2.9Z"/></svg>
+                    <i class="fa-regular fa-star fa-fw" aria-hidden="true"></i>
                 </a>
             @endauth
         </div>

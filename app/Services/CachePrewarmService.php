@@ -24,8 +24,14 @@ class CachePrewarmService
         try {
             $keys = [
                 ...app(StorefrontCache::class)->prewarm(),
-                ...app(AdminDashboardCache::class)->prewarm(),
             ];
+
+            if ((bool) config('shop.cache_prewarm.include_admin', false)) {
+                $keys = [
+                    ...$keys,
+                    ...app(AdminDashboardCache::class)->prewarm(),
+                ];
+            }
 
             return [
                 'warmed' => count($keys),

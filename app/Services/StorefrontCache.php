@@ -40,6 +40,30 @@ class StorefrontCache
         ];
     }
 
+    public static function isWarm(): bool
+    {
+        foreach (self::criticalKeys() as $key) {
+            if (! Cache::has($key)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public static function criticalKeys(): array
+    {
+        return [
+            self::SETTINGS_KEY,
+            self::CATEGORIES_KEY,
+            self::PAGES_KEY,
+            self::MENU_KEY_PREFIX.NavigationMenuItem::PLACEMENT_TOP_NAV,
+        ];
+    }
+
     public function settings(): ?SiteSetting
     {
         return Cache::remember(self::SETTINGS_KEY, now()->addMinutes(10), function (): ?SiteSetting {

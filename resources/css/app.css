@@ -1,3 +1,4 @@
+@import "@fortawesome/fontawesome-free/css/all.min.css";
 @import "tailwindcss";
 
 :root {
@@ -19,6 +20,11 @@ video,
 canvas,
 svg {
     max-width: 100%;
+}
+
+.markdown-icon {
+    color: currentColor;
+    vertical-align: -0.075em;
 }
 
 .theme-default .bg-blue-700,

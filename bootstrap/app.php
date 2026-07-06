@@ -2,8 +2,8 @@
 
 use App\Http\Middleware\EnsureInstalled;
 use App\Http\Middleware\ProtectAgainstRequestAvalanche;
+use App\Http\Middleware\ShowFirstVisitLoadingPage;
 use App\Http\Middleware\TrackPageVisits;
-use App\Http\Middleware\UseRelativeUrls;
 use Illuminate\Foundation\Application;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -51,12 +51,12 @@ return Application::configure(basePath: dirname(__DIR__))
                 | Request::HEADER_X_FORWARDED_PREFIX,
         );
 
-        $middleware->append(UseRelativeUrls::class);
         $middleware->append(ProtectAgainstRequestAvalanche::class);
         $middleware->append(TrackPageVisits::class);
 
         $middleware->web(append: [
             EnsureInstalled::class,
+            ShowFirstVisitLoadingPage::class,
         ]);
 
         $middleware->alias([

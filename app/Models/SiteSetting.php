@@ -42,6 +42,7 @@ class SiteSetting extends Model
         'welcome_message',
         'home_content',
         'home_product_section_order',
+        'loading_page_config',
         'contact_info',
         'copyright_text',
         'payment_instructions',
@@ -116,6 +117,7 @@ class SiteSetting extends Model
             'currency_gold_price' => 'decimal:4',
             'home_welcome_enabled' => 'boolean',
             'home_product_section_order' => 'array',
+            'loading_page_config' => 'array',
             'page_music_enabled' => 'boolean',
             'guide_pet_enabled' => 'boolean',
             'support_ai_enabled' => 'boolean',
@@ -220,6 +222,14 @@ class SiteSetting extends Model
         }
 
         return $ordered;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function loadingPageConfig(): array
+    {
+        return \App\Support\LoadingPage::normalize($this->loading_page_config);
     }
 
     public function guidePetAssetUrl(): ?string

@@ -922,7 +922,7 @@ it('renders custom pages from markdown safely', function (): void {
     $page = Page::query()->create([
         'title' => '关于我们',
         'slug' => 'about-us',
-        'body' => "## 购买说明\n\n- 人工确认付款\n\n<script>alert('xss')</script>",
+        'body' => "## 购买说明\n\n- 人工确认付款 [fa:cart-shopping]\n- 收藏提示 [fa:regular:heart 愿望单]\n\n<script>alert('xss')</script>",
         'excerpt' => '轻量商城说明页',
         'seo_title' => '关于 ShopWeb',
         'seo_description' => 'ShopWeb 自定义说明页面',
@@ -934,6 +934,9 @@ it('renders custom pages from markdown safely', function (): void {
         ->assertSee('关于我们')
         ->assertSee('购买说明')
         ->assertSee('人工确认付款')
+        ->assertSee('fa-solid fa-cart-shopping', false)
+        ->assertSee('fa-regular fa-heart', false)
+        ->assertSee('aria-label="愿望单"', false)
         ->assertDontSee('<script>', false)
         ->assertDontSee('alert', false);
 });

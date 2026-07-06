@@ -16,8 +16,16 @@ return [
     ],
     'cache_prewarm' => [
         'enabled' => (bool) env('SHOP_CACHE_PREWARM_ENABLED', true),
+        'include_admin' => (bool) env('SHOP_CACHE_PREWARM_INCLUDE_ADMIN', false),
         'urls' => array_values(array_filter(array_map('trim', explode(',', (string) env('SHOP_CACHE_PREWARM_URLS', '/,/products,/forum,/ai-image'))))),
         'ttl_seconds' => (int) env('SHOP_CACHE_PREWARM_TTL', 600),
+    ],
+    'analytics' => [
+        'track_admin_page_views' => (bool) env('SHOP_ANALYTICS_TRACK_ADMIN_PAGE_VIEWS', false),
+    ],
+    'first_visit_loading' => [
+        'enabled' => (bool) env('SHOP_FIRST_VISIT_LOADING_ENABLED', env('APP_ENV') !== 'testing'),
+        'show_on_cold_cache' => (bool) env('SHOP_FIRST_VISIT_LOADING_ON_COLD_CACHE', true),
     ],
     'alert_bot' => [
         'enabled' => (bool) env('SHOP_ALERT_BOT_ENABLED', false),
