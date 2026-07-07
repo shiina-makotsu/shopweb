@@ -256,8 +256,8 @@ class WalletSettingsPage extends Page implements HasSchemas
                                                     ->minValue(1)
                                                     ->default(1),
                                                 Toggle::make('is_stackable')
-                                                    ->label('允许本规则赠券同单叠加')
-                                                    ->helperText('默认关闭；关闭后，本规则发放的优惠券不能和其它优惠券在同一笔订单中同时使用。')
+                                                    ->label('允许该赠券同单叠加')
+                                                    ->helperText('默认关闭；关闭后，该规则发放的每一张优惠券都不能和任意第二张优惠券在同一笔订单中同时使用，包括同规则发放的其它赠券。')
                                                     ->default(false),
                                             ])
                                             ->columns(3)
@@ -484,7 +484,10 @@ class WalletSettingsPage extends Page implements HasSchemas
         $credit = $isBlank ? '待设置' : e(Money::format($creditCents));
         $discountText = $discount < 100 ? '<span>按 '.$discount.'% 付款</span>' : '<span>无折扣</span>';
         $bonusText = $bonusCents > 0 ? '<span>赠送 '.e(Money::format($bonusCents)).'</span>' : '<span>无赠送余额</span>';
-        $couponText = (bool) ($state['coupon_reward_enabled'] ?? false) ? '<span>含充值赠券</span>' : '<span>无赠券</span>';
+        $couponParts = static::previewCouponRewardParts($state);
+        $couponText = $couponParts === []
+            ? '<span>无赠券</span>'
+            : '<span>赠券 '.e(implode('+', $couponParts)).'</span>';
 
         $footer = '<span style="display:flex;flex-wrap:wrap;gap:6px;color:#475569;font-size:12px;">'.$discountText.$bonusText.$couponText.'</span>';
 
@@ -508,10 +511,6 @@ class WalletSettingsPage extends Page implements HasSchemas
     {
         $value = $state['amount_cents'] ?? 0;
 
-        if ((bool) ($state['_stored'] ?? false) || (int) ($state['id'] ?? 0) > 0) {
-            return max(0, (int) $value);
-        }
-
         if (! filled($value)) {
             return 0;
         }
@@ -530,10 +529,6 @@ class WalletSettingsPage extends Page implements HasSchemas
     {
         $value = $state['bonus_cents'] ?? 0;
 
-        if ((bool) ($state['_stored'] ?? false) || (int) ($state['id'] ?? 0) > 0) {
-            return max(0, (int) $value);
-        }
-
         if (! filled($value)) {
             return 0;
         }
@@ -544,6 +539,50 @@ class WalletSettingsPage extends Page implements HasSchemas
             $value,
             $currency,
             $state['currency_unit'] ?: CurrencyUnit::defaultUnit($currency),
+            CurrencyUnit::exchangeRateFor($currency),
+        );
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private static function previewCouponRewardParts(array $state): array
+    {
+        if (! (bool) ($state['coupon_reward_enabled'] ?? false)) {
+            return [];
+        }
+
+        return collect($state['coupon_reward_rules'] ?? [])
+            ->map(function (array $rule): ?string {
+                $type = ($rule['type'] ?? Coupon::TYPE_FIXED) === Coupon::TYPE_PERCENT
+                    ? Coupon::TYPE_PERCENT
+                    : Coupon::TYPE_FIXED;
+                $value = $rule['value'] ?? null;
+
+                if (! filled($value)) {
+                    return null;
+                }
+
+                $label = $type === Coupon::TYPE_PERCENT
+                    ? max(0, min(100, (int) $value)).'%折扣券'
+                    : Money::format(static::previewCouponRewardValueCents($rule));
+                $quantity = max(1, (int) ($rule['quantity'] ?? 1));
+
+                return $quantity > 1 ? $label.'*'.$quantity : $label;
+            })
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    private static function previewCouponRewardValueCents(array $rule): int
+    {
+        $currency = CurrencyUnit::normalizeCurrency($rule['currency_code'] ?? CurrencyUnit::baseCurrency());
+
+        return CurrencyUnit::toSettlementCents(
+            $rule['value'] ?? 0,
+            $currency,
+            $rule['currency_unit'] ?: CurrencyUnit::defaultUnit($currency),
             CurrencyUnit::exchangeRateFor($currency),
         );
     }

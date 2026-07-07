@@ -215,7 +215,7 @@ class CardPreviewTemplate
                     };
                     const scheduleRestore = () => {
                         window.clearTimeout(refreshTimer);
-                        refreshTimer = window.setTimeout(() => initializeRoots({ restoreVisibility: true, updateContainer: true }), 180);
+                        refreshTimer = window.setTimeout(() => initializeRoots({ restoreVisibility: true, updateContainer: true }), 20);
                     };
                     const openIndexes = () => new Set((state.open || []).map((value) => Number.parseInt(value, 10)).filter((value) => Number.isFinite(value)));
                     const setOpen = (index, open) => {
@@ -278,16 +278,22 @@ class CardPreviewTemplate
                         item.style.display = visible ? '' : 'none';
                         item.setAttribute(visibleAttribute, visible ? '1' : '0');
                     };
+                    const topLevelSettingItems = (settings) => Array.from(settings?.querySelectorAll('.fi-fo-repeater-item') || [])
+                        .filter((item) => {
+                            const parentItem = item.parentElement?.closest('.fi-fo-repeater-item');
+
+                            return ! parentItem || ! settings.contains(parentItem);
+                        });
+                    const topLevelAddButton = (settings) => Array.from(settings?.querySelectorAll('.fi-fo-repeater-add button') || [])
+                        .find((button) => {
+                            const parentItem = button.parentElement?.closest('.fi-fo-repeater-item');
+
+                            return ! parentItem || ! settings.contains(parentItem);
+                        });
                     const settingItems = (root, options = {}) => {
                         const restoreVisibility = Boolean(options.restoreVisibility);
                         const settings = settingsFor(root);
-                        const list = settings?.querySelector('.fi-fo-repeater-items');
-                        const directItems = Array.from(list?.children || [])
-                            .filter((item) => item.classList.contains('fi-fo-repeater-item'))
-                            .filter((item) => ! item.parentElement?.closest('.fi-fo-repeater-item'));
-                        const nestedTopItems = Array.from(list?.querySelectorAll('.fi-fo-repeater-item') || [])
-                            .filter((item) => ! item.parentElement?.closest('.fi-fo-repeater-item'));
-                        const items = (directItems.length > 0 ? directItems : nestedTopItems)
+                        const items = topLevelSettingItems(settings)
                             .map((item, index) => {
                                 item.setAttribute(settingItemAttribute, String(index));
                                 applySettingBlockStyle(item);
@@ -341,7 +347,6 @@ class CardPreviewTemplate
                         setOpen(index, true);
                         markItemVisibility(item, true);
                         refreshSettingsVisibility(root, items);
-                        settingsFor(root)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                     };
                     const orderChanged = (root) => {
                         const original = originalOrder(root);
@@ -438,7 +443,7 @@ class CardPreviewTemplate
                         let item = items[index];
 
                         if (card.dataset.cardPreviewNew === '1' && card.dataset.cardPreviewVirtual === '1') {
-                            const addButton = settings?.querySelector('.fi-fo-repeater-add button');
+                            const addButton = topLevelAddButton(settings);
                             addButton?.click();
 
                             window.setTimeout(() => {
@@ -455,7 +460,6 @@ class CardPreviewTemplate
                         markItemVisibility(item, ! isOpen);
                         setOpen(index, ! isOpen);
                         refreshSettingsVisibility(root, items);
-                        settings?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                     });
 
                     const initializeRoots = (options = {}) => roots().forEach((root) => {
@@ -476,9 +480,16 @@ class CardPreviewTemplate
 
                             return target?.closest?.(rootSelector);
                         });
+                        const touchesSettings = mutations.some((mutation) => {
+                            const target = mutation.target instanceof Element ? mutation.target : mutation.target?.parentElement;
+
+                            return target?.closest?.(settingsSelector);
+                        });
 
                         if (touchesPreview) {
                             scheduleRefresh();
+                        } else if (touchesSettings) {
+                            scheduleRestore();
                         }
                     });
 

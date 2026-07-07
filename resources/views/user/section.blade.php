@@ -693,7 +693,7 @@
                                         </div>
                                         <p class="mt-1 text-slate-600">代码：<code class="rounded-sm bg-slate-100 px-1.5 py-0.5">{{ $coupon->code }}</code></p>
                                         <p class="mt-1 text-slate-600">范围：{{ $coupon->scopeLabel() }}</p>
-                                        <p class="mt-1 text-slate-600">叠加：{{ $coupon->is_stackable ? '可叠加使用' : '不可叠加使用' }}</p>
+                                        <p class="mt-1 text-slate-600">叠加：{{ $coupon->is_stackable ? '可与其它优惠码同单使用' : '不可与任何其它优惠码同单使用' }}</p>
                                         <p class="mt-1 text-slate-600">
                                             时间：
                                             {{ $coupon->starts_at?->format('Y-m-d H:i') ?? '不限开始' }}
@@ -822,13 +822,11 @@
                                     @csrf
                                     <input type="hidden" name="wallet_recharge_option_id" value="{{ $option->id }}">
                                     <h3 class="font-semibold">{{ $option->displayName() }}</h3>
-                                    <p class="mt-2 text-2xl font-semibold text-red-700">@money($option->payableCents())</p>
-                                    <p class="mt-1 text-slate-600">到账：@money($option->creditCents())</p>
+                                    <p class="mt-2 text-sm text-red-700">付款：@money($option->payableCents())</p>
+                                    <p class="mt-1 text-2xl font-bold text-red-700">实际到账：{{ $option->actualRechargeTotalLabel() }}</p>
+                                    <p class="mt-1 text-slate-500">{{ $option->rechargeAmountBreakdownLabel() }}</p>
                                     @if($option->discount_percent !== null)
                                         <p class="mt-1 text-xs text-red-700">按 {{ $option->discount_percent }}% 付款</p>
-                                    @endif
-                                    @if((int) $option->bonus_cents > 0)
-                                        <p class="mt-1 text-xs text-red-700">赠送 @money((int) $option->bonus_cents)</p>
                                     @endif
                                     <button class="mt-3 w-full rounded-sm border border-blue-700 bg-blue-700 px-3 py-2 text-sm font-medium text-white hover:bg-blue-800" type="submit">选择充值</button>
                                 </form>

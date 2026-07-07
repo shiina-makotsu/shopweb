@@ -82,6 +82,63 @@ class WalletRechargeOption extends Model
         return $this->name ?: Money::format((int) $this->amount_cents).' 充值';
     }
 
+    public function creditWithRewardsLabel(): string
+    {
+        $parts = [
+            Money::format($this->creditCents()),
+            ...$this->couponRewardDisplayParts(),
+        ];
+
+        return '到账金额：'.implode('+', $parts);
+    }
+
+    public function actualRechargeTotalLabel(): string
+    {
+        return Money::format($this->actualRechargeTotalCents());
+    }
+
+    public function actualRechargeTotalCents(): int
+    {
+        return $this->creditCents() + collect($this->couponRewardRules())
+            ->filter(fn (array $rule): bool => $rule['type'] === Coupon::TYPE_FIXED)
+            ->sum(fn (array $rule): int => (int) $rule['value'] * max(1, (int) ($rule['quantity'] ?? 1)));
+    }
+
+    public function rechargeAmountBreakdownLabel(): string
+    {
+        $parts = [Money::format((int) $this->amount_cents)];
+
+        if ((int) $this->bonus_cents > 0) {
+            $parts[] = Money::format((int) $this->bonus_cents);
+        }
+
+        array_push($parts, ...$this->couponRewardDisplayParts());
+
+        return '金额：'.implode('+', $parts);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function couponRewardDisplayParts(): array
+    {
+        if (! $this->couponRewardEnabled()) {
+            return [];
+        }
+
+        return collect($this->couponRewardRules())
+            ->map(function (array $rule): string {
+                $value = $rule['type'] === Coupon::TYPE_PERCENT
+                    ? ((int) $rule['value']).'%折扣券'
+                    : Money::format((int) $rule['value']);
+                $quantity = (int) ($rule['quantity'] ?? 1);
+
+                return $quantity > 1 ? $value.'*'.$quantity : $value;
+            })
+            ->values()
+            ->all();
+    }
+
     public function couponRewardEnabled(): bool
     {
         return (bool) $this->coupon_reward_enabled && $this->couponRewardRules() !== [];

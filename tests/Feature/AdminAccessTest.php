@@ -9,6 +9,7 @@ use App\Models\OrderStatusSetting;
 use App\Models\Page;
 use App\Models\Product;
 use App\Models\SiteSetting;
+use App\Models\Coupon;
 use App\Models\WalletRechargeOption;
 use Livewire\Livewire;
 
@@ -578,6 +579,47 @@ it('renders merged admin management tabs for wallet flash sale and comments', fu
         'bonus_cents' => 1000,
         'is_active' => true,
     ]);
+    WalletRechargeOption::query()->create([
+        'name' => null,
+        'currency_code' => 'CNY',
+        'currency_unit' => 'yuan',
+        'amount_cents' => 1000,
+        'discount_percent' => null,
+        'bonus_cents' => 0,
+        'is_active' => true,
+    ]);
+    WalletRechargeOption::query()->create([
+        'name' => 'Coupon reward option',
+        'currency_code' => 'CNY',
+        'currency_unit' => 'yuan',
+        'amount_cents' => 3000,
+        'discount_percent' => null,
+        'bonus_cents' => 0,
+        'is_active' => true,
+        'coupon_reward_enabled' => true,
+        'coupon_reward_currency_code' => 'CNY',
+        'coupon_reward_currency_unit' => 'yuan',
+        'coupon_reward_type' => Coupon::TYPE_FIXED,
+        'coupon_reward_value' => 500,
+        'coupon_reward_quantity' => 2,
+        'coupon_reward_usage_limit' => 1,
+        'coupon_reward_rules' => [
+            [
+                'name' => 'editable fixed reward',
+                'currency_code' => 'CNY',
+                'currency_unit' => 'yuan',
+                'type' => Coupon::TYPE_FIXED,
+                'value' => 500,
+                'valid_days' => null,
+                'scope' => Coupon::SCOPE_GLOBAL,
+                'product_ids' => [],
+                'minimum_order_cents' => 0,
+                'quantity' => 2,
+                'usage_limit' => 1,
+                'is_stackable' => false,
+            ],
+        ],
+    ]);
 
     $this->actingAs($admin)
         ->get(\App\Filament\Pages\WalletSettingsPage::getUrl())
@@ -596,7 +638,21 @@ it('renders merged admin management tabs for wallet flash sale and comments', fu
         ->assertSee('data-wallet-recharge-preview-card', false)
         ->assertSee('data-wallet-recharge-settings', false)
         ->assertSee('data-wallet-recharge-save-order', false)
+        ->assertSee(\App\Support\Money::format(1000))
+        ->assertDontSee(\App\Support\Money::format(10))
+        ->assertSee('Coupon reward option')
+        ->assertSee('editable fixed reward')
         ->assertSee('新增充值选项');
+
+    $templateSource = file_get_contents(app_path('Filament/Support/CardPreviewTemplate.php'));
+
+    expect($templateSource)
+        ->toContain('topLevelSettingItems')
+        ->toContain('topLevelAddButton')
+        ->toContain('settings.contains(parentItem)')
+        ->toContain('touchesSettings')
+        ->toContain('scheduleRestore();')
+        ->toContain('}), 20);');
 
     $this->actingAs($admin)
         ->get(\App\Filament\Resources\WalletRedeemCodeResource::getUrl('index'))

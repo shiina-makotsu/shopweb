@@ -593,6 +593,13 @@ it('creates wallet recharge orders from configured recharge options', function (
         ->assertSee('按 90% 付款');
 
     $this->actingAs($user)
+        ->get(route('user.section', 'wallet'))
+        ->assertOk()
+        ->assertSee('付款：'.Money::format($option->payableCents()))
+        ->assertSee('实际到账：'.Money::format($option->actualRechargeTotalCents()))
+        ->assertSee($option->rechargeAmountBreakdownLabel());
+
+    $this->actingAs($user)
         ->post(route('user.wallet.recharge-option'), [
             'wallet_recharge_option_id' => $option->id,
         ])
@@ -614,6 +621,20 @@ it('issues generated standard coupons after a configured wallet recharge is conf
         'title' => 'Recharge coupon product',
         'slug' => 'recharge-coupon-product',
         'status' => Product::STATUS_PUBLISHED,
+    ]);
+    $variantA = ProductVariant::query()->create([
+        'product_id' => $product->id,
+        'sku' => 'RECHARGE-COUPON-A',
+        'price_cents' => 5000,
+        'stock' => 5,
+        'is_active' => true,
+    ]);
+    $variantB = ProductVariant::query()->create([
+        'product_id' => $product->id,
+        'sku' => 'RECHARGE-COUPON-B',
+        'price_cents' => 5000,
+        'stock' => 5,
+        'is_active' => true,
     ]);
     $option = WalletRechargeOption::query()->create([
         'name' => '充值 50 赠券',
@@ -663,6 +684,13 @@ it('issues generated standard coupons after a configured wallet recharge is conf
 
     expect($order->wallet_recharge_option_id)->toBe($option->id);
 
+    $this->actingAs($user)
+        ->get(route('user.section', 'wallet'))
+        ->assertOk()
+        ->assertSee('付款：'.Money::format(5000))
+        ->assertSee('实际到账：'.Money::format(6600))
+        ->assertSee('金额：'.Money::format(5000).'+'.Money::format(800).'*2+90%折扣券');
+
     app(OrderService::class)->confirmPayment($order);
     app(OrderService::class)->confirmPayment($order->fresh());
 
@@ -700,6 +728,25 @@ it('issues generated standard coupons after a configured wallet recharge is conf
             ->and($coupon->ends_at)->not->toBeNull()
             ->and($coupon->products->pluck('id')->all())->toBe([$product->id]);
     }
+
+    $fixedUserCoupons = UserCoupon::query()
+        ->whereBelongsTo($user)
+        ->whereIn('coupon_id', $fixedCoupons->pluck('id'))
+        ->orderBy('id')
+        ->get();
+    $cartItems = collect([
+        ['variant' => $variantA, 'product' => $product, 'line_total_cents' => 5000],
+        ['variant' => $variantB, 'product' => $product, 'line_total_cents' => 5000],
+    ]);
+
+    app(CouponService::class)->resolveForCart($user, $cartItems, [
+        $variantA->id => $fixedUserCoupons[0]->id,
+    ]);
+
+    expect(fn () => app(CouponService::class)->resolveForCart($user, $cartItems, [
+        $variantA->id => $fixedUserCoupons[0]->id,
+        $variantB->id => $fixedUserCoupons[1]->id,
+    ]))->toThrow(ValidationException::class);
 
     expect($percentCoupon->name)->toContain('percent reward')
         ->and($percentCoupon->value)->toBe(90)
@@ -2642,7 +2689,7 @@ it('lets users claim coupons and apply one coupon per cart sku', function (): vo
         ->assertSee('券包商品 A')
         ->assertSee('券包商品 B')
         ->assertSee('全场九折')
-        ->assertSee('可叠加使用');
+        ->assertSee('可与其它优惠码同单使用');
 
     $userCouponA = UserCoupon::query()->whereBelongsTo($user)->whereBelongsTo($couponA)->firstOrFail();
     $userCouponB = UserCoupon::query()->whereBelongsTo($user)->whereBelongsTo($couponB)->firstOrFail();
