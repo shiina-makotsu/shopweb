@@ -16,6 +16,7 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Page;
 use App\Models\Product;
+use App\Models\ProductComment;
 use App\Models\ProductMedia;
 use App\Models\ProductTag;
 use App\Models\ProductVariant;
@@ -1181,6 +1182,42 @@ it('renders custom pages from markdown safely', function (): void {
         ->assertSee('aria-label="愿望单"', false)
         ->assertDontSee('<script>', false)
         ->assertDontSee('alert', false);
+});
+
+it('renders product comment font awesome shortcodes and icon inserters', function (): void {
+    $category = Category::query()->create([
+        'name' => '评论分类',
+        'slug' => 'comment-category',
+        'is_active' => true,
+    ]);
+    $product = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => '评论图标商品',
+        'slug' => 'comment-icon-product',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_LOGISTICS,
+        'comments_enabled' => true,
+    ]);
+    ProductVariant::query()->create([
+        'product_id' => $product->id,
+        'spec_name' => '默认规格',
+        'price_cents' => 1200,
+        'stock' => 5,
+        'is_active' => true,
+    ]);
+    ProductComment::query()->create([
+        'product_id' => $product->id,
+        'user_id' => User::factory()->create(['role' => 'customer'])->id,
+        'rating' => 5,
+        'body' => '喜欢这个 [fa:regular:heart 愿望单]',
+    ]);
+
+    $this->actingAs(User::factory()->create(['role' => 'customer']))
+        ->get(route('products.show', $product))
+        ->assertOk()
+        ->assertSee('fa-regular fa-heart', false)
+        ->assertSee('aria-label="愿望单"', false)
+        ->assertSee('data-fa-textarea-target', false);
 });
 
 it('syncs a published custom page into a selected storefront menu', function (): void {

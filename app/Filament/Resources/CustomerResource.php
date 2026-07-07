@@ -31,12 +31,12 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
-use Filament\Tables\Columns\ImageColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\HtmlString;
 
 class CustomerResource extends Resource
@@ -180,55 +180,25 @@ class CustomerResource extends Resource
     {
         return $table
             ->columns([
-                ImageColumn::make('avatar_path')
+                TextColumn::make('avatar_path')
                     ->label('头像')
-                    ->disk('public_uploads')
-                    ->imageSize(40),
+                    ->state(fn (User $record): HtmlString => static::avatarHtml($record))
+                    ->html(),
                 TextColumn::make('name')
                     ->label('用户昵称')
+                    ->state(fn (User $record): HtmlString => static::rowTriggerHtml($record))
+                    ->html()
                     ->searchable(query: fn (Builder $query, string $search): Builder => RegexSearch::where($query, ['name'], $search))
                     ->sortable(),
                 TextColumn::make('public_id')
                     ->label('用户 ID')
                     ->searchable(query: fn (Builder $query, string $search): Builder => RegexSearch::where($query, ['public_id'], $search))
                     ->sortable(),
-                TextColumn::make('email')
-                    ->label('注册邮箱')
-                    ->searchable(query: fn (Builder $query, string $search): Builder => RegexSearch::where($query, ['email'], $search))
-                    ->sortable(),
-                TextColumn::make('birthday')
-                    ->label('生日')
-                    ->formatStateUsing(fn ($state, User $record): string => $state ? ($record->hasBirthdayToday() ? '生日 '.$record->birthday?->format('Y-m-d') : $record->birthday?->format('Y-m-d')) : '-')
-                    ->badge(fn (User $record): bool => $record->hasBirthdayToday())
-                    ->color(fn (User $record): string => $record->hasBirthdayToday() ? 'success' : 'gray')
-                    ->sortable()
-                    ->toggleable(),
-                TextColumn::make('has_diagnosis_certificate')
-                    ->label('诊断证明')
-                    ->formatStateUsing(fn (bool $state): string => $state ? '已持有' : '未标记')
-                    ->badge()
-                    ->color(fn (bool $state): string => $state ? 'success' : 'gray')
-                    ->toggleable(),
                 TextColumn::make('account_type')
                     ->label('用户身份')
                     ->formatStateUsing(fn (?string $state): string => $state === 'member' ? '会员用户' : '普通用户')
                     ->badge()
-                    ->toggleable(),
-                TextColumn::make('forum_role')
-                    ->label('论坛身份')
-                    ->formatStateUsing(fn (?string $state): string => $state === 'moderator' ? '版主' : '普通用户')
-                    ->badge()
-                    ->toggleable(),
-                TextColumn::make('forum_posting_banned_at')
-                    ->label('发帖权限')
-                    ->formatStateUsing(fn ($state): string => $state ? '已封禁' : '可发帖')
-                    ->badge()
-                    ->toggleable(),
-                TextColumn::make('completed_orders_count')->label('完成订单数')->sortable(),
-                TextColumn::make('inviter.name')
-                    ->label('邀请人')
-                    ->formatStateUsing(fn ($state, User $record): string => $record->inviter ? static::userLabel($record->inviter) : '-')
-                    ->toggleable(),
+                    ->sortable(),
                 TextColumn::make('referrals_count')
                     ->label('邀请人数')
                     ->badge()
@@ -238,11 +208,10 @@ class CustomerResource extends Resource
                     ->label('完成累计金额')
                     ->formatStateUsing(fn ($state): string => Money::format((int) ($state ?? 0)))
                     ->sortable(),
-                TextColumn::make('can_view_order_numbers')->label('订单号可见')->formatStateUsing(fn (bool $state): string => $state ? '可见' : '隐藏')->badge(),
-                TextColumn::make('can_view_tracking_numbers')->label('国际物流号')->formatStateUsing(fn (bool $state): string => $state ? '可见' : '隐藏')->badge(),
                 TextColumn::make('created_at')->label('注册时间')->dateTime('Y-m-d H:i')->sortable(),
             ])
             ->defaultSort('created_at', 'desc')
+            ->recordUrl(null)
             ->recordActions([
                 Action::make('issueCoupon')
                     ->label('发放优惠码')
@@ -269,14 +238,6 @@ class CustomerResource extends Resource
                             $data['note'] ?? null,
                         );
                     }),
-                Action::make('viewReferrals')
-                    ->label('查看邀请')
-                    ->icon(Heroicon::OutlinedUserGroup)
-                    ->modalHeading(fn (User $record): string => '邀请明细：'.static::userLabel($record))
-                    ->modalSubmitAction(false)
-                    ->modalCancelActionLabel('关闭')
-                    ->modalWidth('4xl')
-                    ->modalContent(fn (User $record): HtmlString => static::referralsHtml($record)),
                 EditAction::make()
                     ->url(fn (User $record): string => static::getUrl('edit', ['record' => $record->getKey()])),
             ])
@@ -354,9 +315,168 @@ class CustomerResource extends Resource
         return (string) $value;
     }
 
+    private static function avatarHtml(User $user): HtmlString
+    {
+        if ($user->avatar_path) {
+            $url = e(Storage::disk('public_uploads')->url($user->avatar_path));
+            $alt = e($user->displayName());
+
+            return new HtmlString(<<<HTML
+                <span style="display:inline-flex;width:40px;height:40px;align-items:center;justify-content:center;overflow:hidden;border-radius:999px;border:1px solid #cbd5e1;background:#fff;">
+                    <img src="{$url}" alt="{$alt}" style="width:100%;height:100%;object-fit:cover;">
+                </span>
+            HTML);
+        }
+
+        return new HtmlString(<<<HTML
+            <span style="display:inline-flex;width:40px;height:40px;align-items:center;justify-content:center;border-radius:999px;border:1px solid #cbd5e1;background:#f8fafc;color:#64748b;font-size:22px;">
+                <i class="fa-regular fa-circle-user" aria-hidden="true"></i>
+            </span>
+        HTML);
+    }
+
     private static function userLabel(User $user): string
     {
         return $user->displayName().' / '.$user->public_id.' / '.$user->email;
+    }
+
+    private static function rowTriggerHtml(User $record): HtmlString
+    {
+        $label = e($record->name ?: $record->public_id);
+        $details = static::rowDetailsHtml($record)->toHtml();
+
+        return new HtmlString(<<<HTML
+            <span data-shopweb-customer-trigger style="display:block;font-weight:600;color:#0f172a;">{$label}</span>
+            <template data-shopweb-customer-template>{$details}</template>
+            <script>
+                if (! window.shopwebCustomerRowToggleBound) {
+                    window.shopwebCustomerRowToggleBound = true;
+                    document.addEventListener('click', function (event) {
+                        if (event.target.closest('a,button,input,select,textarea,label,[role="button"],[data-shopweb-customer-row-form]')) {
+                            return;
+                        }
+
+                        var trigger = event.target.closest('[data-shopweb-customer-trigger]');
+                        var row = trigger ? trigger.closest('tr') : event.target.closest('tr');
+                        if (! row || ! row.querySelector('[data-shopweb-customer-template]')) {
+                            return;
+                        }
+
+                        var next = row.nextElementSibling;
+                        if (next && next.dataset.shopwebCustomerExpanded === 'true') {
+                            next.remove();
+                            row.classList.remove('shopweb-customer-row-open');
+                            return;
+                        }
+
+                        document.querySelectorAll('tr[data-shopweb-customer-expanded="true"]').forEach(function (item) {
+                            item.previousElementSibling && item.previousElementSibling.classList.remove('shopweb-customer-row-open');
+                            item.remove();
+                        });
+
+                        var template = row.querySelector('[data-shopweb-customer-template]');
+                        var expanded = document.createElement('tr');
+                        expanded.dataset.shopwebCustomerExpanded = 'true';
+                        var cell = document.createElement('td');
+                        cell.colSpan = row.children.length;
+                        cell.style.padding = '0';
+                        cell.innerHTML = template.innerHTML;
+                        expanded.appendChild(cell);
+                        row.insertAdjacentElement('afterend', expanded);
+                        row.classList.add('shopweb-customer-row-open');
+                    });
+                }
+            </script>
+        HTML);
+    }
+
+    private static function rowDetailsHtml(User $record): HtmlString
+    {
+        $record->loadMissing('inviter');
+
+        $email = e($record->email ?: '');
+        $emailLabel = e($record->email ?: '-');
+        $birthday = e($record->birthday?->format('Y-m-d') ?: '');
+        $birthdayLabel = e($record->birthday?->format('Y-m-d') ?: '-');
+        $diagnosisLabel = e($record->has_diagnosis_certificate ? '已持有' : '未标记');
+        $diagnosisChecked = $record->has_diagnosis_certificate ? ' checked' : '';
+        $forumRoleLabel = e($record->forum_role === 'moderator' ? '版主' : '普通用户');
+        $regularSelected = $record->account_type === 'member' ? '' : ' selected';
+        $memberSelected = $record->account_type === 'member' ? ' selected' : '';
+        $forumMemberSelected = $record->forum_role === 'moderator' ? '' : ' selected';
+        $forumModeratorSelected = $record->forum_role === 'moderator' ? ' selected' : '';
+        $bannedAt = e($record->forum_posting_banned_at?->format('Y-m-d\TH:i') ?: '');
+        $bannedAtLabel = e($record->forum_posting_banned_at?->format('Y-m-d H:i') ?: '可发帖');
+        $banReason = e($record->forum_posting_ban_reason ?: '');
+        $banReasonLabel = e($record->forum_posting_ban_reason ?: '-');
+        $orderVisibleChecked = $record->can_view_order_numbers ? ' checked' : '';
+        $trackingVisibleChecked = $record->can_view_tracking_numbers ? ' checked' : '';
+        $completedOrders = e((string) ((int) ($record->completed_orders_count ?? $record->orders()->where('status', Order::STATUS_FULFILLED)->count())));
+        $completedTotal = e(Money::format((int) ($record->completed_orders_total_cents ?? 0)));
+        $orderVisibleLabel = e($record->can_view_order_numbers ? '可见' : '隐藏');
+        $trackingVisibleLabel = e($record->can_view_tracking_numbers ? '可见' : '隐藏');
+        $inviter = e($record->inviter ? static::userLabel($record->inviter) : '-');
+        $referralsCount = e((string) ((int) ($record->referrals_count ?? $record->referrals()->count())));
+        $referrals = $record->referrals()->latest()->limit(20)->get();
+        $referralsList = $referrals->isEmpty()
+            ? '<span style="color:#64748b;">暂无邀请用户</span>'
+            : $referrals->map(fn (User $referral): string => '<span style="display:inline-flex;border:1px solid #cbd5e1;border-radius:999px;background:#fff;padding:2px 8px;margin:2px 4px 2px 0;">'.e(static::userLabel($referral)).'</span>')->implode('');
+        $action = e(route('admin.customers.quick-update', $record, absolute: false));
+        $csrf = e(csrf_token());
+        $superAdmin = auth()->user()?->isSuperAdmin() ?? false;
+        $privacyControls = $superAdmin
+            ? <<<HTML
+                <label style="display:flex;align-items:center;gap:6px;">
+                    <input type="checkbox" name="can_view_order_numbers" value="1"{$orderVisibleChecked}> 订单号可见
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;">
+                    <input type="checkbox" name="can_view_tracking_numbers" value="1"{$trackingVisibleChecked}> 国际物流号可见
+                </label>
+            HTML
+            : '<p style="margin:0;color:#64748b;">订单号/国际物流号可见性仅超级管理员可修改。</p>';
+
+        return new HtmlString(<<<HTML
+            <div class="shopweb-customer-submenu" style="padding:14px 18px 14px 28px;background:#f8fafc;border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;border-left:3px solid #94a3b8;color:#0f172a;font-size:13px;line-height:1.6;">
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;">
+                    <div style="display:grid;grid-template-columns:92px minmax(0,1fr);gap:6px 10px;">
+                        <strong style="color:#475569;">注册邮箱</strong><div style="word-break:break-all;">{$emailLabel}</div>
+                        <strong style="color:#475569;">生日</strong><div>{$birthdayLabel}</div>
+                        <strong style="color:#475569;">诊断证明</strong><div>{$diagnosisLabel}</div>
+                        <strong style="color:#475569;">论坛身份</strong><div>{$forumRoleLabel}</div>
+                        <strong style="color:#475569;">发帖权限</strong><div>{$bannedAtLabel}</div>
+                        <strong style="color:#475569;">封禁原因</strong><div style="word-break:break-word;">{$banReasonLabel}</div>
+                    </div>
+                    <div style="display:grid;grid-template-columns:112px minmax(0,1fr);gap:6px 10px;">
+                        <strong style="color:#475569;">完成订单数</strong><div>{$completedOrders}</div>
+                        <strong style="color:#475569;">完成累计金额</strong><div>{$completedTotal}</div>
+                        <strong style="color:#475569;">订单号可见</strong><div>{$orderVisibleLabel}</div>
+                        <strong style="color:#475569;">国际物流号</strong><div>{$trackingVisibleLabel}</div>
+                        <strong style="color:#475569;">邀请人</strong><div style="word-break:break-word;">{$inviter}</div>
+                        <strong style="color:#475569;">邀请人数</strong><div>{$referralsCount} 人</div>
+                    </div>
+                    <div>
+                        <strong style="display:block;color:#475569;margin-bottom:6px;">邀请明细</strong>
+                        <div style="max-height:120px;overflow:auto;">{$referralsList}</div>
+                    </div>
+                </div>
+                <form method="POST" action="{$action}" data-shopweb-customer-row-form style="margin-top:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px 12px;align-items:end;" onclick="event.stopPropagation();">
+                    <input type="hidden" name="_token" value="{$csrf}">
+                    <label>注册邮箱<input name="email" type="email" value="{$email}" required style="margin-top:4px;width:100%;min-height:34px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;padding:4px 8px;color:#0f172a;"></label>
+                    <label>生日<input name="birthday" type="date" value="{$birthday}" style="margin-top:4px;width:100%;min-height:34px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;padding:4px 8px;color:#0f172a;"></label>
+                    <label>用户身份<select name="account_type" style="margin-top:4px;width:100%;min-height:34px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;padding:4px 8px;color:#0f172a;"><option value="regular"{$regularSelected}>普通用户</option><option value="member"{$memberSelected}>会员用户</option></select></label>
+                    <label>论坛身份<select name="forum_role" style="margin-top:4px;width:100%;min-height:34px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;padding:4px 8px;color:#0f172a;"><option value="member"{$forumMemberSelected}>普通用户</option><option value="moderator"{$forumModeratorSelected}>版主</option></select></label>
+                    <label>发帖封禁时间<input name="forum_posting_banned_at" type="datetime-local" value="{$bannedAt}" style="margin-top:4px;width:100%;min-height:34px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;padding:4px 8px;color:#0f172a;"></label>
+                    <label>封禁原因<input name="forum_posting_ban_reason" value="{$banReason}" style="margin-top:4px;width:100%;min-height:34px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;padding:4px 8px;color:#0f172a;"></label>
+                    <div style="display:flex;flex-direction:column;gap:6px;">
+                        <label style="display:flex;align-items:center;gap:6px;"><input type="checkbox" name="has_diagnosis_certificate" value="1"{$diagnosisChecked}> 持有诊断证明</label>
+                        {$privacyControls}
+                    </div>
+                    <div style="display:flex;justify-content:flex-end;">
+                        <button type="submit" style="border:1px solid #94a3b8;border-radius:8px;background:#fff;padding:7px 14px;color:#0f172a;cursor:pointer;">保存快速详情</button>
+                    </div>
+                </form>
+            </div>
+        HTML);
     }
 
     private static function referralsHtml(User $user): HtmlString

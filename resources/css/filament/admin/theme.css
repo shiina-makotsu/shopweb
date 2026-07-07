@@ -1051,6 +1051,109 @@
     width: 1.125rem;
 }
 
+.fi-fo-markdown-editor .editor-toolbar .shop-md-tool-font-awesome i {
+    font-size: 0.95rem;
+}
+
+.shop-fa-picker-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 99999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    background: rgb(15 23 42 / 0.36);
+}
+
+.shop-fa-picker {
+    width: min(42rem, 100%);
+    max-height: min(42rem, calc(100vh - 2rem));
+    overflow: hidden;
+    border: 1px solid #cbd5e1;
+    border-radius: 16px;
+    background: #fff;
+    box-shadow: 0 24px 80px rgb(15 23 42 / 0.24);
+}
+
+.shop-fa-picker-head,
+.shop-fa-picker-fields,
+.shop-fa-picker-actions {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    padding: 0.9rem 1rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.shop-fa-picker-head {
+    justify-content: space-between;
+    background: linear-gradient(90deg, #eff8ff, #fff1f6);
+}
+
+.shop-fa-picker-head button,
+.shop-fa-picker-actions button {
+    border: 1px solid #94a3b8;
+    border-radius: 999px;
+    background: #fff;
+    padding: 0.45rem 0.8rem;
+    color: #0f172a;
+    cursor: pointer;
+}
+
+.shop-fa-picker-fields {
+    flex-wrap: wrap;
+}
+
+.shop-fa-picker-fields input,
+.shop-fa-picker-fields select {
+    min-height: 2.25rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    background: #fff;
+    padding: 0.4rem 0.65rem;
+}
+
+.shop-fa-picker-fields input:first-child {
+    flex: 1 1 16rem;
+}
+
+.shop-fa-picker-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+    gap: 0.6rem;
+    max-height: 24rem;
+    overflow: auto;
+    padding: 1rem;
+}
+
+.shop-fa-picker-grid button {
+    display: grid;
+    grid-template-columns: 1.5rem minmax(0, 1fr);
+    gap: 0.2rem 0.5rem;
+    align-items: center;
+    min-height: 3.75rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    background: #fff;
+    padding: 0.55rem;
+    text-align: left;
+    color: #0f172a;
+    cursor: pointer;
+}
+
+.shop-fa-picker-grid button:hover,
+.shop-fa-picker-grid button:focus-visible {
+    border-color: #7cbfe2;
+    background: #f8fbff;
+    outline: none;
+}
+
+.shop-fa-picker-grid small {
+    grid-column: 2;
+    color: #64748b;
+}
+
 .fi-fo-markdown-editor .editor-toolbar .shop-md-tabs {
     display: inline-flex;
     gap: 0.125rem;

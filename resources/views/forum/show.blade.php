@@ -98,6 +98,7 @@
                     <h2 class="text-sm font-semibold">管理帖子</h2>
                     <input class="w-full rounded-sm border border-slate-300 px-3 py-2" name="title" maxlength="120" value="{{ old('title', $thread->title) }}" required>
                     <textarea class="w-full rounded-sm border border-slate-300 px-3 py-3 leading-6" name="body" maxlength="12000" rows="18" data-auto-grow-textarea data-min-height="416" style="min-height: 26rem; overflow-y: hidden; resize: vertical;" required>{{ old('body', $thread->body) }}</textarea>
+                    <x-fa-text-button />
                     <button class="rounded-sm border border-blue-700 bg-blue-700 px-4 py-2 font-medium text-white hover:bg-blue-800" type="submit">保存帖子</button>
                 </form>
             @endif
@@ -160,19 +161,21 @@
                         </div>
 
                         @if($comment->canBeManagedBy(auth()->user()))
-                            <form method="post" action="{{ route('forum.comments.update', [$section, $thread, $comment]) }}" class="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
+                            <form method="post" action="{{ route('forum.comments.update', [$section, $thread, $comment]) }}" class="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
                                 @csrf
                                 @method('PATCH')
                                 <input class="rounded-sm border border-slate-300 px-3 py-2 text-xs" name="body" maxlength="6000" value="{{ $comment->body }}" required>
+                                <x-fa-text-button />
                                 <button class="rounded-sm border border-slate-300 px-3 py-2 text-xs hover:bg-slate-50" type="submit">保存回复</button>
                             </form>
                         @endif
 
                         @if($thread->canReceiveReplies() && $section->canBePostedBy(auth()->user()))
-                            <form method="post" action="{{ route('forum.comments.store', [$section, $thread]) }}" enctype="multipart/form-data" class="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
+                            <form method="post" action="{{ route('forum.comments.store', [$section, $thread]) }}" enctype="multipart/form-data" class="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
                                 @csrf
                                 <input type="hidden" name="parent_id" value="{{ $comment->id }}">
                                 <input class="rounded-sm border border-slate-300 px-3 py-2 text-xs" name="body" maxlength="6000" placeholder="回复该评论" required>
+                                <x-fa-text-button />
                                 <button class="rounded-sm border border-slate-300 px-3 py-2 text-xs hover:bg-slate-50" type="submit">回复</button>
                             </form>
                         @endif
@@ -201,6 +204,7 @@
             <form method="post" action="{{ route('forum.comments.store', [$section, $thread]) }}" enctype="multipart/form-data" class="space-y-3 border-t border-slate-200 px-4 py-4 text-sm">
                 @csrf
                 <textarea class="min-h-28 w-full rounded-sm border border-slate-300 px-3 py-2" name="body" maxlength="6000" placeholder="写下回复" required></textarea>
+                <x-fa-text-button />
                 <label class="block">
                     <span class="text-xs font-medium text-slate-600">图片/文件附件</span>
                     <input class="mt-1 block w-full rounded-sm border border-slate-300 px-3 py-2 text-xs" type="file" name="attachments[]" multiple>

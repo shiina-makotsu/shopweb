@@ -36,7 +36,7 @@
                         @if($user->avatar_path)
                             <img class="h-full w-full object-cover" src="{{ \Illuminate\Support\Facades\Storage::disk('public_uploads')->url($user->avatar_path) }}" alt="{{ $user->displayName() }}">
                         @else
-                            {{ mb_substr($user->displayName(), 0, 1) }}
+                            <i class="fa-regular fa-circle-user shop-default-avatar-icon" aria-hidden="true"></i>
                         @endif
                     </div>
                     <label class="block">
@@ -903,7 +903,7 @@
                                     @if($threadUser->avatar_path)
                                         <img class="h-full w-full object-cover" src="{{ \Illuminate\Support\Facades\Storage::disk('public_uploads')->url($threadUser->avatar_path) }}" alt="{{ $threadUser->displayName() }}">
                                     @else
-                                        {{ mb_substr($threadUser->displayName(), 0, 1) }}
+                                        <i class="fa-regular fa-circle-user shop-default-avatar-icon" aria-hidden="true"></i>
                                     @endif
                                 </div>
                                 <div class="min-w-0">

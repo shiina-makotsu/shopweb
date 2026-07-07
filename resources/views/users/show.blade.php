@@ -5,7 +5,7 @@
                 @if($profileUser->avatar_path)
                     <img class="h-full w-full object-cover" src="{{ \Illuminate\Support\Facades\Storage::disk('public_uploads')->url($profileUser->avatar_path) }}" alt="{{ $profileUser->displayName() }}">
                 @else
-                    {{ mb_substr($profileUser->displayName(), 0, 1) }}
+                    <i class="fa-regular fa-circle-user shop-default-avatar-icon" aria-hidden="true"></i>
                 @endif
             </div>
             <div class="min-w-0 flex-1">

@@ -18,7 +18,7 @@
                             @if($comment->user->avatar_path)
                                 <img class="h-full w-full object-cover" src="{{ \App\Support\MediaPath::url($comment->user->avatar_path) }}" alt="{{ $comment->user->displayName() }}">
                             @else
-                                {{ mb_substr($comment->user->displayName(), 0, 1) }}
+                                <i class="fa-regular fa-circle-user shop-default-avatar-icon" aria-hidden="true"></i>
                             @endif
                         </a>
                         <div class="min-w-0 flex-1">
@@ -31,13 +31,14 @@
                                     @endif
                                 @endauth
                             </div>
-                            <p class="mt-2 whitespace-pre-line text-slate-700">{{ $comment->body }}</p>
+                            <div class="content-body mt-2 text-slate-700">{{ \App\Support\Markdown::render($comment->body) }}</div>
 
                             @auth
-                                <form method="post" action="{{ $action }}" class="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
+                                <form method="post" action="{{ $action }}" class="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
                                     @csrf
                                     <input type="hidden" name="parent_id" value="{{ $comment->id }}">
                                     <input class="rounded-sm border border-slate-300 px-3 py-2 text-xs" name="body" maxlength="3000" placeholder="回复该评论" required>
+                                    <x-fa-text-button />
                                     <button class="rounded-sm border border-slate-300 px-3 py-2 text-xs hover:bg-slate-50" type="submit">回复</button>
                                 </form>
                             @endauth
@@ -48,7 +49,7 @@
                                         <a class="font-medium text-slate-700 hover:text-blue-800" href="{{ route('users.show', $reply->user) }}">{{ $reply->user->displayName() }}</a>
                                         / {{ $reply->created_at->format('Y-m-d H:i') }}
                                     </p>
-                                    <p class="mt-1 whitespace-pre-line">{{ $reply->body }}</p>
+                                    <div class="content-body mt-1">{{ \App\Support\Markdown::render($reply->body) }}</div>
                                 </div>
                             @endforeach
                         </div>
@@ -63,6 +64,7 @@
             <form method="post" action="{{ $action }}" class="space-y-3 border-t border-slate-200 px-4 py-4 text-sm">
                 @csrf
                 <textarea class="min-h-28 w-full rounded-sm border border-slate-300 px-3 py-2" name="body" maxlength="3000" placeholder="写下评论" required></textarea>
+                <x-fa-text-button />
                 <button class="rounded-sm border border-blue-700 bg-blue-700 px-4 py-2 font-medium text-white hover:bg-blue-800" type="submit">发布评论</button>
             </form>
         @else

@@ -54,6 +54,7 @@
                     <span class="text-xs font-medium text-slate-600">正文</span>
                     <textarea class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-3 leading-6" name="body" maxlength="12000" rows="24" data-thread-body data-auto-grow-textarea data-min-height="544" style="min-height: 34rem; overflow-y: hidden; resize: vertical;" required>{{ old('body', $templateBodies[$selectedTemplate] ?? '') }}</textarea>
                 </label>
+                <x-fa-text-button />
 
                 <label class="block">
                     <span class="text-xs font-medium text-slate-600">图片/视频/文件附件</span>

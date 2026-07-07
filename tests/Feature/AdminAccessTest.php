@@ -135,6 +135,71 @@ it('renders csv import actions for admins', function (): void {
         ->assertSee('创建前台用户');
 });
 
+it('renders compact customer rows with quick detail previews and actions', function (): void {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $customer = User::factory()->create([
+        'role' => 'customer',
+        'name' => 'Quick Preview User',
+        'public_id' => 'quick_preview_user',
+        'email' => 'quick-preview@example.com',
+    ]);
+    User::factory()->create([
+        'role' => 'customer',
+        'referred_by_user_id' => $customer->id,
+    ]);
+
+    $this->actingAs($admin)
+        ->get('/admin/customers')
+        ->assertOk()
+        ->assertSee('data-shopweb-customer-trigger', false)
+        ->assertSee('data-shopweb-customer-template', false)
+        ->assertSee('保存快速详情')
+        ->assertSee('Quick Preview User')
+        ->assertSee('quick_preview_user')
+        ->assertSee('发放优惠码')
+        ->assertSee('编辑');
+});
+
+it('updates customer quick detail fields from the expanded preview', function (): void {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $customer = User::factory()->create([
+        'role' => 'customer',
+        'public_id' => 'quick_update_user',
+        'email' => 'before-quick@example.com',
+        'account_type' => 'regular',
+        'forum_role' => 'member',
+        'has_diagnosis_certificate' => false,
+        'can_view_order_numbers' => false,
+        'can_view_tracking_numbers' => false,
+    ]);
+
+    $this->actingAs($admin)
+        ->post(route('admin.customers.quick-update', $customer), [
+            'email' => 'after-quick@example.com',
+            'birthday' => '2001-02-03',
+            'has_diagnosis_certificate' => '1',
+            'account_type' => 'member',
+            'forum_role' => 'moderator',
+            'forum_posting_banned_at' => '2026-07-07 12:30:00',
+            'forum_posting_ban_reason' => '测试快速封禁',
+            'can_view_order_numbers' => '1',
+            'can_view_tracking_numbers' => '1',
+        ])
+        ->assertRedirect();
+
+    $customer->refresh();
+
+    expect($customer->email)->toBe('after-quick@example.com')
+        ->and($customer->birthday?->format('Y-m-d'))->toBe('2001-02-03')
+        ->and($customer->has_diagnosis_certificate)->toBeTrue()
+        ->and($customer->account_type)->toBe('member')
+        ->and($customer->forum_role)->toBe('moderator')
+        ->and($customer->forum_posting_banned_at?->format('Y-m-d H:i'))->toBe('2026-07-07 12:30')
+        ->and($customer->forum_posting_ban_reason)->toBe('测试快速封禁')
+        ->and($customer->can_view_order_numbers)->toBeTrue()
+        ->and($customer->can_view_tracking_numbers)->toBeTrue();
+});
+
 it('renders catalog reference management pages for admins', function (): void {
     $this->seed();
 
@@ -350,6 +415,8 @@ it('renders direct page cover upload field for admins', function (): void {
         ->assertOk()
         ->assertSee('cover_upload', false)
         ->assertSee('shop-md-tool-preview', false)
+        ->assertSee('shop-md-tool-font-awesome', false)
+        ->assertSee('data-shop-fa-custom', false)
         ->assertSee('renderMarkdownIntoPreview', false)
         ->assertSee('上传新封面图')
         ->assertSee('编辑模式')

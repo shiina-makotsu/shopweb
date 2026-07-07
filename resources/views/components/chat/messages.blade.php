@@ -52,7 +52,6 @@
         }
 
         $avatarUrl = $avatarUser?->getFilamentAvatarUrl();
-        $avatarInitial = Str::upper(Str::substr($senderName, 0, 1));
         $bubbleClass = $isMine
             ? ($dark ? 'border-blue-900 bg-blue-950 text-gray-100' : 'border-blue-200 bg-blue-50 text-slate-900')
             : ($dark ? 'border-gray-700 bg-gray-900 text-gray-100' : 'border-slate-200 bg-white text-slate-900');
@@ -79,7 +78,7 @@
                 @if($avatarUrl)
                     <img class="h-full w-full object-cover" src="{{ $avatarUrl }}" alt="{{ $senderName }}">
                 @else
-                    <span class="flex h-full w-full items-center justify-center">{{ $avatarInitial }}</span>
+                    <span class="flex h-full w-full items-center justify-center"><i class="fa-regular fa-circle-user shop-default-avatar-icon" aria-hidden="true"></i></span>
                 @endif
             </div>
         @endunless

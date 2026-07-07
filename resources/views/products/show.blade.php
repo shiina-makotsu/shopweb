@@ -390,7 +390,7 @@
                                 @if($comment->user->avatar_path)
                                     <img class="h-full w-full object-cover" src="{{ \Illuminate\Support\Facades\Storage::disk('public_uploads')->url($comment->user->avatar_path) }}" alt="{{ $comment->user->displayName() }}">
                                 @else
-                                    {{ mb_substr($comment->user->displayName(), 0, 1) }}
+                                    <i class="fa-regular fa-circle-user shop-default-avatar-icon" aria-hidden="true"></i>
                                 @endif
                             </a>
                             <div class="min-w-0 flex-1">
@@ -404,7 +404,7 @@
                                         @endif
                                     @endauth
                                 </div>
-                                <p class="mt-2 whitespace-pre-line text-slate-700">{{ $comment->body }}</p>
+                                <div class="content-body mt-2 text-slate-700">{{ \App\Support\Markdown::render($comment->body) }}</div>
                                 @if($comment->image_paths)
                                     <div class="mt-3 flex flex-wrap gap-2">
                                         @foreach($comment->image_paths as $path)
@@ -418,15 +418,16 @@
                                             <a class="font-medium text-slate-700 hover:text-blue-800" href="{{ route('users.show', $reply->user) }}">{{ $reply->user->displayName() }}</a>
                                             / {{ $reply->created_at->format('Y-m-d H:i') }}
                                         </p>
-                                        <p class="mt-1 whitespace-pre-line">{{ $reply->body }}</p>
+                                        <div class="content-body mt-1">{{ \App\Support\Markdown::render($reply->body) }}</div>
                                     </div>
                                 @endforeach
                                 @auth
-                                    <form method="post" action="{{ route('product-comments.status.store', $productRoute) }}" class="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
+                                    <form method="post" action="{{ route('product-comments.status.store', $productRoute) }}" class="mt-3 grid gap-2 sm:grid-cols-[1fr_auto_auto]">
                                         @csrf
                                         <input type="hidden" name="parent_id" value="{{ $comment->id }}">
                                         <input type="hidden" name="rating" value="{{ $comment->rating }}">
                                         <input class="rounded-sm border border-slate-300 px-3 py-2 text-xs" name="body" maxlength="2000" placeholder="回复该评论" required>
+                                        <x-fa-text-button />
                                         <button class="rounded-sm border border-slate-300 px-3 py-2 text-xs hover:bg-slate-50" type="submit">回复</button>
                                     </form>
                                 @endauth
@@ -452,6 +453,7 @@
                         <span class="font-medium">评论</span>
                         <textarea class="mt-1 min-h-28 w-full rounded-sm border border-slate-300 px-3 py-2" name="body" maxlength="2000" required>{{ old('body') }}</textarea>
                     </label>
+                    <x-fa-text-button />
                     <label class="block">
                         <span class="font-medium">图片（最多 3 张）</span>
                         <input class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2" type="file" name="images[]" accept="image/*" multiple>

@@ -18,6 +18,7 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
 
 class OrderStatusSettingResource extends Resource
@@ -71,6 +72,13 @@ class OrderStatusSettingResource extends Resource
                     'heroicon-o-truck' => '运输',
                     'heroicon-o-x-circle' => '取消',
                     'heroicon-o-exclamation-circle' => '提醒',
+                    'fa-solid fa-fish-fins' => 'Font Awesome 鱼板/鱼',
+                    'fa-solid fa-truck' => 'Font Awesome 物流',
+                    'fa-solid fa-box-open' => 'Font Awesome 发货',
+                    'fa-solid fa-wallet' => 'Font Awesome 钱包',
+                    'fa-regular fa-clock' => 'Font Awesome 等待',
+                    'fa-regular fa-circle-check' => 'Font Awesome 完成',
+                    'fa-solid fa-triangle-exclamation' => 'Font Awesome 提醒',
                 ]),
             TextInput::make('sort_order')
                 ->label('排序')
@@ -90,7 +98,10 @@ class OrderStatusSettingResource extends Resource
     {
         return $table
             ->columns([
-                IconColumn::make('icon')->label('图标')->icon(fn (?string $state): ?string => $state)->color(fn (OrderStatusSetting $record): string => $record->color),
+                TextColumn::make('icon')
+                    ->label('图标')
+                    ->state(fn (OrderStatusSetting $record): HtmlString => static::iconHtml($record->icon))
+                    ->html(),
                 TextColumn::make('label')->label('名称')->searchable()->sortable()->badge()->color(fn (OrderStatusSetting $record): string => $record->color),
                 TextColumn::make('code')->label('编码')->searchable()->toggleable(),
                 TextColumn::make('sort_order')->label('排序')->sortable(),
@@ -108,5 +119,20 @@ class OrderStatusSettingResource extends Resource
         return [
             'index' => ManageOrderStatusSettings::route('/'),
         ];
+    }
+
+    private static function iconHtml(?string $icon): HtmlString
+    {
+        $icon = trim((string) $icon);
+
+        if ($icon === '') {
+            return new HtmlString('<span style="color:#94a3b8;">-</span>');
+        }
+
+        if (str_contains($icon, 'fa-')) {
+            return new HtmlString('<i class="'.e($icon.' fa-fw').'" aria-hidden="true" style="font-size:18px;"></i>');
+        }
+
+        return new HtmlString('<code>'.e($icon).'</code>');
     }
 }
