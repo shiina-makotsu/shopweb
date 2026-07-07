@@ -202,6 +202,7 @@ class CardPreviewTemplate
                     const styledAttribute = 'data-card-preview-styled-' + key;
                     const visibleAttribute = 'data-card-preview-visible-' + key;
                     const dragState = { card: null };
+                    const scrollState = { active: false, x: 0, y: 0, timer: null };
                     let refreshTimer = null;
 
                     window.shopwebCardPreviewTemplateState ||= {};
@@ -251,6 +252,31 @@ class CardPreviewTemplate
                         }
 
                         return null;
+                    };
+                    const rememberScroll = () => {
+                        scrollState.active = true;
+                        scrollState.x = window.scrollX;
+                        scrollState.y = window.scrollY;
+                        window.clearTimeout(scrollState.timer);
+                        scrollState.timer = window.setTimeout(() => {
+                            scrollState.active = false;
+                        }, 1500);
+                    };
+                    const restoreScroll = () => {
+                        if (! scrollState.active) return;
+
+                        window.requestAnimationFrame(() => {
+                            window.scrollTo(scrollState.x, scrollState.y);
+                            window.requestAnimationFrame(() => window.scrollTo(scrollState.x, scrollState.y));
+                        });
+                    };
+                    const settingsInteractionTarget = (event) => {
+                        const target = event.target instanceof Element ? event.target : event.target?.parentElement;
+
+                        if (! target?.closest?.(settingsSelector)) return null;
+                        if (target.closest('[data-card-preview-card], [data-card-preview-save-order]')) return null;
+
+                        return target;
                     };
                     const fieldByLabel = (item, label) => {
                         const labels = Array.from(item.querySelectorAll('label'));
@@ -431,6 +457,14 @@ class CardPreviewTemplate
                         syncSortInputs(root);
                     });
 
+                    ['click', 'change', 'input'].forEach((eventName) => {
+                        document.addEventListener(eventName, (event) => {
+                            if (settingsInteractionTarget(event)) {
+                                rememberScroll();
+                            }
+                        }, true);
+                    });
+
                     document.addEventListener('click', (event) => {
                         const card = event.target.closest('[data-card-preview-card]');
                         const root = card?.closest(rootSelector);
@@ -490,17 +524,33 @@ class CardPreviewTemplate
                             scheduleRefresh();
                         } else if (touchesSettings) {
                             scheduleRestore();
+                            restoreScroll();
                         }
                     });
 
                     observer.observe(document.body, { childList: true, subtree: true });
                     document.addEventListener('livewire:init', () => scheduleRefresh());
                     document.addEventListener('livewire:navigated', () => scheduleRefresh());
-                    document.addEventListener('livewire:update', () => scheduleRestore());
-                    document.addEventListener('livewire:updated', () => scheduleRestore());
-                    document.addEventListener('livewire:morphed', () => scheduleRestore());
-                    window.Livewire?.hook?.('morph.updated', () => scheduleRestore());
-                    window.Livewire?.hook?.('commit', ({ succeed }) => succeed(() => scheduleRestore()));
+                    document.addEventListener('livewire:update', () => {
+                        scheduleRestore();
+                        restoreScroll();
+                    });
+                    document.addEventListener('livewire:updated', () => {
+                        scheduleRestore();
+                        restoreScroll();
+                    });
+                    document.addEventListener('livewire:morphed', () => {
+                        scheduleRestore();
+                        restoreScroll();
+                    });
+                    window.Livewire?.hook?.('morph.updated', () => {
+                        scheduleRestore();
+                        restoreScroll();
+                    });
+                    window.Livewire?.hook?.('commit', ({ succeed }) => succeed(() => {
+                        scheduleRestore();
+                        restoreScroll();
+                    }));
                 })();
             </script>
         HTML;

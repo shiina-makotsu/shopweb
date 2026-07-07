@@ -652,7 +652,17 @@ it('renders merged admin management tabs for wallet flash sale and comments', fu
         ->toContain('settings.contains(parentItem)')
         ->toContain('touchesSettings')
         ->toContain('scheduleRestore();')
-        ->toContain('}), 20);');
+        ->toContain('}), 20);')
+        ->toContain('rememberScroll')
+        ->toContain('restoreScroll')
+        ->toContain("['click', 'change', 'input']");
+
+    $walletPageSource = file_get_contents(app_path('Filament/Pages/WalletSettingsPage.php'));
+
+    expect($walletPageSource)
+        ->toContain("->partiallyRenderComponentsAfterStateUpdated(['coupon_reward_rules'])")
+        ->toContain('->skipRenderAfterStateUpdated()')
+        ->toContain("->key('coupon_reward_rules')");
 
     $this->actingAs($admin)
         ->get(\App\Filament\Resources\WalletRedeemCodeResource::getUrl('index'))

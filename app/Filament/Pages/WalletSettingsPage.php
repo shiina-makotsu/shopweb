@@ -163,9 +163,12 @@ class WalletSettingsPage extends Page implements HasSchemas
                                         Toggle::make('coupon_reward_enabled')
                                             ->label('启用充值赠券')
                                             ->default(false)
-                                            ->live(),
+                                            ->live()
+                                            ->partiallyRenderComponentsAfterStateUpdated(['coupon_reward_rules'])
+                                            ->skipRenderAfterStateUpdated(),
                                         Repeater::make('coupon_reward_rules')
                                             ->label('赠券规则')
+                                            ->key('coupon_reward_rules')
                                             ->addActionLabel('添加一种赠券')
                                             ->reorderable()
                                             ->defaultItems(0)
