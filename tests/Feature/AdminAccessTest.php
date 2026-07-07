@@ -161,8 +161,6 @@ it('renders compact customer rows with quick detail previews and actions', funct
 });
 
 it('updates customer quick detail fields from the expanded preview', function (): void {
-    $this->withoutMiddleware();
-
     $admin = User::factory()->create(['role' => 'admin']);
     $customer = User::factory()->create([
         'role' => 'customer',
@@ -175,9 +173,12 @@ it('updates customer quick detail fields from the expanded preview', function ()
         'can_view_tracking_numbers' => false,
     ]);
 
+    $csrfToken = 'customer-quick-update-test';
+
     $this->actingAs($admin)
+        ->withSession(['_token' => $csrfToken])
         ->post(route('admin.customers.quick-update', $customer), [
-            '_token' => csrf_token(),
+            '_token' => $csrfToken,
             'email' => 'after-quick@example.com',
             'birthday' => '2001-02-03',
             'has_diagnosis_certificate' => '1',
