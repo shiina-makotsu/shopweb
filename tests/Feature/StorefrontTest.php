@@ -619,16 +619,34 @@ it('issues generated standard coupons after a configured wallet recharge is conf
         'bonus_cents' => 0,
         'is_active' => true,
         'coupon_reward_enabled' => true,
-        'coupon_reward_currency_code' => 'CNY',
-        'coupon_reward_currency_unit' => 'yuan',
-        'coupon_reward_type' => Coupon::TYPE_FIXED,
-        'coupon_reward_value' => 800,
-        'coupon_reward_valid_days' => 30,
-        'coupon_reward_scope' => Coupon::SCOPE_PRODUCT,
-        'coupon_reward_product_ids' => [$product->id],
-        'coupon_reward_minimum_order_cents' => 3000,
-        'coupon_reward_quantity' => 2,
-        'coupon_reward_usage_limit' => 1,
+        'coupon_reward_rules' => [
+            [
+                'name' => 'fixed reward',
+                'currency_code' => 'CNY',
+                'currency_unit' => 'yuan',
+                'type' => Coupon::TYPE_FIXED,
+                'value' => 800,
+                'valid_days' => 30,
+                'scope' => Coupon::SCOPE_PRODUCT,
+                'product_ids' => [$product->id],
+                'minimum_order_cents' => 3000,
+                'quantity' => 2,
+                'usage_limit' => 1,
+            ],
+            [
+                'name' => 'percent reward',
+                'currency_code' => 'CNY',
+                'currency_unit' => 'yuan',
+                'type' => Coupon::TYPE_PERCENT,
+                'value' => 90,
+                'valid_days' => null,
+                'scope' => Coupon::SCOPE_GLOBAL,
+                'product_ids' => [],
+                'minimum_order_cents' => 10000,
+                'quantity' => 1,
+                'usage_limit' => 3,
+            ],
+        ],
     ]);
 
     $this->actingAs($user)
@@ -645,7 +663,7 @@ it('issues generated standard coupons after a configured wallet recharge is conf
     app(OrderService::class)->confirmPayment($order->fresh());
 
     expect($user->fresh()->wallet_balance_cents)->toBe(5000)
-        ->and(UserCoupon::query()->whereBelongsTo($user)->where('source', UserCoupon::SOURCE_WALLET_RECHARGE)->count())->toBe(2)
+        ->and(UserCoupon::query()->whereBelongsTo($user)->where('source', UserCoupon::SOURCE_WALLET_RECHARGE)->count())->toBe(3)
         ->and(WalletTransaction::query()
             ->where('order_id', $order->id)
             ->where('source', WalletTransaction::SOURCE_WALLET_RECHARGE)
@@ -659,12 +677,17 @@ it('issues generated standard coupons after a configured wallet recharge is conf
         ->with('products')
         ->get();
 
-    expect($issuedCoupons)->toHaveCount(2)
-        ->and($issuedCoupons->pluck('code')->unique())->toHaveCount(2);
+    expect($issuedCoupons)->toHaveCount(3)
+        ->and($issuedCoupons->pluck('code')->unique())->toHaveCount(3);
 
-    foreach ($issuedCoupons as $coupon) {
-        expect($coupon->name)->toContain('充值 50 赠券')
-            ->and($coupon->type)->toBe(Coupon::TYPE_FIXED)
+    $fixedCoupons = $issuedCoupons->where('type', Coupon::TYPE_FIXED)->values();
+    $percentCoupon = $issuedCoupons->firstWhere('type', Coupon::TYPE_PERCENT);
+
+    expect($fixedCoupons)->toHaveCount(2)
+        ->and($percentCoupon)->not->toBeNull();
+
+    foreach ($fixedCoupons as $coupon) {
+        expect($coupon->name)->toContain('fixed reward')
             ->and($coupon->value)->toBe(800)
             ->and($coupon->scope)->toBe(Coupon::SCOPE_PRODUCT)
             ->and($coupon->minimum_order_cents)->toBe(3000)
@@ -672,6 +695,13 @@ it('issues generated standard coupons after a configured wallet recharge is conf
             ->and($coupon->ends_at)->not->toBeNull()
             ->and($coupon->products->pluck('id')->all())->toBe([$product->id]);
     }
+
+    expect($percentCoupon->name)->toContain('percent reward')
+        ->and($percentCoupon->value)->toBe(90)
+        ->and($percentCoupon->scope)->toBe(Coupon::SCOPE_GLOBAL)
+        ->and($percentCoupon->minimum_order_cents)->toBe(10000)
+        ->and($percentCoupon->usage_limit)->toBe(3)
+        ->and($percentCoupon->ends_at)->toBeNull();
 });
 
 it('uses wallet balance when completing a flash sale order selection', function (): void {

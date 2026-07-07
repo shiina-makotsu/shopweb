@@ -66,6 +66,7 @@ class WalletSettingsPage extends Page implements HasSchemas
                     'coupon_reward_minimum_order_cents' => $option->coupon_reward_minimum_order_cents,
                     'coupon_reward_quantity' => $option->coupon_reward_quantity,
                     'coupon_reward_usage_limit' => $option->coupon_reward_usage_limit,
+                    'coupon_reward_rules' => $option->couponRewardRules(),
                 ])
                 ->all(),
         ]);
@@ -144,84 +145,100 @@ class WalletSettingsPage extends Page implements HasSchemas
                                             ->label('启用充值赠券')
                                             ->default(false)
                                             ->live(),
-                                        Select::make('coupon_reward_type')
-                                            ->label('赠券类型')
-                                            ->options([
-                                                Coupon::TYPE_FIXED => '固定金额',
-                                                Coupon::TYPE_PERCENT => '折扣百分比',
-                                            ])
-                                            ->default(Coupon::TYPE_FIXED)
-                                            ->live()
-                                            ->visible(fn (Get $get): bool => (bool) $get('coupon_reward_enabled')),
-                                        ...collect(MoneyInput::conversionControls('coupon_reward_value', 'coupon_reward_currency_code', 'coupon_reward_currency_unit', dehydrated: true))
-                                            ->map(fn ($component) => $component->visible(fn (Get $get): bool => (bool) $get('coupon_reward_enabled') && $get('coupon_reward_type') !== Coupon::TYPE_PERCENT))
-                                            ->all(),
-                                        TextInput::make('coupon_reward_value')
-                                            ->label(fn (Get $get): string => $get('coupon_reward_type') === Coupon::TYPE_PERCENT ? '折扣百分比' : '优惠金额')
-                                            ->numeric()
-                                            ->minValue(0)
-                                            ->helperText('固定金额按所选币种单位录入；折扣百分比填写 1-100。')
+                                        Repeater::make('coupon_reward_rules')
+                                            ->label('赠券规则')
+                                            ->addActionLabel('添加一种赠券')
+                                            ->reorderable()
+                                            ->defaultItems(0)
                                             ->visible(fn (Get $get): bool => (bool) $get('coupon_reward_enabled'))
-                                            ->formatStateUsing(function ($state, Get $get): ?string {
-                                                if ($state === null || $state === '') {
-                                                    return null;
-                                                }
+                                            ->schema([
+                                                TextInput::make('name')->label('规则备注')->maxLength(80)->helperText('仅用于后台区分，可不填。'),
+                                                Select::make('type')
+                                                    ->label('赠券类型')
+                                                    ->options([
+                                                        Coupon::TYPE_FIXED => '固定金额',
+                                                        Coupon::TYPE_PERCENT => '折扣百分比',
+                                                    ])
+                                                    ->default(Coupon::TYPE_FIXED)
+                                                    ->live(),
+                                                ...collect(MoneyInput::conversionControls('value', 'currency_code', 'currency_unit', dehydrated: true))
+                                                    ->map(fn ($component) => $component->visible(fn (Get $get): bool => $get('type') !== Coupon::TYPE_PERCENT))
+                                                    ->all(),
+                                                TextInput::make('value')
+                                                    ->label(fn (Get $get): string => $get('type') === Coupon::TYPE_PERCENT ? '折扣百分比' : '优惠金额')
+                                                    ->numeric()
+                                                    ->minValue(0)
+                                                    ->helperText('固定金额按所选币种单位录入；折扣百分比填写 1-100。')
+                                                    ->formatStateUsing(function ($state, Get $get): ?string {
+                                                        if ($state === null || $state === '') {
+                                                            return null;
+                                                        }
 
-                                                return $get('coupon_reward_type') === Coupon::TYPE_PERCENT
-                                                    ? (string) $state
-                                                    : CurrencyUnit::fromSettlementCents($state, CurrencyUnit::baseCurrency(), CurrencyUnit::baseUnit(), 1);
-                                            })
-                                            ->dehydrateStateUsing(function ($state, Get $get): int {
-                                                if ($get('coupon_reward_type') === Coupon::TYPE_PERCENT) {
-                                                    return max(0, min(100, (int) $state));
-                                                }
+                                                        return $get('type') === Coupon::TYPE_PERCENT
+                                                            ? (string) $state
+                                                            : CurrencyUnit::fromSettlementCents($state, CurrencyUnit::baseCurrency(), CurrencyUnit::baseUnit(), 1);
+                                                    })
+                                                    ->dehydrateStateUsing(function ($state, Get $get): int {
+                                                        if ($get('type') === Coupon::TYPE_PERCENT) {
+                                                            return max(0, min(100, (int) $state));
+                                                        }
 
-                                                $currency = CurrencyUnit::normalizeCurrency($get('coupon_reward_currency_code') ?: CurrencyUnit::baseCurrency());
+                                                        $currency = CurrencyUnit::normalizeCurrency($get('currency_code') ?: CurrencyUnit::baseCurrency());
 
-                                                return CurrencyUnit::toSettlementCents(
-                                                    $state,
-                                                    $currency,
-                                                    $get('coupon_reward_currency_unit') ?: CurrencyUnit::defaultUnit($currency),
-                                                    CurrencyUnit::exchangeRateFor($currency),
-                                                );
-                                            }),
-                                        TextInput::make('coupon_reward_valid_days')
-                                            ->label('有效天数')
-                                            ->numeric()
-                                            ->minValue(1)
-                                            ->helperText('不填则永久有效。')
-                                            ->visible(fn (Get $get): bool => (bool) $get('coupon_reward_enabled')),
-                                        Select::make('coupon_reward_scope')
-                                            ->label('适用范围')
-                                            ->options(Coupon::scopeOptions())
-                                            ->default(Coupon::SCOPE_GLOBAL)
-                                            ->live()
-                                            ->visible(fn (Get $get): bool => (bool) $get('coupon_reward_enabled')),
-                                        Select::make('coupon_reward_product_ids')
-                                            ->label('指定商品')
-                                            ->options(fn (): array => Product::query()->orderBy('title')->limit(200)->pluck('title', 'id')->all())
-                                            ->multiple()
-                                            ->searchable()
-                                            ->preload()
-                                            ->visible(fn (Get $get): bool => (bool) $get('coupon_reward_enabled') && $get('coupon_reward_scope') === Coupon::SCOPE_PRODUCT),
-                                        ...collect(MoneyInput::convertedCents(
-                                            TextInput::make('coupon_reward_minimum_order_cents')->label('最低订单金额')->default(0)->minValue(0),
-                                            controlName: 'coupon_reward_minimum_order_cents'
-                                        ))
-                                            ->map(fn ($component) => $component->visible(fn (Get $get): bool => (bool) $get('coupon_reward_enabled')))
-                                            ->all(),
-                                        TextInput::make('coupon_reward_quantity')
-                                            ->label('发放张数')
-                                            ->numeric()
-                                            ->minValue(1)
-                                            ->default(1)
-                                            ->visible(fn (Get $get): bool => (bool) $get('coupon_reward_enabled')),
-                                        TextInput::make('coupon_reward_usage_limit')
-                                            ->label('每张总可用次数')
-                                            ->numeric()
-                                            ->minValue(1)
-                                            ->default(1)
-                                            ->visible(fn (Get $get): bool => (bool) $get('coupon_reward_enabled')),
+                                                        return CurrencyUnit::toSettlementCents(
+                                                            $state,
+                                                            $currency,
+                                                            $get('currency_unit') ?: CurrencyUnit::defaultUnit($currency),
+                                                            CurrencyUnit::exchangeRateFor($currency),
+                                                        );
+                                                    }),
+                                                TextInput::make('valid_days')
+                                                    ->label('有效天数')
+                                                    ->numeric()
+                                                    ->minValue(1)
+                                                    ->helperText('不填则永久有效。'),
+                                                Select::make('scope')
+                                                    ->label('适用范围')
+                                                    ->options(Coupon::scopeOptions())
+                                                    ->default(Coupon::SCOPE_GLOBAL)
+                                                    ->live(),
+                                                Select::make('product_ids')
+                                                    ->label('指定商品')
+                                                    ->options(fn (): array => Product::query()->orderBy('title')->limit(200)->pluck('title', 'id')->all())
+                                                    ->multiple()
+                                                    ->searchable()
+                                                    ->preload()
+                                                    ->visible(fn (Get $get): bool => $get('scope') === Coupon::SCOPE_PRODUCT),
+                                                TextInput::make('minimum_order_cents')
+                                                    ->label('最低订单金额')
+                                                    ->numeric()
+                                                    ->minValue(0)
+                                                    ->default(0)
+                                                    ->helperText('使用本条规则的币种和单位。')
+                                                    ->formatStateUsing(fn ($state): ?string => CurrencyUnit::fromSettlementCents($state, CurrencyUnit::baseCurrency(), CurrencyUnit::baseUnit(), 1))
+                                                    ->dehydrateStateUsing(function ($state, Get $get): int {
+                                                        $currency = CurrencyUnit::normalizeCurrency($get('currency_code') ?: CurrencyUnit::baseCurrency());
+
+                                                        return CurrencyUnit::toSettlementCents(
+                                                            $state,
+                                                            $currency,
+                                                            $get('currency_unit') ?: CurrencyUnit::defaultUnit($currency),
+                                                            CurrencyUnit::exchangeRateFor($currency),
+                                                        );
+                                                    }),
+                                                TextInput::make('quantity')
+                                                    ->label('本规则发放张数')
+                                                    ->numeric()
+                                                    ->minValue(1)
+                                                    ->default(1),
+                                                TextInput::make('usage_limit')
+                                                    ->label('每张总可用次数')
+                                                    ->numeric()
+                                                    ->minValue(1)
+                                                    ->default(1),
+                                            ])
+                                            ->columns(3)
+                                            ->columnSpanFull(),
                                     ])
                                     ->columns(3)
                                     ->columnSpanFull(),
@@ -240,6 +257,8 @@ class WalletSettingsPage extends Page implements HasSchemas
 
         foreach (($state['recharge_options'] ?? []) as $index => $optionData) {
             $id = (int) ($optionData['id'] ?? 0);
+            $couponRewardRules = $this->normalizeCouponRewardRules($optionData['coupon_reward_rules'] ?? []);
+            $firstCouponRewardRule = $couponRewardRules[0] ?? [];
             $payload = [
                 'name' => $optionData['name'] ?? null,
                 'currency_code' => $optionData['currency_code'] ?: CurrencyUnit::baseCurrency(),
@@ -250,16 +269,17 @@ class WalletSettingsPage extends Page implements HasSchemas
                 'is_active' => (bool) ($optionData['is_active'] ?? false),
                 'sort_order' => (int) ($optionData['sort_order'] ?? $index),
                 'coupon_reward_enabled' => (bool) ($optionData['coupon_reward_enabled'] ?? false),
-                'coupon_reward_currency_code' => $optionData['coupon_reward_currency_code'] ?: CurrencyUnit::baseCurrency(),
-                'coupon_reward_currency_unit' => $optionData['coupon_reward_currency_unit'] ?: CurrencyUnit::baseUnit(),
-                'coupon_reward_type' => ($optionData['coupon_reward_type'] ?? Coupon::TYPE_FIXED) === Coupon::TYPE_PERCENT ? Coupon::TYPE_PERCENT : Coupon::TYPE_FIXED,
-                'coupon_reward_value' => max(0, (int) ($optionData['coupon_reward_value'] ?? 0)),
-                'coupon_reward_valid_days' => filled($optionData['coupon_reward_valid_days'] ?? null) ? max(1, (int) $optionData['coupon_reward_valid_days']) : null,
-                'coupon_reward_scope' => ($optionData['coupon_reward_scope'] ?? Coupon::SCOPE_GLOBAL) === Coupon::SCOPE_PRODUCT ? Coupon::SCOPE_PRODUCT : Coupon::SCOPE_GLOBAL,
-                'coupon_reward_product_ids' => array_values(array_filter(array_map('intval', $optionData['coupon_reward_product_ids'] ?? []))),
-                'coupon_reward_minimum_order_cents' => max(0, (int) ($optionData['coupon_reward_minimum_order_cents'] ?? 0)),
-                'coupon_reward_quantity' => max(1, (int) ($optionData['coupon_reward_quantity'] ?? 1)),
-                'coupon_reward_usage_limit' => max(1, (int) ($optionData['coupon_reward_usage_limit'] ?? 1)),
+                'coupon_reward_currency_code' => $firstCouponRewardRule['currency_code'] ?? CurrencyUnit::baseCurrency(),
+                'coupon_reward_currency_unit' => $firstCouponRewardRule['currency_unit'] ?? CurrencyUnit::baseUnit(),
+                'coupon_reward_type' => $firstCouponRewardRule['type'] ?? Coupon::TYPE_FIXED,
+                'coupon_reward_value' => $firstCouponRewardRule['value'] ?? 0,
+                'coupon_reward_valid_days' => $firstCouponRewardRule['valid_days'] ?? null,
+                'coupon_reward_scope' => $firstCouponRewardRule['scope'] ?? Coupon::SCOPE_GLOBAL,
+                'coupon_reward_product_ids' => $firstCouponRewardRule['product_ids'] ?? [],
+                'coupon_reward_minimum_order_cents' => $firstCouponRewardRule['minimum_order_cents'] ?? 0,
+                'coupon_reward_quantity' => $firstCouponRewardRule['quantity'] ?? 1,
+                'coupon_reward_usage_limit' => $firstCouponRewardRule['usage_limit'] ?? 1,
+                'coupon_reward_rules' => $couponRewardRules,
             ];
 
             $option = $id > 0
@@ -283,5 +303,37 @@ class WalletSettingsPage extends Page implements HasSchemas
         $this->mount();
 
         Notification::make()->title('钱包设置已保存')->success()->send();
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $rules
+     * @return array<int, array<string, mixed>>
+     */
+    private function normalizeCouponRewardRules(array $rules): array
+    {
+        return collect($rules)
+            ->map(function (array $rule): array {
+                $type = ($rule['type'] ?? Coupon::TYPE_FIXED) === Coupon::TYPE_PERCENT ? Coupon::TYPE_PERCENT : Coupon::TYPE_FIXED;
+                $scope = ($rule['scope'] ?? Coupon::SCOPE_GLOBAL) === Coupon::SCOPE_PRODUCT ? Coupon::SCOPE_PRODUCT : Coupon::SCOPE_GLOBAL;
+
+                return [
+                    'name' => trim((string) ($rule['name'] ?? '')),
+                    'currency_code' => CurrencyUnit::normalizeCurrency($rule['currency_code'] ?? CurrencyUnit::baseCurrency()),
+                    'currency_unit' => $rule['currency_unit'] ?: CurrencyUnit::defaultUnit($rule['currency_code'] ?? CurrencyUnit::baseCurrency()),
+                    'type' => $type,
+                    'value' => $type === Coupon::TYPE_PERCENT
+                        ? max(0, min(100, (int) ($rule['value'] ?? 0)))
+                        : max(0, (int) ($rule['value'] ?? 0)),
+                    'valid_days' => filled($rule['valid_days'] ?? null) ? max(1, (int) $rule['valid_days']) : null,
+                    'scope' => $scope,
+                    'product_ids' => array_values(array_filter(array_map('intval', $rule['product_ids'] ?? []))),
+                    'minimum_order_cents' => max(0, (int) ($rule['minimum_order_cents'] ?? 0)),
+                    'quantity' => max(1, (int) ($rule['quantity'] ?? 1)),
+                    'usage_limit' => max(1, (int) ($rule['usage_limit'] ?? 1)),
+                ];
+            })
+            ->filter(fn (array $rule): bool => (int) $rule['value'] > 0 && (int) $rule['quantity'] > 0)
+            ->values()
+            ->all();
     }
 }

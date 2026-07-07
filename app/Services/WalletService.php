@@ -242,32 +242,38 @@ class WalletService
             return 0;
         }
 
-        $quantity = max(1, (int) $option->coupon_reward_quantity);
         $issued = 0;
 
-        for ($index = 1; $index <= $quantity; $index++) {
-            $coupon = $this->createRechargeRewardCoupon($option, $order, $index, $quantity);
+        foreach ($option->couponRewardRules() as $ruleIndex => $rule) {
+            $quantity = max(1, (int) $rule['quantity']);
 
-            app(CouponService::class)->issueToUser(
-                $coupon,
-                $order->user,
-                UserCoupon::SOURCE_WALLET_RECHARGE,
-                $actor,
-                null,
-                '钱包充值赠券：'.$order->order_number,
-            );
+            for ($index = 1; $index <= $quantity; $index++) {
+                $coupon = $this->createRechargeRewardCoupon($option, $order, $rule, $ruleIndex + 1, $index, $quantity);
 
-            $issued++;
+                app(CouponService::class)->issueToUser(
+                    $coupon,
+                    $order->user,
+                    UserCoupon::SOURCE_WALLET_RECHARGE,
+                    $actor,
+                    null,
+                    '钱包充值赠券：'.$order->order_number,
+                );
+
+                $issued++;
+            }
         }
 
         return $issued;
     }
 
-    private function createRechargeRewardCoupon(WalletRechargeOption $option, Order $order, int $index, int $quantity): Coupon
+    /**
+     * @param  array<string, mixed>  $rule
+     */
+    private function createRechargeRewardCoupon(WalletRechargeOption $option, Order $order, array $rule, int $ruleNumber, int $index, int $quantity): Coupon
     {
-        $type = $option->coupon_reward_type === Coupon::TYPE_PERCENT ? Coupon::TYPE_PERCENT : Coupon::TYPE_FIXED;
-        $scope = $option->coupon_reward_scope === Coupon::SCOPE_PRODUCT ? Coupon::SCOPE_PRODUCT : Coupon::SCOPE_GLOBAL;
-        $value = max(1, (int) $option->coupon_reward_value);
+        $type = ($rule['type'] ?? Coupon::TYPE_FIXED) === Coupon::TYPE_PERCENT ? Coupon::TYPE_PERCENT : Coupon::TYPE_FIXED;
+        $scope = ($rule['scope'] ?? Coupon::SCOPE_GLOBAL) === Coupon::SCOPE_PRODUCT ? Coupon::SCOPE_PRODUCT : Coupon::SCOPE_GLOBAL;
+        $value = max(1, (int) ($rule['value'] ?? 0));
 
         if ($type === Coupon::TYPE_PERCENT) {
             $value = min(100, $value);
@@ -275,20 +281,20 @@ class WalletService
 
         $coupon = Coupon::query()->create([
             'code' => $this->nextCouponCode(),
-            'name' => $this->rechargeRewardCouponName($option, $order, $index, $quantity),
+            'name' => $this->rechargeRewardCouponName($option, $order, $rule, $ruleNumber, $index, $quantity),
             'type' => $type,
             'value' => $value,
             'scope' => $scope,
-            'minimum_order_cents' => max(0, (int) $option->coupon_reward_minimum_order_cents),
-            'usage_limit' => max(1, (int) ($option->coupon_reward_usage_limit ?: 1)),
+            'minimum_order_cents' => max(0, (int) ($rule['minimum_order_cents'] ?? 0)),
+            'usage_limit' => max(1, (int) ($rule['usage_limit'] ?? 1)),
             'per_user_limit' => 1,
             'starts_at' => now(),
-            'ends_at' => (int) $option->coupon_reward_valid_days > 0 ? now()->addDays((int) $option->coupon_reward_valid_days) : null,
+            'ends_at' => (int) ($rule['valid_days'] ?? 0) > 0 ? now()->addDays((int) $rule['valid_days']) : null,
             'is_active' => true,
         ]);
 
         if ($scope === Coupon::SCOPE_PRODUCT) {
-            $productIds = collect($option->coupon_reward_product_ids ?: [])
+            $productIds = collect($rule['product_ids'] ?? [])
                 ->map(fn ($id): int => (int) $id)
                 ->filter()
                 ->unique()
@@ -302,11 +308,17 @@ class WalletService
         return $coupon;
     }
 
-    private function rechargeRewardCouponName(WalletRechargeOption $option, Order $order, int $index, int $quantity): string
+    /**
+     * @param  array<string, mixed>  $rule
+     */
+    private function rechargeRewardCouponName(WalletRechargeOption $option, Order $order, array $rule, int $ruleNumber, int $index, int $quantity): string
     {
         $suffix = $quantity > 1 ? " {$index}/{$quantity}" : '';
+        $ruleLabel = $ruleNumber > 1 ? " 规则{$ruleNumber}" : '';
+        $name = trim((string) ($rule['name'] ?? ''));
+        $name = $name !== '' ? ' '.$name : '';
 
-        return trim(($option->name ?: $option->displayName()).' 充值赠券'.$suffix.' '.$order->order_number);
+        return trim(($option->name ?: $option->displayName()).' 充值赠券'.$ruleLabel.$name.$suffix.' '.$order->order_number);
     }
 
     public function credit(
