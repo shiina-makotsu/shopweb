@@ -9,9 +9,11 @@ use App\Filament\Resources\WalletRedeemCodeResource;
 use App\Filament\Support\AdminPageTabs;
 use App\Support\AdminAccess;
 use App\Support\CurrencyUnit;
+use App\Support\Money;
 use App\Support\MoneyInput;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Hidden;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -23,6 +25,7 @@ use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Contracts\HasSchemas;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Support\HtmlString;
 
 class WalletSettingsPage extends Page implements HasSchemas
 {
@@ -47,6 +50,8 @@ class WalletSettingsPage extends Page implements HasSchemas
                 ->get()
                 ->map(fn (WalletRechargeOption $option): array => [
                     'id' => $option->id,
+                    '_stored' => true,
+                    '_placeholder' => false,
                     'name' => $option->name,
                     'currency_code' => $option->currency_code,
                     'currency_unit' => $option->currency_unit,
@@ -68,6 +73,7 @@ class WalletSettingsPage extends Page implements HasSchemas
                     'coupon_reward_usage_limit' => $option->coupon_reward_usage_limit,
                     'coupon_reward_rules' => $option->couponRewardRules(),
                 ])
+                ->push(static::emptyRechargeOptionState())
                 ->all(),
         ]);
     }
@@ -105,16 +111,25 @@ class WalletSettingsPage extends Page implements HasSchemas
                     ->schema([
                         Repeater::make('recharge_options')
                             ->label('充值选项')
-                            ->addActionLabel('添加充值选项')
+                            ->addable(false)
+                            ->collapsible()
+                            ->collapsed()
+                            ->itemLabel(fn (array $state): HtmlString => static::rechargeOptionPreviewHtml($state))
                             ->reorderable()
                             ->schema([
                                 Hidden::make('id'),
+                                Hidden::make('_stored')->default(false),
+                                Hidden::make('_placeholder')->default(false),
+                                Placeholder::make('_preview')
+                                    ->label('用户端卡片预览')
+                                    ->content(fn (Get $get): HtmlString => static::rechargeOptionPreviewHtml(static::rechargeOptionStateFromGet($get)))
+                                    ->columnSpanFull(),
                                 TextInput::make('name')->label('名称')->maxLength(255),
                                 ...MoneyInput::conversionControls('amount_cents', 'currency_code', 'currency_unit', dehydrated: true),
                                 TextInput::make('amount_cents')
                                     ->label('充值面额')
                                     ->numeric()
-                                    ->required()
+                                    ->required(fn (Get $get): bool => static::rechargeOptionHasInputFromGet($get))
                                     ->minValue(0.01)
                                     ->formatStateUsing(fn ($state): ?string => CurrencyUnit::fromSettlementCents($state, CurrencyUnit::baseCurrency(), CurrencyUnit::baseUnit(), 1))
                                     ->dehydrateStateUsing(fn ($state, callable $get): int => CurrencyUnit::toSettlementCents(
@@ -260,6 +275,10 @@ class WalletSettingsPage extends Page implements HasSchemas
         $seenIds = [];
 
         foreach (($state['recharge_options'] ?? []) as $index => $optionData) {
+            if (static::isBlankRechargeOptionData($optionData)) {
+                continue;
+            }
+
             $id = (int) ($optionData['id'] ?? 0);
             $couponRewardRules = $this->normalizeCouponRewardRules($optionData['coupon_reward_rules'] ?? []);
             $firstCouponRewardRule = $couponRewardRules[0] ?? [];
@@ -340,5 +359,149 @@ class WalletSettingsPage extends Page implements HasSchemas
             ->filter(fn (array $rule): bool => (int) $rule['value'] > 0 && (int) $rule['quantity'] > 0)
             ->values()
             ->all();
+    }
+
+    private static function emptyRechargeOptionState(): array
+    {
+        return [
+            'id' => null,
+            '_stored' => false,
+            '_placeholder' => true,
+            'name' => null,
+            'currency_code' => CurrencyUnit::baseCurrency(),
+            'currency_unit' => CurrencyUnit::baseUnit(),
+            'amount_cents' => null,
+            'discount_percent' => null,
+            'bonus_cents' => null,
+            'is_active' => true,
+            'sort_order' => null,
+            'coupon_reward_enabled' => false,
+            'coupon_reward_rules' => [],
+        ];
+    }
+
+    private static function rechargeOptionStateFromGet(Get $get): array
+    {
+        return [
+            'id' => $get('id'),
+            '_stored' => $get('_stored'),
+            '_placeholder' => $get('_placeholder'),
+            'name' => $get('name'),
+            'currency_code' => $get('currency_code'),
+            'currency_unit' => $get('currency_unit'),
+            'amount_cents' => $get('amount_cents'),
+            'discount_percent' => $get('discount_percent'),
+            'bonus_cents' => $get('bonus_cents'),
+            'is_active' => $get('is_active'),
+            'coupon_reward_enabled' => $get('coupon_reward_enabled'),
+            'coupon_reward_rules' => $get('coupon_reward_rules') ?: [],
+        ];
+    }
+
+    private static function rechargeOptionHasInputFromGet(Get $get): bool
+    {
+        return ! static::isBlankRechargeOptionData(static::rechargeOptionStateFromGet($get));
+    }
+
+    private static function isBlankRechargeOptionData(array $data): bool
+    {
+        if ((int) ($data['id'] ?? 0) > 0) {
+            return false;
+        }
+
+        return ! filled($data['name'] ?? null)
+            && ! filled($data['amount_cents'] ?? null)
+            && ! filled($data['discount_percent'] ?? null)
+            && (int) ($data['bonus_cents'] ?? 0) <= 0
+            && ! (bool) ($data['coupon_reward_enabled'] ?? false)
+            && ($data['coupon_reward_rules'] ?? []) === [];
+    }
+
+    private static function rechargeOptionPreviewHtml(array $state): HtmlString
+    {
+        $isBlank = static::isBlankRechargeOptionData($state);
+        $amountCents = $isBlank ? 0 : static::previewAmountCents($state);
+        $discount = filled($state['discount_percent'] ?? null)
+            ? max(1, min(100, (int) $state['discount_percent']))
+            : 100;
+        $payableCents = (int) round($amountCents * $discount / 100);
+        $bonusCents = static::previewBonusCents($state);
+        $creditCents = $amountCents + $bonusCents;
+        $configuredTitle = trim((string) ($state['name'] ?? ''));
+        $title = $isBlank
+            ? '新增充值选项'
+            : ($configuredTitle !== '' ? $configuredTitle : Money::format($amountCents).' 充值');
+        $title = e($title);
+        $badge = $isBlank ? '后台占位，不会显示给用户' : ((bool) ($state['is_active'] ?? true) ? '用户端显示' : '已停用');
+        $badgeColor = $isBlank ? '#64748b' : ((bool) ($state['is_active'] ?? true) ? '#047857' : '#b91c1c');
+        $payable = $isBlank ? '待设置' : e(Money::format($payableCents));
+        $credit = $isBlank ? '待设置' : e(Money::format($creditCents));
+        $discountText = $discount < 100 ? '<span>按 '.$discount.'% 付款</span>' : '<span>无折扣</span>';
+        $bonusText = $bonusCents > 0 ? '<span>赠送 '.e(Money::format($bonusCents)).'</span>' : '<span>无赠送余额</span>';
+        $couponText = (bool) ($state['coupon_reward_enabled'] ?? false) ? '<span>含充值赠券</span>' : '<span>无赠券</span>';
+
+        return new HtmlString(<<<HTML
+            <div style="display:grid;gap:8px;border:1px solid #cbd5e1;border-radius:14px;background:linear-gradient(135deg,#f8fbff,#fff1f6);padding:12px 14px;color:#0f172a;box-shadow:0 8px 24px rgba(15,23,42,.08);">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+                    <strong style="font-size:15px;">{$title}</strong>
+                    <span style="border:1px solid currentColor;border-radius:999px;padding:2px 8px;color:{$badgeColor};font-size:12px;">{$badge}</span>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                    <div style="border-radius:10px;background:rgba(255,255,255,.72);padding:8px;">
+                        <div style="color:#64748b;font-size:12px;">用户实付</div>
+                        <div style="font-weight:700;font-size:18px;color:#be123c;">{$payable}</div>
+                    </div>
+                    <div style="border-radius:10px;background:rgba(255,255,255,.72);padding:8px;">
+                        <div style="color:#64748b;font-size:12px;">钱包到账</div>
+                        <div style="font-weight:700;font-size:18px;color:#be123c;">{$credit}</div>
+                    </div>
+                </div>
+                <div style="display:flex;flex-wrap:wrap;gap:6px;color:#475569;font-size:12px;">{$discountText}{$bonusText}{$couponText}</div>
+            </div>
+        HTML);
+    }
+
+    private static function previewAmountCents(array $state): int
+    {
+        $value = $state['amount_cents'] ?? 0;
+
+        if ((bool) ($state['_stored'] ?? false) || (int) ($state['id'] ?? 0) > 0) {
+            return max(0, (int) $value);
+        }
+
+        if (! filled($value)) {
+            return 0;
+        }
+
+        $currency = CurrencyUnit::normalizeCurrency($state['currency_code'] ?? CurrencyUnit::baseCurrency());
+
+        return CurrencyUnit::toSettlementCents(
+            $value,
+            $currency,
+            $state['currency_unit'] ?: CurrencyUnit::defaultUnit($currency),
+            CurrencyUnit::exchangeRateFor($currency),
+        );
+    }
+
+    private static function previewBonusCents(array $state): int
+    {
+        $value = $state['bonus_cents'] ?? 0;
+
+        if ((bool) ($state['_stored'] ?? false) || (int) ($state['id'] ?? 0) > 0) {
+            return max(0, (int) $value);
+        }
+
+        if (! filled($value)) {
+            return 0;
+        }
+
+        $currency = CurrencyUnit::normalizeCurrency($state['currency_code'] ?? CurrencyUnit::baseCurrency());
+
+        return CurrencyUnit::toSettlementCents(
+            $value,
+            $currency,
+            $state['currency_unit'] ?: CurrencyUnit::defaultUnit($currency),
+            CurrencyUnit::exchangeRateFor($currency),
+        );
     }
 }

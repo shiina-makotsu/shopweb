@@ -238,8 +238,10 @@ class OrderResource extends Resource
             $number = $index + 1;
             $name = e($item->product_title);
             $sku = e($item->variant_sku ?: '-');
-            $specsLabel = $item->productVariant?->displayName()
-                ?: ProductVariant::specsLabel(is_array($item->variant_specs) ? $item->variant_specs : []);
+            $specsLabel = $item->product_status === 'wallet_recharge'
+                ? '-'
+                : ($item->productVariant?->displayName()
+                    ?: ProductVariant::specsLabel(is_array($item->variant_specs) ? $item->variant_specs : []));
             $specs = e($specsLabel);
             $productStatus = e(static::productStatusLabel($item->product_status));
             $itemStatus = e($item->status ?: '-');
@@ -297,7 +299,13 @@ class OrderResource extends Resource
         $record->loadMissing('items.productVariant');
 
         return $record->items
-            ->map(fn ($item): string => trim($item->product_title.' / '.($item->productVariant?->displayName() ?: ProductVariant::specsLabel(is_array($item->variant_specs) ? $item->variant_specs : [])).' x'.$item->quantity))
+            ->map(function ($item): string {
+                if ($item->product_status === 'wallet_recharge') {
+                    return trim($item->product_title.' x'.$item->quantity);
+                }
+
+                return trim($item->product_title.' / '.($item->productVariant?->displayName() ?: ProductVariant::specsLabel(is_array($item->variant_specs) ? $item->variant_specs : [])).' x'.$item->quantity);
+            })
             ->filter()
             ->implode('；') ?: '-';
     }
@@ -312,6 +320,7 @@ class OrderResource extends Resource
         $paymentTotal = e(Money::format($record->paymentTotalCents()));
         $walletPayment = e(Money::format($record->walletPaymentCents()));
         $remainingPayment = e(Money::format($record->remainingPaymentCents()));
+        $shippingFee = e(Money::format((int) $record->shipping_fee_cents));
         $carrier = e($record->shippingCarrier?->name ?: '-');
         $trackingNumber = e($record->tracking_number ?: '-');
         $trackingUrl = e($record->tracking_url ?: '-');
@@ -367,6 +376,8 @@ class OrderResource extends Resource
                         <div>{$payment}</div>
                         <strong style="color:#475569;">付款总金额</strong>
                         <div>{$paymentTotal}</div>
+                        <strong style="color:#475569;">邮费</strong>
+                        <div>{$shippingFee}</div>
                         <strong style="color:#475569;">钱包支付</strong>
                         <div>{$walletPayment}</div>
                         <strong style="color:#475569;">待支付</strong>
@@ -470,6 +481,10 @@ class OrderResource extends Resource
 
     private static function productStatusLabel(?string $status): string
     {
+        if ($status === 'wallet_recharge') {
+            return '钱包充值';
+        }
+
         return Product::statusOptions()[$status ?: ''] ?? ($status ?: '-');
     }
 
@@ -490,19 +505,11 @@ class OrderResource extends Resource
                 TextColumn::make('payment_total_cents')
                     ->label('付款总金额')
                     ->state(fn (Order $record): string => Money::format($record->paymentTotalCents())),
-                TextColumn::make('wallet_payment_cents')
-                    ->label('钱包支付')
-                    ->formatStateUsing(fn ($state): string => Money::format((int) $state))
-                    ->sortable()
-                    ->toggleable(),
-                TextColumn::make('total_cents')->label('待支付')->formatStateUsing(fn ($state) => Money::format($state))->sortable(),
-                TextColumn::make('shipping_fee_cents')->label('邮费')->formatStateUsing(fn ($state) => Money::format((int) $state))->sortable()->toggleable(),
                 TextColumn::make('status')
                     ->label('订单状态')
                     ->formatStateUsing(fn (?string $state): string => app(OrderStatusPresenter::class)->label($state))
                     ->color(fn (?string $state): string => app(OrderStatusPresenter::class)->color($state))
                     ->badge(),
-                TextColumn::make('payment_status')->label('付款状态')->badge(),
                 TextColumn::make('user_deleted_at')
                     ->label('用户可见')
                     ->formatStateUsing(fn ($state): string => $state ? '用户已删除' : '用户可见')

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Coupon;
 use App\Models\Order;
+use App\Models\OrderItem;
 use App\Models\User;
 use App\Models\UserCoupon;
 use App\Models\WalletRechargeOption;
@@ -75,24 +76,15 @@ class WalletService
             return $this->createRechargeOptionOrder($user, $matchedOption);
         }
 
-        return Order::query()->create([
-            'user_id' => $user->id,
-            'order_number' => $this->nextOrderNumber(),
-            'status' => Order::STATUS_PENDING_PAYMENT,
-            'payment_status' => Order::PAYMENT_PENDING,
-            'subtotal_cents' => 0,
-            'discount_cents' => 0,
-            'shipping_fee_cents' => 0,
-            'wallet_payment_cents' => 0,
-            'wallet_recharge_cents' => $amountCents,
-            'is_wallet_recharge' => true,
-            'total_cents' => $amountCents,
-            'contact_name' => $user->displayName(),
-            'contact_phone' => (string) ($user->phone ?? $user->public_id ?? $user->id),
-            'contact_email' => $user->email,
-            'requires_shipping' => false,
-            'customer_note' => '钱包充值',
-        ]);
+        return $this->createRechargeOrderSnapshot(
+            $user,
+            null,
+            $this->customRechargeProductTitle($amountCents),
+            $amountCents,
+            $amountCents,
+            0,
+            '钱包充值',
+        );
     }
 
     public function createRechargeOptionOrder(User $user, WalletRechargeOption $option): Order
@@ -101,25 +93,15 @@ class WalletService
             throw ValidationException::withMessages(['wallet_recharge_option_id' => '该充值选项不可用。']);
         }
 
-        return Order::query()->create([
-            'user_id' => $user->id,
-            'order_number' => $this->nextOrderNumber(),
-            'status' => Order::STATUS_PENDING_PAYMENT,
-            'payment_status' => Order::PAYMENT_PENDING,
-            'subtotal_cents' => 0,
-            'discount_cents' => max(0, (int) $option->amount_cents - $option->payableCents()),
-            'shipping_fee_cents' => 0,
-            'wallet_payment_cents' => 0,
-            'wallet_recharge_cents' => $option->creditCents(),
-            'is_wallet_recharge' => true,
-            'wallet_recharge_option_id' => $option->id,
-            'total_cents' => $option->payableCents(),
-            'contact_name' => $user->displayName(),
-            'contact_phone' => (string) ($user->phone ?? $user->public_id ?? $user->id),
-            'contact_email' => $user->email,
-            'requires_shipping' => false,
-            'customer_note' => '钱包充值选项：'.$option->displayName(),
-        ]);
+        return $this->createRechargeOrderSnapshot(
+            $user,
+            $option,
+            $option->displayName(),
+            $option->payableCents(),
+            $option->creditCents(),
+            max(0, (int) $option->amount_cents - $option->payableCents()),
+            '钱包充值选项：'.$option->displayName(),
+        );
     }
 
     public function applyAvailableBalanceToOrder(User $user, Order $order, int $payableCents, ?User $actor = null): ?WalletTransaction
@@ -391,6 +373,57 @@ class WalletService
                 'note' => $note,
             ]);
         });
+    }
+
+    private function createRechargeOrderSnapshot(
+        User $user,
+        ?WalletRechargeOption $option,
+        string $productTitle,
+        int $payableCents,
+        int $creditCents,
+        int $discountCents,
+        string $customerNote,
+    ): Order {
+        return DB::transaction(function () use ($user, $option, $productTitle, $payableCents, $creditCents, $discountCents, $customerNote): Order {
+            $order = Order::query()->create([
+                'user_id' => $user->id,
+                'order_number' => $this->nextOrderNumber(),
+                'status' => Order::STATUS_PENDING_PAYMENT,
+                'payment_status' => Order::PAYMENT_PENDING,
+                'subtotal_cents' => $payableCents,
+                'discount_cents' => $discountCents,
+                'shipping_fee_cents' => 0,
+                'wallet_payment_cents' => 0,
+                'wallet_recharge_cents' => $creditCents,
+                'is_wallet_recharge' => true,
+                'wallet_recharge_option_id' => $option?->id,
+                'total_cents' => $payableCents,
+                'contact_name' => $user->displayName(),
+                'contact_phone' => (string) ($user->phone ?? $user->public_id ?? $user->id),
+                'contact_email' => $user->email,
+                'requires_shipping' => false,
+                'customer_note' => $customerNote,
+            ]);
+
+            OrderItem::query()->create([
+                'order_id' => $order->id,
+                'product_title' => $productTitle,
+                'product_status' => 'wallet_recharge',
+                'variant_sku' => $option ? 'WALLET-RECHARGE-'.$option->id : 'WALLET-RECHARGE-CUSTOM',
+                'variant_specs' => [],
+                'unit_price_cents' => $payableCents,
+                'quantity' => 1,
+                'line_total_cents' => $payableCents,
+                'discount_cents' => $discountCents,
+            ]);
+
+            return $order;
+        });
+    }
+
+    private function customRechargeProductTitle(int $amountCents): string
+    {
+        return '钱包充值'.rtrim(rtrim(number_format($amountCents / 100, 2, '.', ''), '0'), '.').'元';
     }
 
     private function nextOrderNumber(): string

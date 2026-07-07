@@ -602,7 +602,8 @@ it('creates wallet recharge orders from configured recharge options', function (
 
     expect($order->total_cents)->toBe(900)
         ->and($order->wallet_recharge_cents)->toBe(1200)
-        ->and($order->discount_cents)->toBe(100);
+        ->and($order->discount_cents)->toBe(100)
+        ->and($order->items()->first()?->product_title)->toBe($option->displayName());
 });
 
 it('issues generated standard coupons after a configured wallet recharge is confirmed once', function (): void {
@@ -741,7 +742,8 @@ it('matches custom wallet recharge amounts to configured payable option rewards'
 
     expect($order->wallet_recharge_option_id)->toBe($option->id)
         ->and($order->total_cents)->toBe(8000)
-        ->and($order->wallet_recharge_cents)->toBe(11500);
+        ->and($order->wallet_recharge_cents)->toBe(11500)
+        ->and($order->items()->first()?->product_title)->toBe($option->displayName());
 
     app(OrderService::class)->confirmPayment($order);
 
@@ -755,6 +757,33 @@ it('matches custom wallet recharge amounts to configured payable option rewards'
     expect($user->fresh()->wallet_balance_cents)->toBe(11500)
         ->and($coupon->value)->toBe(500)
         ->and($coupon->is_stackable)->toBeFalse();
+});
+
+it('uses custom wallet recharge amount as order item title when no option matches', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+
+    WalletRechargeOption::query()->create([
+        'name' => '充值 50 档',
+        'currency_code' => 'CNY',
+        'currency_unit' => 'yuan',
+        'amount_cents' => 5000,
+        'discount_percent' => 100,
+        'bonus_cents' => 0,
+        'is_active' => true,
+    ]);
+
+    $this->actingAs($user)
+        ->post(route('user.wallet.recharge'), [
+            'wallet_recharge_amount' => '66.60',
+        ])
+        ->assertRedirect();
+
+    $order = Order::query()->whereBelongsTo($user)->latest('id')->firstOrFail();
+
+    expect($order->wallet_recharge_option_id)->toBeNull()
+        ->and($order->total_cents)->toBe(6660)
+        ->and($order->wallet_recharge_cents)->toBe(6660)
+        ->and($order->items()->first()?->product_title)->toBe('钱包充值66.6元');
 });
 
 it('uses wallet balance when completing a flash sale order selection', function (): void {

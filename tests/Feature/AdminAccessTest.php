@@ -9,6 +9,7 @@ use App\Models\OrderStatusSetting;
 use App\Models\Page;
 use App\Models\Product;
 use App\Models\SiteSetting;
+use App\Models\WalletRechargeOption;
 use Livewire\Livewire;
 
 it('prevents customers from accessing the admin panel', function (): void {
@@ -61,7 +62,6 @@ it('renders admin sidebar navigation for admins', function (): void {
     $this->seed();
 
     $admin = User::factory()->create(['role' => 'admin']);
-
     $this->actingAs($admin)
         ->get('/admin')
         ->assertOk()
@@ -547,14 +547,41 @@ it('shows wallet payment breakdown on the admin order form', function (): void {
         ->assertSee('¥70.00');
 });
 
+it('keeps payment breakdown details out of the admin order table columns', function (): void {
+    $source = file_get_contents(app_path('Filament/Resources/OrderResource.php'));
+
+    expect($source)
+        ->toContain("TextColumn::make('payment_total_cents')")
+        ->not->toContain("TextColumn::make('wallet_payment_cents')")
+        ->not->toContain("TextColumn::make('total_cents')->label")
+        ->not->toContain("TextColumn::make('shipping_fee_cents')")
+        ->not->toContain("TextColumn::make('payment_status')->label");
+});
+
 it('renders merged admin management tabs for wallet flash sale and comments', function (): void {
     $admin = User::factory()->create(['role' => 'admin']);
+    WalletRechargeOption::query()->create([
+        'name' => '后台预览充值卡',
+        'currency_code' => 'CNY',
+        'currency_unit' => 'yuan',
+        'amount_cents' => 10000,
+        'discount_percent' => 90,
+        'bonus_cents' => 1000,
+        'is_active' => true,
+    ]);
 
     $this->actingAs($admin)
         ->get(\App\Filament\Pages\WalletSettingsPage::getUrl())
         ->assertOk()
         ->assertSee('钱包设置')
         ->assertSee('兑换码管理');
+
+    $this->actingAs($admin)
+        ->get(\App\Filament\Pages\WalletSettingsPage::getUrl())
+        ->assertOk()
+        ->assertSee('用户端卡片预览')
+        ->assertSee('后台预览充值卡')
+        ->assertSee('新增充值选项');
 
     $this->actingAs($admin)
         ->get(\App\Filament\Resources\WalletRedeemCodeResource::getUrl('index'))
