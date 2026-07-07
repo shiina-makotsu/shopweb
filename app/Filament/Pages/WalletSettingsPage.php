@@ -109,21 +109,21 @@ class WalletSettingsPage extends Page implements HasSchemas
                 Section::make('充值选项')
                     ->description('在这里维护用户前台钱包页显示的充值档位；每个档位可设置折扣付款或赠送到账余额。')
                     ->schema([
+                        Placeholder::make('_recharge_page_preview')
+                            ->label('用户端充值页面整体预览')
+                            ->content(fn (Get $get): HtmlString => static::rechargeOptionsPagePreviewHtml($get('recharge_options') ?: []))
+                            ->columnSpanFull(),
                         Repeater::make('recharge_options')
                             ->label('充值选项')
                             ->addable(false)
                             ->collapsible()
                             ->collapsed()
-                            ->itemLabel(fn (array $state): HtmlString => static::rechargeOptionPreviewHtml($state))
+                            ->itemLabel(fn (array $state): string => static::rechargeOptionSettingLabel($state))
                             ->reorderable()
                             ->schema([
                                 Hidden::make('id'),
                                 Hidden::make('_stored')->default(false),
                                 Hidden::make('_placeholder')->default(false),
-                                Placeholder::make('_preview')
-                                    ->label('用户端卡片预览')
-                                    ->content(fn (Get $get): HtmlString => static::rechargeOptionPreviewHtml(static::rechargeOptionStateFromGet($get)))
-                                    ->columnSpanFull(),
                                 TextInput::make('name')->label('名称')->maxLength(255),
                                 ...MoneyInput::conversionControls('amount_cents', 'currency_code', 'currency_unit', dehydrated: true),
                                 TextInput::make('amount_cents')
@@ -403,6 +403,15 @@ class WalletSettingsPage extends Page implements HasSchemas
         return ! static::isBlankRechargeOptionData(static::rechargeOptionStateFromGet($get));
     }
 
+    private static function rechargeOptionSettingLabel(array $state): string
+    {
+        if (static::isBlankRechargeOptionData($state)) {
+            return '新增充值选项（后台占位）';
+        }
+
+        return trim((string) ($state['name'] ?? '')) ?: '充值选项设置';
+    }
+
     private static function isBlankRechargeOptionData(array $data): bool
     {
         if ((int) ($data['id'] ?? 0) > 0) {
@@ -417,7 +426,32 @@ class WalletSettingsPage extends Page implements HasSchemas
             && ($data['coupon_reward_rules'] ?? []) === [];
     }
 
-    private static function rechargeOptionPreviewHtml(array $state): HtmlString
+    private static function rechargeOptionsPagePreviewHtml(array $options): HtmlString
+    {
+        $cards = collect($options)
+            ->map(fn (array $state): string => static::rechargeOptionPreviewCardHtml($state))
+            ->filter()
+            ->implode('');
+
+        if ($cards === '') {
+            $cards = static::rechargeOptionPreviewCardHtml(static::emptyRechargeOptionState());
+        }
+
+        return new HtmlString(<<<HTML
+            <div style="border:1px solid #cbd5e1;border-radius:18px;background:#fff;padding:16px;box-shadow:0 10px 34px rgba(15,23,42,.08);">
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px;">
+                    <div>
+                        <strong style="display:block;color:#0f172a;font-size:16px;">充值钱包</strong>
+                        <span style="color:#64748b;font-size:12px;">这里预览用户端充值选项容器；后台占位卡不会显示给用户。</span>
+                    </div>
+                    <span style="border-radius:999px;background:#eff8ff;color:#0369a1;padding:3px 9px;font-size:12px;">用户端页面预览</span>
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;">{$cards}</div>
+            </div>
+        HTML);
+    }
+
+    private static function rechargeOptionPreviewCardHtml(array $state): string
     {
         $isBlank = static::isBlankRechargeOptionData($state);
         $amountCents = $isBlank ? 0 : static::previewAmountCents($state);
@@ -440,7 +474,7 @@ class WalletSettingsPage extends Page implements HasSchemas
         $bonusText = $bonusCents > 0 ? '<span>赠送 '.e(Money::format($bonusCents)).'</span>' : '<span>无赠送余额</span>';
         $couponText = (bool) ($state['coupon_reward_enabled'] ?? false) ? '<span>含充值赠券</span>' : '<span>无赠券</span>';
 
-        return new HtmlString(<<<HTML
+        return <<<HTML
             <div style="display:grid;gap:8px;border:1px solid #cbd5e1;border-radius:14px;background:linear-gradient(135deg,#f8fbff,#fff1f6);padding:12px 14px;color:#0f172a;box-shadow:0 8px 24px rgba(15,23,42,.08);">
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
                     <strong style="font-size:15px;">{$title}</strong>
@@ -458,7 +492,7 @@ class WalletSettingsPage extends Page implements HasSchemas
                 </div>
                 <div style="display:flex;flex-wrap:wrap;gap:6px;color:#475569;font-size:12px;">{$discountText}{$bonusText}{$couponText}</div>
             </div>
-        HTML);
+        HTML;
     }
 
     private static function previewAmountCents(array $state): int

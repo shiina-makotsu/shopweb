@@ -579,7 +579,8 @@ it('renders merged admin management tabs for wallet flash sale and comments', fu
     $this->actingAs($admin)
         ->get(\App\Filament\Pages\WalletSettingsPage::getUrl())
         ->assertOk()
-        ->assertSee('用户端卡片预览')
+        ->assertSee('用户端充值页面整体预览')
+        ->assertSee('充值钱包')
         ->assertSee('后台预览充值卡')
         ->assertSee('新增充值选项');
 
