@@ -175,6 +175,7 @@ it('updates customer quick detail fields from the expanded preview', function ()
 
     $this->actingAs($admin)
         ->post(route('admin.customers.quick-update', $customer), [
+            '_token' => csrf_token(),
             'email' => 'after-quick@example.com',
             'birthday' => '2001-02-03',
             'has_diagnosis_certificate' => '1',
@@ -415,7 +416,8 @@ it('renders direct page cover upload field for admins', function (): void {
         ->assertOk()
         ->assertSee('cover_upload', false)
         ->assertSee('shop-md-tool-preview', false)
-        ->assertSee('shop-md-tool-font-awesome', false)
+        ->assertSee('fontAwesomeIconOptions', false)
+        ->assertSee('font-awesome', false)
         ->assertSee('data-shop-fa-custom', false)
         ->assertSee('renderMarkdownIntoPreview', false)
         ->assertSee('上传新封面图')
