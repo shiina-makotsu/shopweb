@@ -66,6 +66,9 @@ it('renders admin sidebar navigation for admins', function (): void {
         ->get('/admin')
         ->assertOk()
         ->assertSee('shopweb:admin-sidebar-reset-version', false)
+        ->assertSee('shopweb:admin-prefetch:', false)
+        ->assertSee('X-ShopWeb-Purpose', false)
+        ->assertSee('requestIdleCallback', false)
         ->assertSee('shop-sidebar-collapsed-group-trigger', false)
         ->assertDontSee('shop-sidebar-collapsed-inline-items', false)
         ->assertDontSee('shop-sidebar-collapsed-inline-item', false)
@@ -248,6 +251,31 @@ it('renders store information, cache management, and order status settings for a
 
     expect(OrderStatusSetting::query()->count())->toBeGreaterThanOrEqual(4)
         ->and(SiteSetting::query()->first()->store_currency)->toBe('CNY');
+});
+
+it('renders payment settings with storefront payment preview', function (): void {
+    $admin = User::factory()->create(['role' => 'admin']);
+
+    SiteSetting::query()->firstOrCreate([], [
+        'site_name' => 'ShopWeb',
+    ])->forceFill([
+        'payment_qr_path' => 'payments/main.png',
+        'payment_account_name' => 'ShopWeb Pay',
+        'payment_gateway_config' => ['paypal_email' => 'pay@example.com'],
+        'payment_fallback_config' => [
+            'password_red_packet_enabled' => true,
+            'password_red_packet_note' => '口令红包备用说明',
+        ],
+    ])->save();
+
+    $this->actingAs($admin)
+        ->get('/admin/payment-settings')
+        ->assertOk()
+        ->assertSee('付款页面预览')
+        ->assertSee('示例订单 SW2026070712340001')
+        ->assertSee('付款凭证上传入口')
+        ->assertSee('ShopWeb Pay')
+        ->assertSee('pay@example.com');
 });
 
 it('renders support ai connection fields for admins', function (): void {

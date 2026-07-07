@@ -693,6 +693,7 @@
                                         </div>
                                         <p class="mt-1 text-slate-600">代码：<code class="rounded-sm bg-slate-100 px-1.5 py-0.5">{{ $coupon->code }}</code></p>
                                         <p class="mt-1 text-slate-600">范围：{{ $coupon->scopeLabel() }}</p>
+                                        <p class="mt-1 text-slate-600">叠加：{{ $coupon->is_stackable ? '可叠加使用' : '不可叠加使用' }}</p>
                                         <p class="mt-1 text-slate-600">
                                             时间：
                                             {{ $coupon->starts_at?->format('Y-m-d H:i') ?? '不限开始' }}

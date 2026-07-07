@@ -120,6 +120,10 @@ class CouponResource extends Resource
                 label: '最低订单金额'
             ),
             TextInput::make('usage_limit')->label('总次数')->numeric(),
+            Toggle::make('is_stackable')
+                ->label('允许同单叠加使用')
+                ->helperText('关闭后，该优惠码不能和其它优惠码在同一笔订单中同时使用。')
+                ->default(true),
             DateTimePicker::make('starts_at')->label('开始时间'),
             DateTimePicker::make('ends_at')->label('结束时间'),
             Toggle::make('is_active')->label('启用')->default(true),

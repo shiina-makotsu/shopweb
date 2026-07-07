@@ -158,6 +158,10 @@ class CouponService
             $usedUserCouponIds[] = $selectedId;
         }
 
+        if (count($resolved) > 1 && collect($resolved)->contains(fn (array $item): bool => ! (bool) $item['coupon']->is_stackable)) {
+            throw ValidationException::withMessages(['coupon_items' => '所选优惠码不允许在同一笔订单中叠加使用。']);
+        }
+
         return $resolved;
     }
 

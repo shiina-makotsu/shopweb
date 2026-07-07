@@ -236,6 +236,10 @@ class WalletSettingsPage extends Page implements HasSchemas
                                                     ->numeric()
                                                     ->minValue(1)
                                                     ->default(1),
+                                                Toggle::make('is_stackable')
+                                                    ->label('允许本规则赠券同单叠加')
+                                                    ->helperText('默认关闭；关闭后，本规则发放的优惠券不能和其它优惠券在同一笔订单中同时使用。')
+                                                    ->default(false),
                                             ])
                                             ->columns(3)
                                             ->columnSpanFull(),
@@ -330,6 +334,7 @@ class WalletSettingsPage extends Page implements HasSchemas
                     'minimum_order_cents' => max(0, (int) ($rule['minimum_order_cents'] ?? 0)),
                     'quantity' => max(1, (int) ($rule['quantity'] ?? 1)),
                     'usage_limit' => max(1, (int) ($rule['usage_limit'] ?? 1)),
+                    'is_stackable' => (bool) ($rule['is_stackable'] ?? false),
                 ];
             })
             ->filter(fn (array $rule): bool => (int) $rule['value'] > 0 && (int) $rule['quantity'] > 0)

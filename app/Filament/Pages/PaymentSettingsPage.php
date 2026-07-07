@@ -14,9 +14,11 @@ use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\View;
 use Filament\Schemas\Contracts\HasSchemas;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Support\Facades\Storage;
 
 class PaymentSettingsPage extends Page implements HasSchemas
 {
@@ -136,6 +138,15 @@ class PaymentSettingsPage extends Page implements HasSchemas
                             ->helperText('后台确认充值订单收款后，用户打开该充值订单时会看到这段提示。')
                             ->columnSpanFull(),
                     ])->columnSpanFull(),
+                Section::make('付款页面预览')
+                    ->description('根据当前付款设置生成轻量预览，用于检查用户付款页的二维码、PayPal、口令红包和凭证上传入口位置。')
+                    ->schema([
+                        View::make('filament.pages.payment-settings-preview')
+                            ->viewData(fn (): array => [
+                                'preview' => $this->paymentPreviewData(),
+                            ]),
+                    ])
+                    ->columnSpanFull(),
             ]);
     }
 
@@ -195,6 +206,45 @@ class PaymentSettingsPage extends Page implements HasSchemas
             ->get()
             ->mapWithKeys(fn (MediaAsset $asset): array => [$asset->path => $asset->name ?: basename($asset->path)])
             ->all();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function paymentPreviewData(): array
+    {
+        $state = $this->data;
+        $fallback = is_array($state['payment_fallback_config'] ?? null) ? $state['payment_fallback_config'] : [];
+        $gateway = is_array($state['payment_gateway_config'] ?? null) ? $state['payment_gateway_config'] : [];
+        $paypalEmail = trim((string) ($gateway['paypal_email'] ?? ''));
+
+        return [
+            'payment_qr_url' => $this->previewAssetUrl($state['payment_qr_path'] ?? null),
+            'fallback_qr_url' => $this->previewAssetUrl($fallback['fallback_qr_path'] ?? null),
+            'friend_qr_url' => $this->previewAssetUrl($fallback['friend_qr_path'] ?? null),
+            'account_name' => trim((string) ($state['payment_account_name'] ?? '')),
+            'account_note' => trim((string) ($state['payment_account_note'] ?? '')),
+            'instructions' => trim((string) ($state['payment_instructions'] ?? '')),
+            'paypal_email' => filter_var($paypalEmail, FILTER_VALIDATE_EMAIL) ? $paypalEmail : '',
+            'red_packet_enabled' => (bool) ($fallback['password_red_packet_enabled'] ?? false),
+            'red_packet_note' => trim((string) ($fallback['password_red_packet_note'] ?? '')),
+            'support_enabled' => (bool) ($fallback['support_enabled'] ?? true),
+        ];
+    }
+
+    private function previewAssetUrl(mixed $path): ?string
+    {
+        $path = trim((string) $path);
+
+        if ($path === '') {
+            return null;
+        }
+
+        if (MediaAsset::isExternalUrl($path)) {
+            return $path;
+        }
+
+        return Storage::disk('public_uploads')->url($path);
     }
 
     private function settings(): SiteSetting

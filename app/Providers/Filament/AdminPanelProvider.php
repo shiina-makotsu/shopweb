@@ -240,6 +240,165 @@ class AdminPanelProvider extends PanelProvider
                             document.addEventListener('livewire:update', syncNavigationGroupBadges);
                             document.addEventListener('livewire:update', syncAdminMenuOrder);
 
+                            const adminPrefetchConfig = {
+                                maxPerPage: 60,
+                                cooldownMs: 10 * 60 * 1000,
+                                initialDelayMs: 900,
+                                betweenMs: 450,
+                                timeoutMs: 9000,
+                            };
+                            const adminPrefetchRuntime = {
+                                started: false,
+                                queue: [],
+                                active: false,
+                                timer: null,
+                            };
+                            const adminPrefetchKey = (url) => `shopweb:admin-prefetch:${normalizeUrl(url)}`;
+                            const canAdminPrefetch = () => {
+                                if (! window.fetch || ! window.AbortController) {
+                                    return false;
+                                }
+
+                                if (navigator.connection?.saveData) {
+                                    return false;
+                                }
+
+                                return document.visibilityState === 'visible';
+                            };
+                            const rememberAdminPrefetch = (url) => {
+                                try {
+                                    sessionStorage.setItem(adminPrefetchKey(url), String(Date.now()));
+                                } catch (error) {
+                                    // Browsers may block storage in hardened contexts; prefetch can continue without it.
+                                }
+                            };
+                            const wasAdminPrefetchedRecently = (url) => {
+                                try {
+                                    const value = Number(sessionStorage.getItem(adminPrefetchKey(url)) || 0);
+
+                                    return value > 0 && Date.now() - value < adminPrefetchConfig.cooldownMs;
+                                } catch (error) {
+                                    return false;
+                                }
+                            };
+                            const adminPrefetchUrls = () => {
+                                const currentPath = normalizeUrl(window.location.href);
+                                const configUrls = (adminMenuConfig.items || []).map((item) => item.url).filter(Boolean);
+                                const sidebarUrls = Array.from(document.querySelectorAll('.fi-sidebar a[href]')).map((link) => link.href);
+
+                                return [...new Set([...sidebarUrls, ...configUrls])]
+                                    .map((url) => {
+                                        try {
+                                            return new URL(url, window.location.origin);
+                                        } catch (error) {
+                                            return null;
+                                        }
+                                    })
+                                    .filter((url) => url && url.origin === window.location.origin)
+                                    .filter((url) => url.pathname.startsWith('/admin'))
+                                    .filter((url) => ! url.pathname.includes('/logout'))
+                                    .filter((url) => normalizeUrl(url.href) !== currentPath)
+                                    .map((url) => url.href);
+                            };
+                            const runAdminPrefetchQueue = () => {
+                                if (adminPrefetchRuntime.active || ! adminPrefetchRuntime.queue.length || ! canAdminPrefetch()) {
+                                    return;
+                                }
+
+                                const url = adminPrefetchRuntime.queue.shift();
+
+                                if (! url || wasAdminPrefetchedRecently(url)) {
+                                    runAdminPrefetchQueue();
+
+                                    return;
+                                }
+
+                                adminPrefetchRuntime.active = true;
+                                rememberAdminPrefetch(url);
+
+                                const controller = new AbortController();
+                                const timeout = window.setTimeout(() => controller.abort(), adminPrefetchConfig.timeoutMs);
+
+                                fetch(url, {
+                                    method: 'GET',
+                                    credentials: 'same-origin',
+                                    cache: 'force-cache',
+                                    priority: 'low',
+                                    signal: controller.signal,
+                                    headers: {
+                                        Accept: 'text/html,application/xhtml+xml',
+                                        'X-ShopWeb-Purpose': 'admin-prefetch',
+                                    },
+                                }).catch(() => {
+                                    // Prefetch is opportunistic and must never affect interactive admin work.
+                                }).finally(() => {
+                                    window.clearTimeout(timeout);
+                                    adminPrefetchRuntime.active = false;
+                                    adminPrefetchRuntime.timer = window.setTimeout(runAdminPrefetchQueue, adminPrefetchConfig.betweenMs);
+                                });
+                            };
+                            const enqueueAdminPrefetch = (urls, immediate = false) => {
+                                if (! canAdminPrefetch()) {
+                                    return;
+                                }
+
+                                const normalized = Array.isArray(urls) ? urls : [urls];
+                                const existing = new Set(adminPrefetchRuntime.queue);
+                                normalized.forEach((url) => {
+                                    if (! url || existing.has(url) || wasAdminPrefetchedRecently(url)) {
+                                        return;
+                                    }
+
+                                    adminPrefetchRuntime.queue.push(url);
+                                    existing.add(url);
+                                });
+
+                                if (immediate) {
+                                    runAdminPrefetchQueue();
+                                }
+                            };
+                            const scheduleAdminPrefetch = () => {
+                                if (adminPrefetchRuntime.started || ! canAdminPrefetch()) {
+                                    return;
+                                }
+
+                                adminPrefetchRuntime.started = true;
+                                const start = () => {
+                                    enqueueAdminPrefetch(adminPrefetchUrls().slice(0, adminPrefetchConfig.maxPerPage), true);
+                                };
+
+                                if ('requestIdleCallback' in window) {
+                                    window.requestIdleCallback(start, { timeout: 3500 });
+                                } else {
+                                    window.setTimeout(start, adminPrefetchConfig.initialDelayMs);
+                                }
+                            };
+                            const bindAdminPrefetchHints = () => {
+                                document.querySelectorAll('.fi-sidebar a[href]').forEach((link) => {
+                                    if (link.dataset.shopwebPrefetchBound === 'true') {
+                                        return;
+                                    }
+
+                                    link.dataset.shopwebPrefetchBound = 'true';
+                                    const prefetch = () => enqueueAdminPrefetch(link.href, true);
+                                    link.addEventListener('pointerenter', prefetch, { passive: true });
+                                    link.addEventListener('touchstart', prefetch, { passive: true });
+                                    link.addEventListener('focus', prefetch, { passive: true });
+                                });
+                            };
+
+                            document.addEventListener('DOMContentLoaded', () => {
+                                bindAdminPrefetchHints();
+                                window.setTimeout(scheduleAdminPrefetch, adminPrefetchConfig.initialDelayMs);
+                            });
+                            document.addEventListener('livewire:navigated', () => {
+                                adminPrefetchRuntime.started = false;
+                                adminPrefetchRuntime.queue = [];
+                                bindAdminPrefetchHints();
+                                window.setTimeout(scheduleAdminPrefetch, adminPrefetchConfig.initialDelayMs);
+                            });
+                            document.addEventListener('livewire:update', bindAdminPrefetchHints);
+
                             try {
                                 if (window.innerWidth >= 1024 && localStorage.getItem(resetKey) !== resetVersion) {
                                     localStorage.setItem('isOpen', JSON.stringify(true));

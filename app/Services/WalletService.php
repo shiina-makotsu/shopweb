@@ -69,6 +69,12 @@ class WalletService
             throw ValidationException::withMessages(['wallet_recharge_amount' => '钱包充值金额必须大于 0。']);
         }
 
+        $matchedOption = $this->matchingRechargeOptionForPayableAmount($amountCents);
+
+        if ($matchedOption) {
+            return $this->createRechargeOptionOrder($user, $matchedOption);
+        }
+
         return Order::query()->create([
             'user_id' => $user->id,
             'order_number' => $this->nextOrderNumber(),
@@ -288,6 +294,7 @@ class WalletService
             'minimum_order_cents' => max(0, (int) ($rule['minimum_order_cents'] ?? 0)),
             'usage_limit' => max(1, (int) ($rule['usage_limit'] ?? 1)),
             'per_user_limit' => 1,
+            'is_stackable' => (bool) ($rule['is_stackable'] ?? false),
             'starts_at' => now(),
             'ends_at' => (int) ($rule['valid_days'] ?? 0) > 0 ? now()->addDays((int) $rule['valid_days']) : null,
             'is_active' => true,
@@ -393,6 +400,16 @@ class WalletService
         } while (Order::query()->where('order_number', $number)->exists());
 
         return $number;
+    }
+
+    private function matchingRechargeOptionForPayableAmount(int $amountCents): ?WalletRechargeOption
+    {
+        return WalletRechargeOption::query()
+            ->active()
+            ->orderBy('sort_order')
+            ->orderBy('amount_cents')
+            ->get()
+            ->first(fn (WalletRechargeOption $option): bool => $option->payableCents() === $amountCents);
     }
 
     private function nextCouponCode(): string

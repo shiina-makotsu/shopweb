@@ -31,6 +31,7 @@ use App\Models\Warehouse;
 use App\Models\WarehouseShippingRate;
 use App\Models\WarehouseStock;
 use App\Services\FlashSaleCampaignService;
+use App\Services\CouponService;
 use App\Services\OrderService;
 use App\Services\StorefrontCache;
 use App\Support\Money;
@@ -41,6 +42,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 use Livewire\Livewire;
 
 it('formats sku specification labels with value before name', function (): void {
@@ -690,6 +692,7 @@ it('issues generated standard coupons after a configured wallet recharge is conf
         expect($coupon->name)->toContain('fixed reward')
             ->and($coupon->value)->toBe(800)
             ->and($coupon->scope)->toBe(Coupon::SCOPE_PRODUCT)
+            ->and($coupon->is_stackable)->toBeFalse()
             ->and($coupon->minimum_order_cents)->toBe(3000)
             ->and($coupon->usage_limit)->toBe(1)
             ->and($coupon->ends_at)->not->toBeNull()
@@ -702,6 +705,55 @@ it('issues generated standard coupons after a configured wallet recharge is conf
         ->and($percentCoupon->minimum_order_cents)->toBe(10000)
         ->and($percentCoupon->usage_limit)->toBe(3)
         ->and($percentCoupon->ends_at)->toBeNull();
+});
+
+it('matches custom wallet recharge amounts to configured payable option rewards', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+    $option = WalletRechargeOption::query()->create([
+        'name' => '自定义命中 100',
+        'currency_code' => 'CNY',
+        'currency_unit' => 'yuan',
+        'amount_cents' => 10000,
+        'discount_percent' => 80,
+        'bonus_cents' => 1500,
+        'is_active' => true,
+        'coupon_reward_enabled' => true,
+        'coupon_reward_rules' => [
+            [
+                'name' => 'custom match reward',
+                'type' => Coupon::TYPE_FIXED,
+                'value' => 500,
+                'scope' => Coupon::SCOPE_GLOBAL,
+                'quantity' => 1,
+                'usage_limit' => 1,
+            ],
+        ],
+    ]);
+
+    $this->actingAs($user)
+        ->post(route('user.wallet.recharge'), [
+            'wallet_recharge_amount' => '80',
+        ])
+        ->assertRedirect();
+
+    $order = Order::query()->whereBelongsTo($user)->latest('id')->firstOrFail();
+
+    expect($order->wallet_recharge_option_id)->toBe($option->id)
+        ->and($order->total_cents)->toBe(8000)
+        ->and($order->wallet_recharge_cents)->toBe(11500);
+
+    app(OrderService::class)->confirmPayment($order);
+
+    $coupon = Coupon::query()
+        ->whereIn('id', UserCoupon::query()
+            ->whereBelongsTo($user)
+            ->where('source', UserCoupon::SOURCE_WALLET_RECHARGE)
+            ->pluck('coupon_id'))
+        ->firstOrFail();
+
+    expect($user->fresh()->wallet_balance_cents)->toBe(11500)
+        ->and($coupon->value)->toBe(500)
+        ->and($coupon->is_stackable)->toBeFalse();
 });
 
 it('uses wallet balance when completing a flash sale order selection', function (): void {
@@ -2517,7 +2569,8 @@ it('lets users claim coupons and apply one coupon per cart sku', function (): vo
         ->assertSee('A 商品券')
         ->assertSee('券包商品 A')
         ->assertSee('券包商品 B')
-        ->assertSee('全场九折');
+        ->assertSee('全场九折')
+        ->assertSee('可叠加使用');
 
     $userCouponA = UserCoupon::query()->whereBelongsTo($user)->whereBelongsTo($couponA)->firstOrFail();
     $userCouponB = UserCoupon::query()->whereBelongsTo($user)->whereBelongsTo($couponB)->firstOrFail();
@@ -2531,7 +2584,8 @@ it('lets users claim coupons and apply one coupon per cart sku', function (): vo
         ->assertSee('name="coupon_items['.$variantA->id.']"', false)
         ->assertSee('name="coupon_items['.$variantB->id.']"', false)
         ->assertSee('WALLETA')
-        ->assertSee('WALLETB');
+        ->assertSee('WALLETB')
+        ->assertSee('可叠加使用');
 
     $this->actingAs($user)->post(route('checkout.store'), [
         'contact_name' => '券包用户',
@@ -2557,6 +2611,71 @@ it('lets users claim coupons and apply one coupon per cart sku', function (): vo
         'coupon_code' => 'WALLETB',
         'discount_cents' => 500,
     ]);
+});
+
+it('prevents non stackable coupons from being used with another coupon in one order', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+    $category = Category::query()->create(['name' => 'No stack', 'slug' => 'no-stack', 'is_active' => true]);
+    $productA = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => 'No stack A',
+        'slug' => 'no-stack-a',
+        'status' => Product::STATUS_PUBLISHED,
+    ]);
+    $variantA = ProductVariant::query()->create([
+        'product_id' => $productA->id,
+        'sku' => 'NO-STACK-A',
+        'price_cents' => 10000,
+        'stock' => 5,
+        'is_active' => true,
+    ]);
+    $productB = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => 'No stack B',
+        'slug' => 'no-stack-b',
+        'status' => Product::STATUS_PUBLISHED,
+    ]);
+    $variantB = ProductVariant::query()->create([
+        'product_id' => $productB->id,
+        'sku' => 'NO-STACK-B',
+        'price_cents' => 5000,
+        'stock' => 5,
+        'is_active' => true,
+    ]);
+    $couponA = Coupon::query()->create([
+        'code' => 'NOSTACKA',
+        'name' => '不可叠加券',
+        'type' => Coupon::TYPE_FIXED,
+        'value' => 1000,
+        'scope' => Coupon::SCOPE_GLOBAL,
+        'is_stackable' => false,
+        'is_active' => true,
+    ]);
+    $couponB = Coupon::query()->create([
+        'code' => 'STACKB',
+        'name' => '普通券',
+        'type' => Coupon::TYPE_FIXED,
+        'value' => 500,
+        'scope' => Coupon::SCOPE_GLOBAL,
+        'is_stackable' => true,
+        'is_active' => true,
+    ]);
+
+    $userCouponA = app(CouponService::class)->issueToUser($couponA, $user);
+    $userCouponB = app(CouponService::class)->issueToUser($couponB, $user);
+    $cartItems = collect([
+        ['variant' => $variantA, 'product' => $productA, 'line_total_cents' => 10000],
+        ['variant' => $variantB, 'product' => $productB, 'line_total_cents' => 5000],
+    ]);
+
+    app(CouponService::class)->resolveForCart($user, $cartItems, [
+        $variantA->id => $userCouponA->id,
+    ]);
+
+    expect(fn () => app(CouponService::class)->resolveForCart($user, $cartItems, [
+        $variantA->id => $userCouponA->id,
+        $variantB->id => $userCouponB->id,
+    ]))->toThrow(ValidationException::class);
 });
 
 it('cleans stale product links from global coupons and tracks coupon holders', function (): void {

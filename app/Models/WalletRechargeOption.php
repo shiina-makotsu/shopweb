@@ -141,6 +141,7 @@ class WalletRechargeOption extends Model
             'minimum_order_cents' => max(0, (int) ($rule['minimum_order_cents'] ?? 0)),
             'quantity' => max(1, (int) ($rule['quantity'] ?? 1)),
             'usage_limit' => max(1, (int) ($rule['usage_limit'] ?? 1)),
+            'is_stackable' => (bool) ($rule['is_stackable'] ?? false),
         ];
     }
 }

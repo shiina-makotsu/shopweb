@@ -29,6 +29,7 @@ class Coupon extends Model
         'minimum_order_cents',
         'usage_limit',
         'per_user_limit',
+        'is_stackable',
         'starts_at',
         'ends_at',
         'is_active',
@@ -40,6 +41,7 @@ class Coupon extends Model
             'starts_at' => 'datetime',
             'ends_at' => 'datetime',
             'is_active' => 'boolean',
+            'is_stackable' => 'boolean',
         ];
     }
 

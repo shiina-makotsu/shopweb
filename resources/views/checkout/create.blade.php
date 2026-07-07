@@ -159,7 +159,7 @@
                                             @foreach($lineCoupons as $userCoupon)
                                                 @php($coupon = $userCoupon->coupon)
                                                 <option value="{{ $userCoupon->id }}" @selected((string) old('coupon_items.'.$item['variant']->id) === (string) $userCoupon->id)>
-                                                    {{ $coupon->name }} / {{ $coupon->code }} / {{ $coupon->discountLabel() }} / {{ $coupon->scopeLabel() }}
+                                                    {{ $coupon->name }} / {{ $coupon->code }} / {{ $coupon->discountLabel() }} / {{ $coupon->scopeLabel() }} / {{ $coupon->is_stackable ? '可叠加使用' : '不可叠加使用' }}
                                                 </option>
                                             @endforeach
                                         </select>
