@@ -114,10 +114,14 @@ class WalletSettingsPage extends Page implements HasSchemas
                             ->content(fn (Get $get): HtmlString => static::rechargeOptionsPagePreviewHtml($get('recharge_options') ?: []))
                             ->columnSpanFull(),
                         Repeater::make('recharge_options')
-                            ->label('充值选项')
+                            ->label('预览卡片设置')
                             ->addable(false)
                             ->collapsible()
                             ->collapsed()
+                            ->extraAttributes([
+                                'data-wallet-recharge-settings' => 'true',
+                                'style' => 'display:none;',
+                            ])
                             ->itemLabel(fn (array $state): string => static::rechargeOptionSettingLabel($state))
                             ->reorderable()
                             ->schema([
@@ -406,7 +410,7 @@ class WalletSettingsPage extends Page implements HasSchemas
     private static function rechargeOptionSettingLabel(array $state): string
     {
         if (static::isBlankRechargeOptionData($state)) {
-            return '新增充值选项（后台占位）';
+            return '新增充值选项设置（后台占位）';
         }
 
         return trim((string) ($state['name'] ?? '')) ?: '充值选项设置';
@@ -429,29 +433,62 @@ class WalletSettingsPage extends Page implements HasSchemas
     private static function rechargeOptionsPagePreviewHtml(array $options): HtmlString
     {
         $cards = collect($options)
-            ->map(fn (array $state): string => static::rechargeOptionPreviewCardHtml($state))
+            ->values()
+            ->map(fn (array $state, int $index): string => static::rechargeOptionPreviewCardHtml($state, $index))
             ->filter()
             ->implode('');
 
         if ($cards === '') {
-            $cards = static::rechargeOptionPreviewCardHtml(static::emptyRechargeOptionState());
+            $cards = static::rechargeOptionPreviewCardHtml(static::emptyRechargeOptionState(), 0);
         }
 
         return new HtmlString(<<<HTML
-            <div style="border:1px solid #cbd5e1;border-radius:18px;background:#fff;padding:16px;box-shadow:0 10px 34px rgba(15,23,42,.08);">
+            <div data-wallet-recharge-page-preview style="border:1px solid #cbd5e1;border-radius:18px;background:#fff;padding:16px;box-shadow:0 10px 34px rgba(15,23,42,.08);">
                 <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px;">
                     <div>
                         <strong style="display:block;color:#0f172a;font-size:16px;">充值钱包</strong>
-                        <span style="color:#64748b;font-size:12px;">这里预览用户端充值选项容器；后台占位卡不会显示给用户。</span>
+                        <span style="color:#64748b;font-size:12px;">点击下方卡片后，在预览下方展开对应设置；后台占位卡不会显示给用户。</span>
                     </div>
                     <span style="border-radius:999px;background:#eff8ff;color:#0369a1;padding:3px 9px;font-size:12px;">用户端页面预览</span>
                 </div>
                 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;">{$cards}</div>
             </div>
+            <script>
+                (() => {
+                    if (window.shopwebWalletRechargePreviewBound) return;
+                    window.shopwebWalletRechargePreviewBound = true;
+
+                    document.addEventListener('click', (event) => {
+                        const card = event.target.closest('[data-wallet-recharge-preview-card]');
+
+                        if (! card) return;
+
+                        const index = Number.parseInt(card.dataset.walletRechargePreviewCard || '0', 10);
+                        const preview = card.closest('[data-wallet-recharge-page-preview]');
+                        const section = preview?.closest('[data-field-wrapper], section, form') || document;
+                        const settings = section.querySelector('[data-wallet-recharge-settings]');
+                        const items = Array.from((settings || section).querySelectorAll('[data-repeater-item], .fi-fo-repeater-item, [x-data*="isCollapsed"]'));
+                        const item = items[index] || items[items.length - 1];
+
+                        if (! item) return;
+
+                        if (settings) {
+                            settings.style.display = '';
+                        }
+
+                        items.forEach((entry) => {
+                            entry.style.display = entry === item ? '' : 'none';
+                        });
+                        item.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        const toggle = item.querySelector('button[aria-expanded="false"], button[title*="展开"], button[aria-label*="展开"]');
+                        toggle?.click();
+                    });
+                })();
+            </script>
         HTML);
     }
 
-    private static function rechargeOptionPreviewCardHtml(array $state): string
+    private static function rechargeOptionPreviewCardHtml(array $state, int $index): string
     {
         $isBlank = static::isBlankRechargeOptionData($state);
         $amountCents = $isBlank ? 0 : static::previewAmountCents($state);
@@ -475,7 +512,7 @@ class WalletSettingsPage extends Page implements HasSchemas
         $couponText = (bool) ($state['coupon_reward_enabled'] ?? false) ? '<span>含充值赠券</span>' : '<span>无赠券</span>';
 
         return <<<HTML
-            <div style="display:grid;gap:8px;border:1px solid #cbd5e1;border-radius:14px;background:linear-gradient(135deg,#f8fbff,#fff1f6);padding:12px 14px;color:#0f172a;box-shadow:0 8px 24px rgba(15,23,42,.08);">
+            <button type="button" data-wallet-recharge-preview-card="{$index}" style="display:grid;gap:8px;border:1px solid #cbd5e1;border-radius:14px;background:linear-gradient(135deg,#f8fbff,#fff1f6);padding:12px 14px;color:#0f172a;box-shadow:0 8px 24px rgba(15,23,42,.08);text-align:left;cursor:pointer;">
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
                     <strong style="font-size:15px;">{$title}</strong>
                     <span style="border:1px solid currentColor;border-radius:999px;padding:2px 8px;color:{$badgeColor};font-size:12px;">{$badge}</span>
@@ -491,7 +528,7 @@ class WalletSettingsPage extends Page implements HasSchemas
                     </div>
                 </div>
                 <div style="display:flex;flex-wrap:wrap;gap:6px;color:#475569;font-size:12px;">{$discountText}{$bonusText}{$couponText}</div>
-            </div>
+            </button>
         HTML;
     }
 

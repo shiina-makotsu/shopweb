@@ -582,6 +582,8 @@ it('renders merged admin management tabs for wallet flash sale and comments', fu
         ->assertSee('用户端充值页面整体预览')
         ->assertSee('充值钱包')
         ->assertSee('后台预览充值卡')
+        ->assertSee('data-wallet-recharge-preview-card', false)
+        ->assertSee('data-wallet-recharge-settings', false)
         ->assertSee('新增充值选项');
 
     $this->actingAs($admin)
