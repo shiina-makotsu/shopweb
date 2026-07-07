@@ -161,6 +161,8 @@ it('renders compact customer rows with quick detail previews and actions', funct
 });
 
 it('updates customer quick detail fields from the expanded preview', function (): void {
+    $this->withoutMiddleware(\Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class);
+
     $admin = User::factory()->create(['role' => 'admin']);
     $customer = User::factory()->create([
         'role' => 'customer',
