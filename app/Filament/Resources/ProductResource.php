@@ -6,6 +6,7 @@ use App\Filament\Concerns\ChecksAdminAccess;
 use App\Filament\Resources\ProductResource\Pages\CreateProduct;
 use App\Filament\Resources\ProductResource\Pages\EditProduct;
 use App\Filament\Resources\ProductResource\Pages\ListProducts;
+use App\Filament\Support\CardPreviewTemplate;
 use App\Models\MediaAsset;
 use App\Models\Product;
 use App\Models\ProductMedia;
@@ -149,9 +150,17 @@ class ProductResource extends Resource
                     ->options(fn (Get $get): array => CurrencyUnit::unitOptions($get('variant_price_currency_code') ?: CurrencyUnit::baseCurrency()))
                     ->default(fn (): string => CurrencyUnit::baseUnit())
                     ->dehydrated(false),
+                Placeholder::make('_sku_page_preview')
+                    ->label('SKU 卡片预览')
+                    ->content(fn (Get $get): HtmlString => static::productSkuPreviewHtml($get('variants') ?: []))
+                    ->columnSpanFull(),
                 Repeater::make('variants')->label('SKU 规格')
                     ->addActionLabel('添加规格值')
                     ->relationship()
+                    ->extraAttributes([
+                        'data-product-sku-settings' => 'true',
+                        'style' => 'display:none;',
+                    ])
                     ->schema([
                         Section::make('SKU 基础')
                             ->schema([
@@ -177,7 +186,6 @@ class ProductResource extends Resource
                                     ->label('图片链接')
                                     ->placeholder('https://example.com/sku.jpg 或 products/sku.jpg')
                                     ->helperText('粘贴链接，或使用右侧 + 选择资源库文件/上传。')
-                                    ->live(debounce: 500)
                                     ->maxLength(2048)
                                     ->dehydrateStateUsing(fn (?string $state): ?string => blank($state) ? null : trim($state)),
                                 static::imageAssetPicker('image_path', '+'),
@@ -318,6 +326,206 @@ class ProductResource extends Resource
 
                 return $asset->path;
             });
+    }
+
+    /**
+     * @param  array<int|string, array<string, mixed>>  $variants
+     */
+    private static function productSkuPreviewHtml(array $variants): HtmlString
+    {
+        $states = collect($variants)->values();
+        $blankIndex = $states->search(fn (array $state): bool => static::isBlankProductSkuState($state));
+        $cards = $states
+            ->reject(fn (array $state): bool => static::isBlankProductSkuState($state))
+            ->map(fn (array $state, int $index): string => static::productSkuPreviewCardHtml($state, $index))
+            ->implode('');
+        $newIndex = $blankIndex === false ? $states->count() : (int) $blankIndex;
+        $cards .= static::productSkuPreviewCardHtml(static::emptyProductSkuState(), $newIndex, true, $blankIndex === false);
+
+        $preview = CardPreviewTemplate::render([
+            'key' => 'product-sku',
+            'title' => 'SKU 卡片',
+            'description' => '点击卡片后在下方展开对应 SKU 设置；再次点击同一张卡片会收回。',
+            'badge' => '商品 SKU 预览',
+            'cards' => $cards,
+            'settingsSelector' => '[data-product-sku-settings]',
+            'legacyRootAttributes' => 'data-product-sku-page-preview',
+            'legacyGridAttributes' => 'data-product-sku-preview-grid',
+            'enableSorting' => false,
+        ]);
+
+        return new HtmlString($preview->toHtml().static::productSkuPreviewSyncScript());
+
+    }
+
+    private static function productSkuPreviewSyncScript(): string
+    {
+        return <<<'HTML'
+            <script>
+                (() => {
+                    if (window.shopwebProductSkuLocalPreviewBound) return;
+                    window.shopwebProductSkuLocalPreviewBound = true;
+
+                    const rootSelector = '[data-card-preview-root="product-sku"]';
+                    const settingsSelector = '[data-product-sku-settings]';
+                    const itemAttribute = 'data-card-preview-setting-item-product-sku';
+                    const valueByLabel = (item, labels) => {
+                        const labelNodes = Array.from(item.querySelectorAll('label'));
+                        const matched = labelNodes.find((node) => labels.some((label) => node.textContent.trim().includes(label)));
+                        const id = matched?.getAttribute('for');
+                        const field = id ? item.querySelector('#' + CSS.escape(id)) : null;
+
+                        return field?.value?.trim?.() || '';
+                    };
+                    const topLevelItems = (list) => Array.from(list?.children || [])
+                        .filter((node) => node.classList.contains('fi-fo-repeater-item'))
+                        .filter((node) => ! node.parentElement?.closest('.fi-fo-repeater-item'));
+                    const itemIndex = (item) => {
+                        const existing = Number.parseInt(item.getAttribute(itemAttribute) || '', 10);
+
+                        if (Number.isFinite(existing)) return existing;
+
+                        return topLevelItems(item.closest('.fi-fo-repeater-items')).indexOf(item);
+                    };
+                    const syncCard = (item) => {
+                        const index = itemIndex(item);
+
+                        if (index < 0) return;
+
+                        const root = document.querySelector(rootSelector);
+                        const card = root?.querySelector('[data-card-preview-card="' + index + '"]');
+
+                        if (! card) return;
+
+                        const sku = valueByLabel(item, ['SKU']);
+                        const spec = valueByLabel(item, ['规格参数名']);
+                        const image = valueByLabel(item, ['图片链接']);
+                        const price = valueByLabel(item, ['价格']);
+                        const stock = valueByLabel(item, ['库存']);
+                        const title = card.querySelector('.shop-admin-preview-card-title');
+                        const subtitle = card.querySelector('.shop-admin-preview-card-muted');
+                        const priceNode = card.querySelector('.shop-admin-preview-price');
+                        const stockNode = card.querySelector('.shop-admin-preview-stock');
+                        const imageNode = card.querySelector('.shop-admin-preview-image, .shop-admin-preview-image-placeholder');
+
+                        if (title) {
+                            title.textContent = sku || spec || (card.dataset.cardPreviewNew === '1' ? '新建 SKU' : '未命名 SKU');
+                        }
+
+                        if (subtitle) {
+                            subtitle.textContent = spec || (sku ? '未填写规格参数名' : '正在编辑 SKU');
+                        }
+
+                        if (priceNode) {
+                            priceNode.textContent = price || '待设置';
+                        }
+
+                        if (stockNode) {
+                            stockNode.textContent = stock || '待设置';
+                        }
+
+                        if (imageNode && image) {
+                            if (imageNode.tagName === 'IMG') {
+                                imageNode.setAttribute('src', image);
+                            } else {
+                                const img = document.createElement('img');
+                                img.className = 'shop-admin-preview-image';
+                                img.style.cssText = 'width:64px;height:64px;object-fit:cover;border:1px solid #cbd5e1;border-radius:12px;background:#f8fafc;';
+                                img.setAttribute('src', image);
+                                img.setAttribute('alt', 'SKU 图片');
+                                imageNode.replaceWith(img);
+                            }
+                        }
+                    };
+                    const syncFromTarget = (target) => {
+                        const settings = target.closest(settingsSelector);
+                        const item = target.closest('.fi-fo-repeater-item');
+
+                        if (! settings || ! item || item.parentElement?.closest('.fi-fo-repeater-item')) return;
+
+                        syncCard(item);
+                    };
+
+                    document.addEventListener('input', (event) => syncFromTarget(event.target), true);
+                    document.addEventListener('change', (event) => syncFromTarget(event.target), true);
+                })();
+            </script>
+        HTML;
+    }
+
+    /**
+     * @param  array<string, mixed>  $state
+     */
+    private static function productSkuPreviewCardHtml(array $state, int $index, bool $virtualNew = false, bool $requiresNewItem = false): string
+    {
+        $isBlank = $virtualNew || static::isBlankProductSkuState($state);
+        $sku = trim((string) ($state['sku'] ?? ''));
+        $specName = trim((string) ($state['spec_name'] ?? ''));
+        $id = (int) ($state['id'] ?? 0);
+        $price = filled($state['price_cents'] ?? null)
+            ? (string) $state['price_cents']
+            : '待设置';
+        $stock = filled($state['stock'] ?? null)
+            ? (string) $state['stock']
+            : '待设置';
+        $title = $isBlank
+            ? '新建 SKU'
+            : ($sku !== '' ? $sku : ($specName !== '' ? $specName : ($id > 0 ? 'SKU #'.$id : '未命名 SKU')));
+        $subtitle = $isBlank
+            ? '点击后添加并编辑 SKU'
+            : ($specName !== '' ? $specName : ($sku !== '' ? '未填写规格参数名' : '正在编辑原 SKU'));
+        $imageUrl = MediaPath::url((string) ($state['image_path'] ?? ''));
+        $title = e($title);
+        $subtitle = e($subtitle);
+        $price = e($price);
+        $stock = e($stock);
+        $image = $imageUrl
+            ? '<img src="'.e($imageUrl).'" alt="SKU 图片" class="shop-admin-preview-image" style="width:64px;height:64px;object-fit:cover;border:1px solid #cbd5e1;border-radius:12px;background:#f8fafc;">'
+            : '<div class="shop-admin-preview-image-placeholder" style="display:grid;width:64px;height:64px;place-items:center;border:1px dashed #cbd5e1;border-radius:12px;background:#f8fafc;color:#94a3b8;font-size:12px;">图片</div>';
+        $new = $isBlank ? '1' : '0';
+        $virtual = $requiresNewItem ? '1' : '0';
+
+        return CardPreviewTemplate::card([
+            'index' => $index,
+            'title' => html_entity_decode((string) $title, ENT_QUOTES, 'UTF-8'),
+            'subtitle' => html_entity_decode((string) $subtitle, ENT_QUOTES, 'UTF-8'),
+            'image' => $image,
+            'imageLayout' => true,
+            'metrics' => [
+                ['label' => '价格', 'value' => html_entity_decode((string) $price, ENT_QUOTES, 'UTF-8'), 'class' => 'shop-admin-preview-price'],
+                ['label' => '库存', 'value' => html_entity_decode((string) $stock, ENT_QUOTES, 'UTF-8'), 'class' => 'shop-admin-preview-stock'],
+            ],
+            'legacyAttributes' => 'data-product-sku-preview-card="'.$index.'" data-product-sku-new="'.$new.'" data-product-sku-virtual="'.$virtual.'"',
+            'isNew' => $isBlank,
+            'isVirtual' => $requiresNewItem,
+        ]);
+
+    }
+
+    private static function emptyProductSkuState(): array
+    {
+        return [
+            'sku' => null,
+            'spec_name' => null,
+            'image_path' => null,
+            'price_cents' => null,
+            'stock' => null,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $state
+     */
+    private static function isBlankProductSkuState(array $state): bool
+    {
+        if ((int) ($state['id'] ?? 0) > 0) {
+            return false;
+        }
+
+        return ! filled($state['sku'] ?? null)
+            && ! filled($state['spec_name'] ?? null)
+            && ! filled($state['image_path'] ?? null)
+            && ! filled($state['price_cents'] ?? null);
     }
 
     private static function mediaAssetPicker(string $targetField): Select

@@ -231,6 +231,15 @@ it('renders catalog reference management pages for admins', function (): void {
         ->assertOk()
         ->assertSee('制造商')
         ->assertSee('供应商')
+        ->assertSee('SKU 与库存')
+        ->assertSee('SKU 卡片预览')
+        ->assertSee('data-card-preview-root="product-sku"', false)
+        ->assertSee('data-card-preview-card', false)
+        ->assertSee('shopwebProductSkuLocalPreviewBound', false)
+        ->assertSee('data-product-sku-preview-card', false)
+        ->assertSee('data-product-sku-settings', false)
+        ->assertSee('SKU 规格')
+        ->assertSee('添加规格值')
         ->assertSee('标签')
         ->assertSee('数量单位');
 });
@@ -582,8 +591,11 @@ it('renders merged admin management tabs for wallet flash sale and comments', fu
         ->assertSee('用户端充值页面整体预览')
         ->assertSee('充值钱包')
         ->assertSee('后台预览充值卡')
+        ->assertSee('data-card-preview-root="wallet-recharge"', false)
+        ->assertSee('data-card-preview-card', false)
         ->assertSee('data-wallet-recharge-preview-card', false)
         ->assertSee('data-wallet-recharge-settings', false)
+        ->assertSee('data-wallet-recharge-save-order', false)
         ->assertSee('新增充值选项');
 
     $this->actingAs($admin)

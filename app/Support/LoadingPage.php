@@ -233,6 +233,14 @@ HTML;
 @keyframes spin { to { transform:rotate(360deg); } }
 @keyframes pulse { 0%,100% { transform:scale(.92); opacity:.78; } 50% { transform:scale(1); opacity:1; } }
 @media (prefers-reduced-motion: reduce) { .fishcake, .ring, .pulse { animation-duration:2.4s; } .bar span { transition-duration:.8s; } }
+.dark .shop-loading-preview { color-scheme:dark; --ink:#e5e7eb; --muted:#94a3b8; --line:#334155; --paper:#111827; --soft:#0f172a; background:linear-gradient(135deg,#07111f 0%,#0b1120 48%,#1f1424 100%); border-color:#334155; color:var(--ink); }
+.dark .shop-loading-preview .shop-loading-card { border-color:#334155; background:rgba(17,24,39,.94); color:var(--ink); box-shadow:0 22px 60px rgba(0,0,0,.3); }
+.dark .shop-loading-preview :is(h1,p,.steps) { color:var(--ink); }
+.dark .shop-loading-preview :is(.loader small,.skip) { color:#93c5fd; }
+.dark .shop-loading-preview :is(.fishcake,.pulse) { border-color:#334155; background:#0f172a; box-shadow:0 10px 26px rgba(96,165,250,.18); }
+.dark .shop-loading-preview .ring { border-color:#334155; border-top-color:#f472b6; border-right-color:#60a5fa; }
+.dark .shop-loading-preview .bar { border-color:#334155; background:#0f172a; }
+.dark .shop-loading-preview .progress-percent { color:var(--muted); }
 CSS;
     }
 

@@ -85,7 +85,7 @@
                 </button>
             </div>
 
-            <p style="margin-top: 0.75rem; color: #64748b;">
+            <p class="shop-settings-description" style="margin-top: 0.75rem;">
                 为避免覆盖生产临时改动，执行更新或回滚前会检查 Git 工作区必须保持干净；如 package.json 或 package-lock.json 变化，会先安装前端依赖再构建。
             </p>
         </div>

@@ -7,6 +7,7 @@ use App\Models\Product;
 use App\Models\WalletRechargeOption;
 use App\Filament\Resources\WalletRedeemCodeResource;
 use App\Filament\Support\AdminPageTabs;
+use App\Filament\Support\CardPreviewTemplate;
 use App\Support\AdminAccess;
 use App\Support\CurrencyUnit;
 use App\Support\Money;
@@ -117,7 +118,6 @@ class WalletSettingsPage extends Page implements HasSchemas
                             ->label('预览卡片设置')
                             ->addable(false)
                             ->collapsible()
-                            ->collapsed()
                             ->extraAttributes([
                                 'data-wallet-recharge-settings' => 'true',
                                 'style' => 'display:none;',
@@ -442,50 +442,24 @@ class WalletSettingsPage extends Page implements HasSchemas
             $cards = static::rechargeOptionPreviewCardHtml(static::emptyRechargeOptionState(), 0);
         }
 
-        return new HtmlString(<<<HTML
-            <div data-wallet-recharge-page-preview style="border:1px solid #cbd5e1;border-radius:18px;background:#fff;padding:16px;box-shadow:0 10px 34px rgba(15,23,42,.08);">
-                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px;">
-                    <div>
-                        <strong style="display:block;color:#0f172a;font-size:16px;">充值钱包</strong>
-                        <span style="color:#64748b;font-size:12px;">点击下方卡片后，在预览下方展开对应设置；后台占位卡不会显示给用户。</span>
-                    </div>
-                    <span style="border-radius:999px;background:#eff8ff;color:#0369a1;padding:3px 9px;font-size:12px;">用户端页面预览</span>
-                </div>
-                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;">{$cards}</div>
-            </div>
-            <script>
-                (() => {
-                    if (window.shopwebWalletRechargePreviewBound) return;
-                    window.shopwebWalletRechargePreviewBound = true;
+        $initialOrder = collect($options)->values()->keys()->implode(',');
 
-                    document.addEventListener('click', (event) => {
-                        const card = event.target.closest('[data-wallet-recharge-preview-card]');
+        return CardPreviewTemplate::render([
+            'key' => 'wallet-recharge',
+            'title' => '充值钱包',
+            'description' => '点击下方卡片后，在预览下方展开对应设置；后台占位卡不会显示给用户。',
+            'badge' => '用户端页面预览',
+            'cards' => $cards,
+            'settingsSelector' => '[data-wallet-recharge-settings]',
+            'legacyRootAttributes' => 'data-wallet-recharge-page-preview data-wallet-recharge-original-order="'.$initialOrder.'"',
+            'legacyGridAttributes' => 'data-wallet-recharge-preview-grid',
+            'legacySaveAttributes' => 'data-wallet-recharge-save-order',
+            'enableSorting' => true,
+            'originalOrder' => $initialOrder,
+            'sortFieldLabel' => '排序',
+            'saveLabel' => '保存排序',
+        ]);
 
-                        if (! card) return;
-
-                        const index = Number.parseInt(card.dataset.walletRechargePreviewCard || '0', 10);
-                        const preview = card.closest('[data-wallet-recharge-page-preview]');
-                        const section = preview?.closest('[data-field-wrapper], section, form') || document;
-                        const settings = section.querySelector('[data-wallet-recharge-settings]');
-                        const items = Array.from((settings || section).querySelectorAll('[data-repeater-item], .fi-fo-repeater-item, [x-data*="isCollapsed"]'));
-                        const item = items[index] || items[items.length - 1];
-
-                        if (! item) return;
-
-                        if (settings) {
-                            settings.style.display = '';
-                        }
-
-                        items.forEach((entry) => {
-                            entry.style.display = entry === item ? '' : 'none';
-                        });
-                        item.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        const toggle = item.querySelector('button[aria-expanded="false"], button[title*="展开"], button[aria-label*="展开"]');
-                        toggle?.click();
-                    });
-                })();
-            </script>
-        HTML);
     }
 
     private static function rechargeOptionPreviewCardHtml(array $state, int $index): string
@@ -499,9 +473,10 @@ class WalletSettingsPage extends Page implements HasSchemas
         $bonusCents = static::previewBonusCents($state);
         $creditCents = $amountCents + $bonusCents;
         $configuredTitle = trim((string) ($state['name'] ?? ''));
+        $id = (int) ($state['id'] ?? 0);
         $title = $isBlank
             ? '新增充值选项'
-            : ($configuredTitle !== '' ? $configuredTitle : Money::format($amountCents).' 充值');
+            : ($configuredTitle !== '' ? $configuredTitle : ($amountCents > 0 ? Money::format($amountCents).' 充值' : ($id > 0 ? '充值选项 #'.$id : '充值选项')));
         $title = e($title);
         $badge = $isBlank ? '后台占位，不会显示给用户' : ((bool) ($state['is_active'] ?? true) ? '用户端显示' : '已停用');
         $badgeColor = $isBlank ? '#64748b' : ((bool) ($state['is_active'] ?? true) ? '#047857' : '#b91c1c');
@@ -511,25 +486,22 @@ class WalletSettingsPage extends Page implements HasSchemas
         $bonusText = $bonusCents > 0 ? '<span>赠送 '.e(Money::format($bonusCents)).'</span>' : '<span>无赠送余额</span>';
         $couponText = (bool) ($state['coupon_reward_enabled'] ?? false) ? '<span>含充值赠券</span>' : '<span>无赠券</span>';
 
-        return <<<HTML
-            <button type="button" data-wallet-recharge-preview-card="{$index}" style="display:grid;gap:8px;border:1px solid #cbd5e1;border-radius:14px;background:linear-gradient(135deg,#f8fbff,#fff1f6);padding:12px 14px;color:#0f172a;box-shadow:0 8px 24px rgba(15,23,42,.08);text-align:left;cursor:pointer;">
-                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
-                    <strong style="font-size:15px;">{$title}</strong>
-                    <span style="border:1px solid currentColor;border-radius:999px;padding:2px 8px;color:{$badgeColor};font-size:12px;">{$badge}</span>
-                </div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-                    <div style="border-radius:10px;background:rgba(255,255,255,.72);padding:8px;">
-                        <div style="color:#64748b;font-size:12px;">用户实付</div>
-                        <div style="font-weight:700;font-size:18px;color:#be123c;">{$payable}</div>
-                    </div>
-                    <div style="border-radius:10px;background:rgba(255,255,255,.72);padding:8px;">
-                        <div style="color:#64748b;font-size:12px;">钱包到账</div>
-                        <div style="font-weight:700;font-size:18px;color:#be123c;">{$credit}</div>
-                    </div>
-                </div>
-                <div style="display:flex;flex-wrap:wrap;gap:6px;color:#475569;font-size:12px;">{$discountText}{$bonusText}{$couponText}</div>
-            </button>
-        HTML;
+        $footer = '<span style="display:flex;flex-wrap:wrap;gap:6px;color:#475569;font-size:12px;">'.$discountText.$bonusText.$couponText.'</span>';
+
+        return CardPreviewTemplate::card([
+            'index' => $index,
+            'title' => html_entity_decode((string) $title, ENT_QUOTES, 'UTF-8'),
+            'subtitle' => $badge,
+            'metrics' => [
+                ['label' => '用户实付', 'value' => html_entity_decode((string) $payable, ENT_QUOTES, 'UTF-8'), 'class' => 'shop-admin-preview-price'],
+                ['label' => '钱包到账', 'value' => html_entity_decode((string) $credit, ENT_QUOTES, 'UTF-8'), 'class' => 'shop-admin-preview-price'],
+            ],
+            'footer' => $footer,
+            'legacyAttributes' => 'data-wallet-recharge-preview-card="'.$index.'" data-wallet-recharge-placeholder="'.($isBlank ? '1' : '0').'"',
+            'isPlaceholder' => $isBlank,
+            'draggable' => ! $isBlank,
+        ]);
+
     }
 
     private static function previewAmountCents(array $state): int

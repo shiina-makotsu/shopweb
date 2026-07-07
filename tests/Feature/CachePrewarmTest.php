@@ -104,6 +104,7 @@ it('renders admin loading page settings and uses saved lightweight page config',
         ->assertOk()
         ->assertSee('加载等待页')
         ->assertSee('页面预览')
+        ->assertSee('.dark .shop-loading-preview', false)
         ->assertSee('🍥', false);
 
     SiteSetting::query()->firstOrCreate([], ['site_name' => 'ShopWeb'])->update([

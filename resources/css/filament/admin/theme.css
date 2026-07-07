@@ -1663,6 +1663,140 @@
     z-index: 60;
 }
 
+.shop-admin-preview-panel {
+    border: 1px solid #cbd5e1;
+    border-radius: 18px;
+    background: #ffffff;
+    padding: 16px;
+    box-shadow: 0 10px 34px rgb(15 23 42 / 8%);
+}
+
+.shop-admin-preview-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.shop-admin-preview-title {
+    display: block;
+    color: #0f172a;
+    font-size: 16px;
+}
+
+.shop-admin-preview-muted {
+    color: #64748b;
+    font-size: 12px;
+}
+
+.shop-admin-preview-badge {
+    border-radius: 999px;
+    background: #eff8ff;
+    color: #0369a1;
+    padding: 3px 9px;
+    font-size: 12px;
+}
+
+.shop-admin-preview-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 12px;
+}
+
+.shop-admin-preview-card {
+    display: grid;
+    gap: 8px;
+    border: 1px solid #cbd5e1;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #f8fbff, #fff1f6);
+    padding: 12px 14px;
+    color: #0f172a;
+    box-shadow: 0 8px 24px rgb(15 23 42 / 8%);
+    text-align: left;
+    cursor: pointer;
+}
+
+.shop-admin-preview-card.is-draggable {
+    cursor: grab;
+}
+
+.shop-admin-preview-card-title {
+    font-size: 15px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.shop-admin-preview-card-muted {
+    color: #64748b;
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.shop-admin-preview-metric {
+    border-radius: 10px;
+    background: rgb(255 255 255 / 72%);
+    padding: 7px;
+}
+
+.shop-admin-preview-metric-label {
+    display: block;
+    color: #64748b;
+    font-size: 12px;
+}
+
+.shop-admin-preview-price {
+    font-weight: 700;
+    color: #be123c;
+}
+
+.shop-admin-preview-stock {
+    font-weight: 700;
+    color: #0f766e;
+}
+
+.shop-admin-preview-image {
+    width: 64px;
+    height: 64px;
+    object-fit: cover;
+    border: 1px solid #cbd5e1;
+    border-radius: 12px;
+    background: #f8fafc;
+}
+
+.shop-admin-preview-image-placeholder {
+    display: grid;
+    width: 64px;
+    height: 64px;
+    place-items: center;
+    border: 1px dashed #cbd5e1;
+    border-radius: 12px;
+    background: #f8fafc;
+    color: #94a3b8;
+    font-size: 12px;
+}
+
+.shop-admin-preview-save {
+    border: 1px solid #cbd5e1;
+    border-radius: 999px;
+    background: #f1f5f9;
+    color: #94a3b8;
+    cursor: not-allowed;
+    padding: 7px 14px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.shop-admin-preview-setting {
+    border: 1px solid #cbd5e1;
+    border-radius: 14px;
+    background: #ffffff;
+    box-shadow: 0 8px 24px rgb(15 23 42 / 8%);
+}
+
 .dark {
     --shop-admin-blue: #17324b;
     --shop-admin-blue-strong: #60a5fa;
@@ -1685,6 +1819,105 @@
 .dark .fi-layout {
     background: linear-gradient(135deg, #07111f 0%, #0b1120 48%, #1f1424 100%);
     color: var(--wp-admin-text);
+}
+
+.dark .shop-admin-preview-panel {
+    border-color: var(--wp-admin-border) !important;
+    background: #111827 !important;
+    color: var(--wp-admin-text) !important;
+    box-shadow: 0 10px 34px rgb(0 0 0 / 24%) !important;
+}
+
+.dark .shop-admin-preview-title,
+.dark .shop-admin-preview-card,
+.dark .shop-admin-preview-card-title {
+    color: var(--wp-admin-text) !important;
+}
+
+.dark .shop-admin-preview-muted,
+.dark .shop-admin-preview-card-muted,
+.dark .shop-admin-preview-metric-label {
+    color: var(--wp-admin-muted) !important;
+}
+
+.dark .shop-admin-preview-badge {
+    background: #172033 !important;
+    color: #93c5fd !important;
+}
+
+.dark .shop-admin-preview-card {
+    border-color: var(--wp-admin-border) !important;
+    background: linear-gradient(135deg, #172033, #2a1829) !important;
+    box-shadow: 0 8px 24px rgb(0 0 0 / 26%) !important;
+}
+
+.dark .shop-admin-preview-metric {
+    background: rgb(15 23 42 / 72%) !important;
+}
+
+.dark .shop-admin-preview-image,
+.dark .shop-admin-preview-image-placeholder {
+    border-color: var(--wp-admin-border) !important;
+    background: #0f172a !important;
+}
+
+.dark .shop-admin-preview-image-placeholder {
+    color: var(--wp-admin-muted) !important;
+}
+
+.dark .shop-admin-preview-save {
+    border-color: var(--wp-admin-border) !important;
+    background: #172033 !important;
+    color: var(--wp-admin-muted) !important;
+}
+
+.dark .shop-admin-preview-setting {
+    border-color: var(--wp-admin-border) !important;
+    background: #111827 !important;
+    color: var(--wp-admin-text) !important;
+    box-shadow: 0 8px 24px rgb(0 0 0 / 24%) !important;
+}
+
+.dark .shop-loading-preview {
+    border-color: var(--wp-admin-border);
+    background: linear-gradient(135deg, #07111f 0%, #0b1120 48%, #1f1424 100%);
+    color: var(--wp-admin-text);
+}
+
+.dark .shop-loading-preview .shop-loading-card {
+    border-color: var(--wp-admin-border);
+    background: rgb(17 24 39 / 94%);
+    color: var(--wp-admin-text);
+    box-shadow: 0 22px 60px rgb(0 0 0 / 30%);
+}
+
+.dark .shop-loading-preview :is(h1, p, .steps) {
+    color: var(--wp-admin-text);
+}
+
+.dark .shop-loading-preview :is(.loader small, .skip) {
+    color: #93c5fd;
+}
+
+.dark .shop-loading-preview :is(.fishcake, .pulse) {
+    border-color: #334155;
+    background: #0f172a;
+    box-shadow: 0 10px 26px rgb(96 165 250 / 18%);
+}
+
+.dark .shop-loading-preview .ring {
+    border-color: #334155;
+    border-top-color: #f472b6;
+    border-right-color: #60a5fa;
+}
+
+.dark .shop-loading-preview .bar {
+    border-color: #334155;
+    background: #0f172a;
+}
+
+.dark .shop-loading-preview .progress-percent {
+    color: var(--wp-admin-muted);
 }
 
 .dark .fi-main,
@@ -1909,6 +2142,22 @@
     background: #3b2f12;
     border-color: #92400e;
     color: #fbbf24;
+}
+
+.dark .shop-settings-select,
+.dark .shop-cache-result {
+    border-color: var(--wp-admin-border);
+    background: #0f172a;
+    color: var(--wp-admin-text);
+}
+
+.dark .shop-settings-select option {
+    background: #111827;
+    color: var(--wp-admin-text);
+}
+
+.dark .shop-cache-result {
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 3%);
 }
 
 .dark .shop-settings-errors,
