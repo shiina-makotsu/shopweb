@@ -44,11 +44,21 @@ class WalletSettingsPage extends Page implements HasSchemas
 
     public function mount(): void
     {
+        $options = WalletRechargeOption::query()
+            ->orderBy('sort_order')
+            ->orderBy('amount_cents')
+            ->get();
+        $blankOptionIds = $options
+            ->filter(fn (WalletRechargeOption $option): bool => static::isBlankRechargeOption($option))
+            ->pluck('id');
+
+        if ($blankOptionIds->isNotEmpty()) {
+            WalletRechargeOption::query()->whereKey($blankOptionIds)->delete();
+            $options = $options->reject(fn (WalletRechargeOption $option): bool => $blankOptionIds->contains($option->id));
+        }
+
         $this->form->fill([
-            'recharge_options' => WalletRechargeOption::query()
-                ->orderBy('sort_order')
-                ->orderBy('amount_cents')
-                ->get()
+            'recharge_options' => $options
                 ->map(fn (WalletRechargeOption $option): array => [
                     'id' => $option->id,
                     '_stored' => true,
@@ -112,12 +122,30 @@ class WalletSettingsPage extends Page implements HasSchemas
                     ->schema([
                         Placeholder::make('_recharge_page_preview')
                             ->label('用户端充值页面整体预览')
+                            ->key('_recharge_page_preview')
                             ->content(fn (Get $get): HtmlString => static::rechargeOptionsPagePreviewHtml($get('recharge_options') ?: []))
                             ->columnSpanFull(),
                         Repeater::make('recharge_options')
                             ->label('预览卡片设置')
+                            ->key('recharge_options')
                             ->addable(false)
                             ->collapsible()
+                            ->partiallyRenderComponentsAfterStateUpdated(['_recharge_page_preview'])
+                            ->deleteAction(fn (Action $action): Action => $action->action(function (array $arguments, Repeater $component): void {
+                                $items = $component->getRawState() ?? [];
+                                $item = $items[$arguments['item']] ?? null;
+                                $id = (int) ($item['id'] ?? 0);
+
+                                if ($id > 0) {
+                                    WalletRechargeOption::query()->whereKey($id)->delete();
+                                }
+
+                                unset($items[$arguments['item']]);
+
+                                $component->rawState($items);
+                                $component->callAfterStateUpdated();
+                                $component->shouldPartiallyRenderAfterActionsCalled() ? $component->partiallyRender() : null;
+                            }))
                             ->extraAttributes([
                                 'data-wallet-recharge-settings' => 'true',
                                 'style' => 'display:none;',
@@ -421,16 +449,21 @@ class WalletSettingsPage extends Page implements HasSchemas
 
     private static function isBlankRechargeOptionData(array $data): bool
     {
-        if ((int) ($data['id'] ?? 0) > 0) {
-            return false;
-        }
-
         return ! filled($data['name'] ?? null)
-            && ! filled($data['amount_cents'] ?? null)
+            && (float) ($data['amount_cents'] ?? 0) <= 0
             && ! filled($data['discount_percent'] ?? null)
             && (int) ($data['bonus_cents'] ?? 0) <= 0
             && ! (bool) ($data['coupon_reward_enabled'] ?? false)
             && ($data['coupon_reward_rules'] ?? []) === [];
+    }
+
+    private static function isBlankRechargeOption(WalletRechargeOption $option): bool
+    {
+        return ! filled($option->name)
+            && (int) $option->amount_cents <= 0
+            && ! filled($option->discount_percent)
+            && (int) $option->bonus_cents <= 0
+            && ! $option->couponRewardEnabled();
     }
 
     private static function rechargeOptionsPagePreviewHtml(array $options): HtmlString

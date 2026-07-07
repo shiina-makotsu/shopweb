@@ -660,6 +660,9 @@ it('renders merged admin management tabs for wallet flash sale and comments', fu
     $walletPageSource = file_get_contents(app_path('Filament/Pages/WalletSettingsPage.php'));
 
     expect($walletPageSource)
+        ->toContain("->key('_recharge_page_preview')")
+        ->toContain("->key('recharge_options')")
+        ->toContain("->partiallyRenderComponentsAfterStateUpdated(['_recharge_page_preview'])")
         ->toContain("->partiallyRenderComponentsAfterStateUpdated(['coupon_reward_rules'])")
         ->toContain('->skipRenderAfterStateUpdated()')
         ->toContain("->key('coupon_reward_rules')");
@@ -689,6 +692,63 @@ it('renders merged admin management tabs for wallet flash sale and comments', fu
         ->assertSee('页面评论')
         ->assertSee('公告评论')
         ->assertSee('论坛回复');
+});
+
+it('removes persisted blank wallet recharge options when wallet settings are saved', function (): void {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $valid = WalletRechargeOption::query()->create([
+        'name' => 'Keep recharge option',
+        'currency_code' => 'CNY',
+        'currency_unit' => 'yuan',
+        'amount_cents' => 1000,
+        'discount_percent' => null,
+        'bonus_cents' => 0,
+        'is_active' => true,
+    ]);
+    $blank = WalletRechargeOption::query()->create([
+        'name' => null,
+        'currency_code' => 'CNY',
+        'currency_unit' => 'yuan',
+        'amount_cents' => 0,
+        'discount_percent' => null,
+        'bonus_cents' => 0,
+        'is_active' => true,
+    ]);
+
+    Livewire::actingAs($admin)
+        ->test(\App\Filament\Pages\WalletSettingsPage::class)
+        ->call('save')
+        ->assertHasNoErrors();
+
+    expect(WalletRechargeOption::query()->whereKey($valid->id)->exists())->toBeTrue()
+        ->and(WalletRechargeOption::query()->whereKey($blank->id)->exists())->toBeFalse();
+});
+
+it('persists edited wallet recharge option settings', function (): void {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $option = WalletRechargeOption::query()->create([
+        'name' => 'Old recharge option',
+        'currency_code' => 'CNY',
+        'currency_unit' => 'yuan',
+        'amount_cents' => 1000,
+        'discount_percent' => null,
+        'bonus_cents' => 0,
+        'is_active' => true,
+    ]);
+
+    $component = Livewire::actingAs($admin)->test(\App\Filament\Pages\WalletSettingsPage::class);
+    $state = $component->instance()->data['recharge_options'];
+    $key = array_key_first($state);
+
+    $component
+        ->set("data.recharge_options.{$key}.name", 'Updated recharge option')
+        ->set("data.recharge_options.{$key}.discount_percent", 80)
+        ->call('save')
+        ->assertHasNoErrors();
+
+    expect($option->fresh())
+        ->name->toBe('Updated recharge option')
+        ->discount_percent->toBe(80);
 });
 
 it('renders resource library forum logs and admin role defaults for admins', function (): void {
