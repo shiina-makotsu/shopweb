@@ -1162,6 +1162,8 @@ it('hides storefront order numbers by default', function (): void {
 });
 
 it('renders custom pages from markdown safely', function (): void {
+    config(['shop.first_visit_loading.enabled' => false]);
+
     $page = Page::query()->create([
         'title' => '关于我们',
         'slug' => 'about-us',
@@ -1186,6 +1188,8 @@ it('renders custom pages from markdown safely', function (): void {
 });
 
 it('renders product comment font awesome shortcodes and icon inserters', function (): void {
+    config(['shop.first_visit_loading.enabled' => false]);
+
     $category = Category::query()->create([
         'name' => '评论分类',
         'slug' => 'comment-category',
