@@ -1172,7 +1172,8 @@ it('renders custom pages from markdown safely', function (): void {
         'is_published' => true,
     ]);
 
-    $this->get(route('pages.show', $page))
+    $this->followingRedirects()
+        ->get(route('pages.show', $page))
         ->assertOk()
         ->assertSee('关于我们')
         ->assertSee('购买说明')
@@ -1200,6 +1201,7 @@ it('renders product comment font awesome shortcodes and icon inserters', functio
     ]);
     ProductVariant::query()->create([
         'product_id' => $product->id,
+        'sku' => 'COMMENT-ICON-SKU',
         'spec_name' => '默认规格',
         'price_cents' => 1200,
         'stock' => 5,
