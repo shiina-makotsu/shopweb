@@ -21,6 +21,7 @@ class CardPreviewTemplate
      *     originalOrder?: string,
      *     sortFieldLabel?: string,
      *     saveLabel?: string,
+     *     sortSaveMethod?: string,
      *     minCardWidth?: string
      * } $config
      */
@@ -39,10 +40,15 @@ class CardPreviewTemplate
         $originalOrder = e((string) ($config['originalOrder'] ?? ''));
         $sortFieldLabel = (string) ($config['sortFieldLabel'] ?? '排序');
         $saveLabel = e((string) ($config['saveLabel'] ?? '保存排序'));
+        $sortSaveMethod = (string) ($config['sortSaveMethod'] ?? '');
+        $sortSaveMethodAttribute = e($sortSaveMethod);
         $minCardWidth = e((string) ($config['minCardWidth'] ?? '230px'));
         $descriptionHtml = $description === '' ? '' : '<span class="shop-admin-preview-muted" style="color:#64748b;font-size:12px;">'.$description.'</span>';
         $badgeHtml = $badge === '' ? '' : '<span class="shop-admin-preview-badge" style="border-radius:999px;background:#eff8ff;color:#0369a1;padding:3px 9px;font-size:12px;">'.$badge.'</span>';
         $saveHtml = '';
+        $inlineSaveAction = e(<<<'JS'
+event.preventDefault(); event.stopPropagation(); const button = this; const root = button.closest('[data-card-preview-root]'); const cards = Array.from(root?.querySelectorAll('[data-card-preview-card]') || []).filter((card) => card.dataset.cardPreviewPlaceholder !== '1'); const order = cards.map((card) => card.dataset.cardPreviewSortKey || card.dataset.cardPreviewCard || '').filter(Boolean); const uiOrder = cards.map((card) => card.dataset.cardPreviewCard || '').filter(Boolean); const label = button.dataset.cardPreviewSaveLabel || '\u4fdd\u5b58\u6392\u5e8f'; const fail = () => { button.disabled = false; button.textContent = '\u4fdd\u5b58\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5'; }; if (order.length < 2) { button.textContent = '\u6ca1\u6709\u9700\u8981\u4fdd\u5b58\u7684\u6392\u5e8f'; window.setTimeout(() => { button.textContent = label; }, 1200); return false; } const method = button.dataset.cardPreviewSortSaveMethod || ''; const wireRoot = button.closest('[wire\\:id]'); const wire = wireRoot ? window.Livewire?.find?.(wireRoot.getAttribute('wire:id')) : null; if (! method || ! wire?.call) { fail(); return false; } button.disabled = true; button.textContent = '\u4fdd\u5b58\u4e2d...'; Promise.resolve(wire.call(method, order)).then(() => { if (root) root.dataset.cardPreviewOriginalOrder = uiOrder.join(','); button.textContent = '\u5df2\u4fdd\u5b58'; window.setTimeout(() => { button.disabled = false; button.textContent = label; }, 1200); }).catch(fail); return false;
+JS);
 
         if ($enableSorting) {
             $saveHtml = <<<HTML
@@ -50,15 +56,18 @@ class CardPreviewTemplate
                     <button
                         type="button"
                         data-card-preview-save-order
+                        data-card-preview-save-label="{$saveLabel}"
+                        data-card-preview-sort-save-method="{$sortSaveMethodAttribute}"
                         {$legacySaveAttributes}
-                        disabled
+                        aria-disabled="true"
+                        onclick="{$inlineSaveAction}"
                         class="shop-admin-preview-save"
                     >{$saveLabel}</button>
                 </div>
             HTML;
         }
 
-        $script = static::script($key, $settingsSelector, $enableSorting, $sortFieldLabel);
+        $script = static::script($key, $settingsSelector, $enableSorting, $sortFieldLabel, $sortSaveMethod);
 
         return new HtmlString(<<<HTML
             <div
@@ -178,12 +187,13 @@ class CardPreviewTemplate
         return '<div class="shop-admin-preview-image-placeholder" style="display:grid;width:64px;height:64px;place-items:center;border:1px dashed #cbd5e1;border-radius:12px;background:#f8fafc;color:#94a3b8;font-size:12px;">'.e($alt).'</div>';
     }
 
-    private static function script(string $key, string $settingsSelector, bool $enableSorting, string $sortFieldLabel): string
+    private static function script(string $key, string $settingsSelector, bool $enableSorting, string $sortFieldLabel, string $sortSaveMethod = ''): string
     {
         $encodedKey = json_encode($key, JSON_THROW_ON_ERROR);
         $encodedSelector = json_encode($settingsSelector, JSON_THROW_ON_ERROR);
         $encodedSorting = $enableSorting ? 'true' : 'false';
         $encodedSortFieldLabel = json_encode($sortFieldLabel, JSON_THROW_ON_ERROR);
+        $encodedSortSaveMethod = json_encode($sortSaveMethod, JSON_THROW_ON_ERROR);
 
         return <<<HTML
             <script>
@@ -196,6 +206,11 @@ class CardPreviewTemplate
                     const settingsSelector = {$encodedSelector};
                     const enableSorting = {$encodedSorting};
                     const sortFieldLabel = {$encodedSortFieldLabel};
+                    const sortSaveMethod = {$encodedSortSaveMethod};
+                    const defaultSaveLabel = '\u4fdd\u5b58\u6392\u5e8f';
+                    const savingLabel = '\u4fdd\u5b58\u4e2d...';
+                    const savedLabel = '\u5df2\u4fdd\u5b58';
+                    const failedLabel = '\u4fdd\u5b58\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5';
                     const rootSelector = '[data-card-preview-root="' + CSS.escape(key) + '"]';
                     const settingItemAttribute = 'data-card-preview-setting-item-' + key;
                     const initializedAttribute = 'data-card-preview-initialized-' + key;
@@ -209,6 +224,7 @@ class CardPreviewTemplate
                     window.shopwebCardPreviewTemplateState[key] ||= { open: [] };
                     const state = window.shopwebCardPreviewTemplateState[key];
 
+                    const eventElement = (event) => event.target instanceof Element ? event.target : event.target?.parentElement;
                     const roots = () => Array.from(document.querySelectorAll(rootSelector));
                     const scheduleRefresh = () => {
                         window.clearTimeout(refreshTimer);
@@ -232,10 +248,51 @@ class CardPreviewTemplate
                     };
                     const grid = (root) => root?.querySelector('[data-card-preview-grid]');
                     const cards = (root) => Array.from(grid(root)?.querySelectorAll('[data-card-preview-card]') || []);
-                    const originalOrder = (root) => (root?.dataset.cardPreviewOriginalOrder || '').split(',').filter(Boolean);
                     const currentOrder = (root) => cards(root)
                         .filter((card) => card.dataset.cardPreviewPlaceholder !== '1')
                         .map((card) => card.dataset.cardPreviewCard || '');
+                    const currentSortOrder = (root) => cards(root)
+                        .filter((card) => card.dataset.cardPreviewPlaceholder !== '1')
+                        .map((card) => card.dataset.cardPreviewSortKey || card.dataset.cardPreviewCard || '');
+                    const movePlaceholdersLast = (root) => {
+                        const targetGrid = grid(root);
+
+                        if (! targetGrid) return;
+
+                        cards(root)
+                            .filter((card) => card.dataset.cardPreviewPlaceholder === '1')
+                            .forEach((card) => targetGrid.appendChild(card));
+                    };
+                    const insertionCardForPoint = (root, x, y) => {
+                        const candidates = cards(root)
+                            .filter((card) => card !== dragState.card && card.dataset.cardPreviewPlaceholder !== '1');
+
+                        return candidates.reduce((closest, card) => {
+                            const box = card.getBoundingClientRect();
+                            const offset = Math.hypot(x - (box.left + box.width / 2), y - (box.top + box.height / 2));
+                            const after = y > box.top + box.height / 2 || (Math.abs(y - (box.top + box.height / 2)) < box.height / 2 && x > box.left + box.width / 2);
+
+                            if (! closest || offset < closest.offset) {
+                                return { card, offset, after };
+                            }
+
+                            return closest;
+                        }, null);
+                    };
+                    const originalOrder = (root) => {
+                        if (! root) return [];
+
+                        const raw = root.dataset.cardPreviewOriginalOrder || '';
+
+                        if (raw !== '') {
+                            return raw.split(',').filter(Boolean);
+                        }
+
+                        const current = currentOrder(root);
+                        root.dataset.cardPreviewOriginalOrder = current.join(',');
+
+                        return current;
+                    };
                     const sectionFor = (root) => root?.closest('section, form') || document;
                     const settingsFor = (root) => {
                         const scopes = [
@@ -378,7 +435,9 @@ class CardPreviewTemplate
                         const original = originalOrder(root);
                         const current = currentOrder(root);
 
-                        return original.length === current.length && current.some((value, index) => value !== original[index]);
+                        if (current.length < 2) return false;
+
+                        return current.join(',') !== original.join(',');
                     };
                     const setSaveButtonState = (root) => {
                         const button = root?.querySelector('[data-card-preview-save-order]');
@@ -386,13 +445,31 @@ class CardPreviewTemplate
 
                         if (! button) return;
 
-                        button.disabled = ! changed;
+                        button.disabled = false;
+                        button.setAttribute('aria-disabled', changed ? 'false' : 'true');
                         button.style.background = changed ? 'linear-gradient(135deg,#bae6fd,#fbcfe8)' : '';
                         button.style.borderColor = changed ? '#7dd3fc' : '';
                         button.style.color = changed ? '#0f172a' : '';
                         button.style.cursor = changed ? 'pointer' : 'not-allowed';
                     };
-                    const syncSortInputs = (root) => {
+                    const wireModelName = (input) => Array.from(input?.attributes || [])
+                        .find((attribute) => attribute.name === 'wire:model' || attribute.name.startsWith('wire:model.'))
+                        ?.value;
+                    const livewireComponent = (root) => {
+                        const livewireRoot = root?.closest('[wire\\:id]');
+                        const componentId = livewireRoot?.getAttribute('wire:id');
+
+                        return componentId ? window.Livewire?.find?.(componentId) : null;
+                    };
+                    const syncLivewireModel = (root, input, value) => {
+                        const model = wireModelName(input);
+                        const component = livewireComponent(root);
+
+                        if (! model || ! component?.set) return;
+
+                        component.set(model, value, false);
+                    };
+                    const syncSortInputs = (root, submit = true) => {
                         const form = root.closest('form');
                         const items = settingItems(root);
 
@@ -402,18 +479,41 @@ class CardPreviewTemplate
 
                             if (! input) return;
 
-                            input.value = String((orderIndex + 1) * 10);
+                            const sortValue = String((orderIndex + 1) * 10);
+                            input.value = sortValue;
                             input.dispatchEvent(new Event('input', { bubbles: true }));
                             input.dispatchEvent(new Event('change', { bubbles: true }));
+                            syncLivewireModel(root, input, sortValue);
                         });
 
-                        form?.requestSubmit();
+                        if (submit) {
+                            window.setTimeout(() => form?.requestSubmit(), 80);
+                        }
+                    };
+                    const saveSortOrder = (root, button) => {
+                        const order = currentOrder(root);
+
+                        syncSortInputs(root, false);
+
+                        if (! sortSaveMethod) {
+                            syncSortInputs(root, true);
+
+                            return;
+                        }
+
+                        button.disabled = true;
+                        button.textContent = savingLabel;
+
+                        root.dispatchEvent(new CustomEvent('shopweb-card-preview-save-sort', {
+                            bubbles: true,
+                            detail: { key, method: sortSaveMethod, order: currentSortOrder(root), uiOrder: order },
+                        }));
                     };
 
                     document.addEventListener('dragstart', (event) => {
                         if (! enableSorting) return;
 
-                        const card = event.target.closest('[data-card-preview-card]');
+                        const card = eventElement(event)?.closest('[data-card-preview-card]');
                         const root = card?.closest(rootSelector);
 
                         if (! card || ! root || card.dataset.cardPreviewPlaceholder === '1') return;
@@ -428,6 +528,7 @@ class CardPreviewTemplate
 
                         const root = dragState.card.closest(rootSelector);
                         dragState.card.style.opacity = '';
+                        movePlaceholdersLast(root);
                         dragState.card = null;
                         setSaveButtonState(root);
                     });
@@ -435,27 +536,108 @@ class CardPreviewTemplate
                     document.addEventListener('dragover', (event) => {
                         if (! enableSorting || ! dragState.card) return;
 
-                        const target = event.target.closest('[data-card-preview-card]');
+                        const target = eventElement(event)?.closest('[data-card-preview-card]');
                         const root = target?.closest(rootSelector);
 
                         if (! target || ! root || target === dragState.card || target.dataset.cardPreviewPlaceholder === '1') return;
 
                         event.preventDefault();
-                        const targetGrid = target.closest('[data-card-preview-grid]');
-                        const box = target.getBoundingClientRect();
-                        const after = event.clientY > box.top + box.height / 2 || event.clientX > box.left + box.width / 2;
+                        const targetGrid = grid(root);
+                        const insertion = insertionCardForPoint(root, event.clientX, event.clientY);
 
-                        targetGrid.insertBefore(dragState.card, after ? target.nextSibling : target);
+                        if (! targetGrid || ! insertion) return;
+
+                        targetGrid.insertBefore(dragState.card, insertion.after ? insertion.card.nextSibling : insertion.card);
                     });
 
                     document.addEventListener('click', (event) => {
-                        const button = event.target.closest('[data-card-preview-save-order]');
+                        const button = eventElement(event)?.closest('[data-card-preview-save-order]');
                         const root = button?.closest(rootSelector);
 
-                        if (! button || ! root || button.disabled) return;
+                        if (! button || ! root) return;
+                        event.preventDefault();
+                        event.stopPropagation();
 
-                        syncSortInputs(root);
+                        saveSortOrder(root, button);
                     });
+
+                    document.addEventListener('shopweb-card-preview-save-sort', (event) => {
+                        if (event.detail?.key !== key) return;
+
+                        const root = eventElement(event)?.closest(rootSelector);
+                        const button = root?.querySelector('[data-card-preview-save-order]');
+                        const method = event.detail.method;
+                        const order = event.detail.order || [];
+                        const component = livewireComponent(root);
+
+                        if (! root || ! method || ! component?.call) {
+                            window.dispatchEvent(new CustomEvent('shopweb-card-preview-sort-failed', { detail: { key } }));
+
+                            return;
+                        }
+
+                        Promise.resolve(component.call(method, order))
+                            .then(() => {
+                                window.dispatchEvent(new CustomEvent('shopweb-card-preview-sort-saved', {
+                                    detail: { key, order: event.detail.uiOrder || currentOrder(root) },
+                                }));
+                            })
+                            .catch(() => {
+                                if (button) {
+                                    button.disabled = false;
+                                }
+
+                                window.dispatchEvent(new CustomEvent('shopweb-card-preview-sort-failed', { detail: { key } }));
+                            });
+                    });
+
+                    document.addEventListener('shopweb-card-preview-sort-saved', (event) => {
+                        if (event.detail?.key !== key) return;
+
+                        roots().forEach((root) => {
+                            const button = root.querySelector('[data-card-preview-save-order]');
+
+                            root.dataset.cardPreviewOriginalOrder = (event.detail.order || currentOrder(root)).join(',');
+
+                            if (button) {
+                                const label = button.dataset.cardPreviewSaveLabel || defaultSaveLabel;
+
+                                button.textContent = savedLabel;
+                                window.setTimeout(() => {
+                                    button.textContent = label;
+                                }, 1200);
+                            }
+
+                            setSaveButtonState(root);
+                        });
+                    });
+
+                    document.addEventListener('shopweb-card-preview-sort-failed', (event) => {
+                        if (event.detail?.key !== key) return;
+
+                        roots().forEach((root) => {
+                            const button = root.querySelector('[data-card-preview-save-order]');
+
+                            if (! button) return;
+
+                            button.disabled = false;
+                            button.textContent = failedLabel;
+                            button.style.background = '#fee2e2';
+                            button.style.borderColor = '#fca5a5';
+                            button.style.color = '#991b1b';
+                            button.style.cursor = 'pointer';
+                        });
+                    });
+
+                    document.addEventListener('submit', (event) => {
+                        const form = event.target instanceof HTMLFormElement ? event.target : null;
+
+                        if (! form) return;
+
+                        roots()
+                            .filter((root) => form.contains(root) && orderChanged(root))
+                            .forEach((root) => syncSortInputs(root, false));
+                    }, true);
 
                     ['click', 'change', 'input'].forEach((eventName) => {
                         document.addEventListener(eventName, (event) => {
@@ -466,7 +648,7 @@ class CardPreviewTemplate
                     });
 
                     document.addEventListener('click', (event) => {
-                        const card = event.target.closest('[data-card-preview-card]');
+                        const card = eventElement(event)?.closest('[data-card-preview-card]');
                         const root = card?.closest(rootSelector);
 
                         if (! card || ! root) return;
@@ -497,6 +679,7 @@ class CardPreviewTemplate
                     });
 
                     const initializeRoots = (options = {}) => roots().forEach((root) => {
+                        movePlaceholdersLast(root);
                         const items = settingItems(root, options);
                         if (options.restoreVisibility) {
                             restoreSettingsVisibility(root, items);

@@ -243,6 +243,13 @@ it('renders catalog reference management pages for admins', function (): void {
         ->assertSee('添加规格值')
         ->assertSee('标签')
         ->assertSee('数量单位');
+
+    $productResourceSource = file_get_contents(app_path('Filament/Resources/ProductResource.php'));
+
+    expect($productResourceSource)
+        ->toContain("'key' => 'product-sku'")
+        ->toContain("'enableSorting' => false")
+        ->not->toContain("'sortSaveMethod' => 'saveProductSkuSortOrder'");
 });
 
 it('opens product and customer edit pages by stable ids after route key changes', function (): void {
@@ -638,6 +645,10 @@ it('renders merged admin management tabs for wallet flash sale and comments', fu
         ->assertSee('data-wallet-recharge-preview-card', false)
         ->assertSee('data-wallet-recharge-settings', false)
         ->assertSee('data-wallet-recharge-save-order', false)
+        ->assertSee('data-card-preview-sort-key', false)
+        ->assertSee('data-card-preview-sort-save-method', false)
+        ->assertSee('onclick=', false)
+        ->assertSee('data-wallet-recharge-option-id', false)
         ->assertSee(\App\Support\Money::format(1000))
         ->assertDontSee(\App\Support\Money::format(10))
         ->assertSee('Coupon reward option')
@@ -655,7 +666,32 @@ it('renders merged admin management tabs for wallet flash sale and comments', fu
         ->toContain('}), 20);')
         ->toContain('rememberScroll')
         ->toContain('restoreScroll')
-        ->toContain("['click', 'change', 'input']");
+        ->toContain("['click', 'change', 'input']")
+        ->toContain('root.dataset.cardPreviewOriginalOrder = current.join')
+        ->toContain("return current.join(',') !== original.join(',')")
+        ->toContain('wireModelName')
+        ->toContain('syncLivewireModel')
+        ->toContain('component.set(model, value, false)')
+        ->toContain('eventElement')
+        ->toContain('aria-disabled="true"')
+        ->toContain('data-card-preview-sort-save-method')
+        ->toContain('onclick="{$inlineSaveAction}"')
+        ->toContain('$inlineSaveAction = e')
+        ->toContain("button.setAttribute('aria-disabled'")
+        ->toContain('saveSortOrder(root, button)')
+        ->toContain('savingLabel')
+        ->toContain('savedLabel')
+        ->toContain('failedLabel')
+        ->toContain('sortSaveMethod')
+        ->toContain('button.textContent = savingLabel')
+        ->toContain("root.dispatchEvent(new CustomEvent('shopweb-card-preview-save-sort'")
+        ->toContain('currentSortOrder')
+        ->toContain('component.call(method, order)')
+        ->toContain("document.addEventListener('shopweb-card-preview-sort-saved'")
+        ->toContain('movePlaceholdersLast')
+        ->toContain('insertionCardForPoint')
+        ->toContain("document.addEventListener('submit'")
+        ->not->toContain('syncSortInputs(root, false);'.PHP_EOL.'                        dragState.card = null');
 
     $walletPageSource = file_get_contents(app_path('Filament/Pages/WalletSettingsPage.php'));
 
@@ -665,7 +701,15 @@ it('renders merged admin management tabs for wallet flash sale and comments', fu
         ->toContain("->partiallyRenderComponentsAfterStateUpdated(['_recharge_page_preview'])")
         ->toContain("->partiallyRenderComponentsAfterStateUpdated(['coupon_reward_rules'])")
         ->toContain('->skipRenderAfterStateUpdated()')
-        ->toContain("->key('coupon_reward_rules')");
+        ->toContain("->key('coupon_reward_rules')")
+        ->toContain('orderedRechargeOptionPreviewEntries')
+        ->toContain("->reject(fn (array \$entry): bool => static::isBlankRechargeOptionData(\$entry['state']))")
+        ->toContain("'sortSaveMethod' => 'saveRechargeOptionSortOrder'")
+        ->toContain("'legacySaveAttributes' => 'data-wallet-recharge-save-order'")
+        ->toContain('data-card-preview-sort-key')
+        ->toContain('data-wallet-recharge-option-id')
+        ->toContain('syncRechargeOptionStateOrder')
+        ->toContain('$this->skipRender();');
 
     $this->actingAs($admin)
         ->get(\App\Filament\Resources\WalletRedeemCodeResource::getUrl('index'))
@@ -692,6 +736,70 @@ it('renders merged admin management tabs for wallet flash sale and comments', fu
         ->assertSee('页面评论')
         ->assertSee('公告评论')
         ->assertSee('论坛回复');
+});
+
+it('persists wallet recharge option preview drag sort order', function (): void {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $first = WalletRechargeOption::query()->create([
+        'name' => 'First recharge option',
+        'currency_code' => 'CNY',
+        'currency_unit' => 'yuan',
+        'amount_cents' => 1000,
+        'discount_percent' => null,
+        'bonus_cents' => 0,
+        'is_active' => true,
+        'sort_order' => 10,
+    ]);
+    $second = WalletRechargeOption::query()->create([
+        'name' => 'Second recharge option',
+        'currency_code' => 'CNY',
+        'currency_unit' => 'yuan',
+        'amount_cents' => 2000,
+        'discount_percent' => null,
+        'bonus_cents' => 0,
+        'is_active' => true,
+        'sort_order' => 20,
+    ]);
+
+    $component = Livewire::actingAs($admin)
+        ->test(\App\Filament\Pages\WalletSettingsPage::class)
+        ->call('saveRechargeOptionSortOrder', [$second->id, $first->id])
+        ->assertHasNoErrors();
+
+    expect(collect($component->instance()->data['recharge_options'])
+        ->reject(fn (array $option): bool => empty($option['id']))
+        ->pluck('id')
+        ->all())
+        ->toBe([$second->id, $first->id]);
+
+    $component
+        ->call('save')
+        ->assertHasNoErrors();
+
+    expect($second->fresh()->sort_order)->toBe(10)
+        ->and($first->fresh()->sort_order)->toBe(20)
+        ->and(WalletRechargeOption::query()->orderBy('sort_order')->pluck('id')->all())
+        ->toBe([$second->id, $first->id]);
+
+    $component = Livewire::actingAs($admin)
+        ->test(\App\Filament\Pages\WalletSettingsPage::class)
+        ->call('saveRechargeOptionSortOrder', [$first->id, $second->id])
+        ->assertHasNoErrors();
+
+    expect(collect($component->instance()->data['recharge_options'])
+        ->reject(fn (array $option): bool => empty($option['id']))
+        ->pluck('id')
+        ->all())
+        ->toBe([$first->id, $second->id]);
+
+    $component
+        ->call('save')
+        ->assertHasNoErrors();
+
+    expect($first->fresh()->sort_order)->toBe(10)
+        ->and($second->fresh()->sort_order)->toBe(20)
+        ->and(WalletRechargeOption::query()->orderBy('sort_order')->pluck('id')->all())
+        ->toBe([$first->id, $second->id]);
 });
 
 it('removes persisted blank wallet recharge options when wallet settings are saved', function (): void {

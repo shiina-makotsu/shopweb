@@ -364,6 +364,76 @@ class WalletSettingsPage extends Page implements HasSchemas
     }
 
     /**
+     * @param  array<int, int|string>  $orderedKeys
+     */
+    public function saveRechargeOptionSortOrder(array $orderedKeys): void
+    {
+        $options = array_values($this->data['recharge_options'] ?? []);
+        $knownIds = collect($options)
+            ->map(fn (array $option): int => (int) ($option['id'] ?? 0))
+            ->filter(fn (int $id): bool => $id > 0)
+            ->values();
+        $orderedIds = collect($orderedKeys)
+            ->map(fn (int|string $key): int => (int) $key)
+            ->filter(fn (int $id): bool => $knownIds->contains($id))
+            ->values();
+
+        if ($orderedIds->isEmpty()) {
+            $orderedIds = collect($orderedKeys)
+                ->map(fn (int|string $index): ?array => $options[(int) $index] ?? null)
+                ->filter(fn (?array $option): bool => $option !== null && ! static::isBlankRechargeOptionData($option))
+                ->map(fn (array $option): int => (int) ($option['id'] ?? 0))
+                ->filter(fn (int $id): bool => $id > 0)
+                ->values();
+        }
+
+        if ($orderedIds->count() < 2) {
+            Notification::make()->title('没有需要保存的排序')->info()->send();
+
+            return;
+        }
+
+        $orderedIds->each(function (int $id, int $index): void {
+            WalletRechargeOption::query()
+                ->whereKey($id)
+                ->update(['sort_order' => ($index + 1) * 10]);
+        });
+
+        $this->syncRechargeOptionStateOrder($orderedIds->all());
+        $this->skipRender();
+
+        Notification::make()->title('充值选项排序已保存')->success()->send();
+    }
+
+    /**
+     * @param  array<int, int>  $orderedIds
+     */
+    private function syncRechargeOptionStateOrder(array $orderedIds): void
+    {
+        $orderIndexes = array_flip($orderedIds);
+        $options = collect($this->data['recharge_options'] ?? [])
+            ->map(function (array $option, int|string $key) use ($orderIndexes): array {
+                $id = (int) ($option['id'] ?? 0);
+
+                if ($id > 0 && array_key_exists($id, $orderIndexes)) {
+                    $option['sort_order'] = ((int) $orderIndexes[$id] + 1) * 10;
+                } elseif (! static::isBlankRechargeOptionData($option)) {
+                    $option['sort_order'] = (int) ($option['sort_order'] ?? 999999);
+                }
+
+                return $option;
+            })
+            ->sortBy([
+                fn (array $option): int => static::isBlankRechargeOptionData($option) ? 1 : 0,
+                fn (array $option): int => (int) ($option['sort_order'] ?? 999999),
+            ])
+            ->values()
+            ->all();
+
+        $this->data['recharge_options'] = $options;
+    }
+
+    /**
      * @param  array<int, array<string, mixed>>  $rules
      * @return array<int, array<string, mixed>>
      */
@@ -468,9 +538,9 @@ class WalletSettingsPage extends Page implements HasSchemas
 
     private static function rechargeOptionsPagePreviewHtml(array $options): HtmlString
     {
-        $cards = collect($options)
-            ->values()
-            ->map(fn (array $state, int $index): string => static::rechargeOptionPreviewCardHtml($state, $index))
+        $previewEntries = static::orderedRechargeOptionPreviewEntries($options);
+        $cards = $previewEntries
+            ->map(fn (array $entry): string => static::rechargeOptionPreviewCardHtml($entry['state'], $entry['index']))
             ->filter()
             ->implode('');
 
@@ -478,7 +548,10 @@ class WalletSettingsPage extends Page implements HasSchemas
             $cards = static::rechargeOptionPreviewCardHtml(static::emptyRechargeOptionState(), 0);
         }
 
-        $initialOrder = collect($options)->values()->keys()->implode(',');
+        $initialOrder = $previewEntries
+            ->reject(fn (array $entry): bool => static::isBlankRechargeOptionData($entry['state']))
+            ->pluck('index')
+            ->implode(',');
 
         return CardPreviewTemplate::render([
             'key' => 'wallet-recharge',
@@ -494,8 +567,22 @@ class WalletSettingsPage extends Page implements HasSchemas
             'originalOrder' => $initialOrder,
             'sortFieldLabel' => '排序',
             'saveLabel' => '保存排序',
+            'sortSaveMethod' => 'saveRechargeOptionSortOrder',
         ]);
 
+    }
+
+    private static function orderedRechargeOptionPreviewEntries(array $options): \Illuminate\Support\Collection
+    {
+        return collect($options)
+            ->values()
+            ->map(fn (array $state, int $index): array => ['state' => $state, 'index' => $index])
+            ->sortBy([
+                fn (array $entry): int => static::isBlankRechargeOptionData($entry['state']) ? 1 : 0,
+                fn (array $entry): int => (int) ($entry['state']['sort_order'] ?? ($entry['index'] + 1) * 10),
+                fn (array $entry): int => $entry['index'],
+            ])
+            ->values();
     }
 
     private static function rechargeOptionPreviewCardHtml(array $state, int $index): string
@@ -536,7 +623,7 @@ class WalletSettingsPage extends Page implements HasSchemas
                 ['label' => '钱包到账', 'value' => html_entity_decode((string) $credit, ENT_QUOTES, 'UTF-8'), 'class' => 'shop-admin-preview-price'],
             ],
             'footer' => $footer,
-            'legacyAttributes' => 'data-wallet-recharge-preview-card="'.$index.'" data-wallet-recharge-placeholder="'.($isBlank ? '1' : '0').'"',
+            'legacyAttributes' => 'data-wallet-recharge-preview-card="'.$index.'" data-card-preview-sort-key="'.$id.'" data-wallet-recharge-option-id="'.$id.'" data-wallet-recharge-placeholder="'.($isBlank ? '1' : '0').'"',
             'isPlaceholder' => $isBlank,
             'draggable' => ! $isBlank,
         ]);
