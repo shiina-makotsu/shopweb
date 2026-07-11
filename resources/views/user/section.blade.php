@@ -679,40 +679,36 @@
 
                 <section class="rounded-sm border border-slate-300">
                     <h2 class="border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold">我的优惠码</h2>
-                    <div class="divide-y divide-slate-100">
+                    <div class="grid gap-3 p-4 sm:grid-cols-2">
                         @forelse($coupons as $userCoupon)
                             @php
                                 $coupon = $userCoupon->coupon;
                             @endphp
                             @if($coupon)
-                                <article class="grid gap-3 px-4 py-4 text-sm md:grid-cols-[1fr_auto]">
-                                    <div>
-                                        <div class="flex flex-wrap items-center gap-2">
-                                            <h3 class="font-semibold">{{ $coupon->name }}</h3>
-                                            <span class="rounded-sm border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs">{{ $userCoupon->statusLabel() }}</span>
-                                        </div>
-                                        <p class="mt-1 text-slate-600">代码：<code class="rounded-sm bg-slate-100 px-1.5 py-0.5">{{ $coupon->code }}</code></p>
-                                        <p class="mt-1 text-slate-600">范围：{{ $coupon->scopeLabel() }}</p>
-                                        <p class="mt-1 text-slate-600">叠加：{{ $coupon->is_stackable ? '可与其它优惠码同单使用' : '不可与任何其它优惠码同单使用' }}</p>
-                                        <p class="mt-1 text-slate-600">
-                                            时间：
-                                            {{ $coupon->starts_at?->format('Y-m-d H:i') ?? '不限开始' }}
-                                            -
-                                            {{ $coupon->ends_at?->format('Y-m-d H:i') ?? '不限结束' }}
-                                        </p>
-                                    </div>
-                                    <div class="text-left md:text-right">
-                                        <p class="text-lg font-semibold text-red-700">{{ $coupon->discountLabel() }}</p>
-                                        @if($coupon->minimum_order_cents > 0)
-                                            <p class="mt-1 text-xs text-slate-500">满 @money($coupon->minimum_order_cents) 可用</p>
-                                        @else
-                                            <p class="mt-1 text-xs text-slate-500">无最低金额</p>
+                                <details class="group overflow-hidden rounded-md border border-slate-300 bg-white text-sm shadow-sm dark:border-slate-600 dark:bg-slate-800">
+                                    <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-4 marker:hidden">
+                                        <span class="min-w-0">
+                                            <span class="block truncate font-semibold text-slate-900 dark:text-slate-100">{{ $coupon->name }}</span>
+                                            <span class="mt-1 block text-xs text-slate-500 dark:text-slate-400">点击查看使用限制</span>
+                                        </span>
+                                        <span class="shrink-0 text-lg font-bold text-red-700 dark:text-red-400">{{ $coupon->discountLabel() }}</span>
+                                    </summary>
+                                    <div class="border-t border-slate-200 bg-slate-50 px-4 py-4 text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300">
+                                        <dl class="grid gap-2">
+                                            <div class="flex justify-between gap-3"><dt class="text-slate-500 dark:text-slate-400">适用范围</dt><dd class="text-right font-medium">{{ $coupon->scopeLabel() }}</dd></div>
+                                            <div class="flex justify-between gap-3"><dt class="text-slate-500 dark:text-slate-400">最低金额</dt><dd class="text-right font-medium">{{ $coupon->minimum_order_cents > 0 ? \App\Support\Money::format((int) $coupon->minimum_order_cents) : '无门槛' }}</dd></div>
+                                            <div class="flex justify-between gap-3"><dt class="text-slate-500 dark:text-slate-400">使用次数</dt><dd class="text-right font-medium">每人 {{ $coupon->per_user_limit }} 次 / 总计 {{ $coupon->usage_limit }} 次</dd></div>
+                                            <div class="flex justify-between gap-3"><dt class="text-slate-500 dark:text-slate-400">叠加使用</dt><dd class="text-right font-medium">{{ $coupon->is_stackable ? '允许' : '不允许' }}</dd></div>
+                                            <div class="flex justify-between gap-3"><dt class="text-slate-500 dark:text-slate-400">有效时效</dt><dd class="text-right font-medium">{{ $coupon->remainingValidityLabel() }}</dd></div>
+                                        </dl>
+                                        @if($coupon->ends_at)
+                                            <p class="mt-3 text-right text-xs text-slate-500 dark:text-slate-400">有效至 {{ $coupon->ends_at->format('Y-m-d H:i') }}</p>
                                         @endif
                                     </div>
-                                </article>
+                                </details>
                             @endif
                         @empty
-                            <p class="px-4 py-8 text-sm text-slate-600">暂无已添加的优惠码。</p>
+                            <p class="py-8 text-sm text-slate-600 dark:text-slate-400 sm:col-span-2">暂无已添加的优惠码。</p>
                         @endforelse
                     </div>
                 </section>

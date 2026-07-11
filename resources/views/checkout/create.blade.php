@@ -149,39 +149,38 @@
                                 <span class="text-sm font-medium">可用优惠码</span>
                                 <a class="text-xs font-medium text-blue-700 hover:text-blue-900" href="{{ route('user.section', 'coupons') }}">管理我的优惠码</a>
                             </div>
-                            @foreach($items as $item)
-                                @php($lineChoices = $couponChoicesByVariant[(int) $item['variant']->id] ?? [])
-                                <label class="block rounded-sm border border-slate-200 bg-white px-3 py-3">
-                                    <span class="block text-xs font-medium text-slate-700">{{ $item['product']->title }} / {{ $item['variant']->specLabel() }}</span>
-                                    @if($lineChoices !== [])
-                                        <select class="mt-2 w-full rounded-sm border border-slate-300 bg-white px-3 py-2 text-sm" name="coupon_items[{{ $item['variant']->id }}]" data-coupon-select>
-                                            <option value="" data-discount-cents="0">不使用优惠码</option>
-                                            @foreach($lineChoices as $choice)
-                                                @php($coupon = $choice['coupon'])
-                                                @continue(! $coupon)
-                                                <option
-                                                    value="{{ $choice['user_coupon']->id }}"
-                                                    data-discount-cents="{{ (int) $choice['discount_cents'] }}"
-                                                    @disabled(! $choice['available'])
-                                                    @selected((string) old('coupon_items.'.$item['variant']->id) === (string) $choice['user_coupon']->id && $choice['available'])
-                                                >
-                                                    {{ $coupon->name }} / {{ $coupon->code }} / {{ $coupon->discountLabel() }} / {{ $coupon->scopeLabel() }} / {{ $coupon->is_stackable ? '可叠加使用' : '不可叠加使用' }}{{ $choice['available'] ? '' : ' / 不可用：'.$choice['reason'] }}
-                                                </option>
-                                            @endforeach
-                                        </select>
-                                        <div class="mt-2 space-y-1 text-xs text-slate-500">
-                                            @foreach($lineChoices as $choice)
-                                                @php($coupon = $choice['coupon'])
-                                                @continue(! $coupon || $choice['available'])
-                                                <p><span class="font-medium text-slate-600">{{ $coupon->code }}</span> 不可用：{{ $choice['reason'] }}</p>
-                                            @endforeach
-                                        </div>
-                                    @else
-                                        <p class="mt-2 text-xs text-slate-500">你还没有可用于结算的优惠码。</p>
-                                    @endif
+                            @forelse($couponChoices as $choice)
+                                @php($coupon = $choice['coupon'])
+                                @continue(! $coupon)
+                                @php($oldSelections = collect(old('coupon_selections', []))->map(fn ($id) => (string) $id)->all())
+                                <label class="flex gap-3 rounded-sm border border-slate-200 bg-white px-3 py-3 text-sm {{ $choice['available'] ? 'cursor-pointer hover:bg-slate-50' : 'opacity-70' }}">
+                                    <input
+                                        class="mt-1"
+                                        type="checkbox"
+                                        name="coupon_selections[]"
+                                        value="{{ $choice['user_coupon']->id }}"
+                                        data-coupon-select
+                                        data-discount-cents="{{ (int) $choice['discount_cents'] }}"
+                                        @disabled(! $choice['available'])
+                                        @checked(in_array((string) $choice['user_coupon']->id, $oldSelections, true) && $choice['available'])
+                                    >
+                                    <span class="min-w-0 flex-1">
+                                        <span class="block font-medium">{{ $coupon->name }}</span>
+                                        <span class="mt-1 block text-xs leading-5 text-slate-600">
+                                            {{ $coupon->discountLabel() }} / {{ $coupon->scopeLabel() }} / {{ $coupon->is_stackable ? '可叠加使用' : '不可叠加使用' }} /
+                                            {{ ($coupon->scope ?? \App\Models\Coupon::SCOPE_GLOBAL) === \App\Models\Coupon::SCOPE_GLOBAL ? '按订单商品总价抵扣' : '按订单内匹配商品抵扣' }}
+                                        </span>
+                                        @if($choice['available'])
+                                            <span class="mt-1 block text-xs font-medium text-emerald-700">预计抵扣 @money((int) $choice['discount_cents'])</span>
+                                        @else
+                                            <span class="mt-1 block text-xs font-medium text-amber-700">不可用：{{ $choice['reason'] }}</span>
+                                        @endif
+                                    </span>
                                 </label>
-                            @endforeach
-                            @error('coupon_items')
+                            @empty
+                                <p class="rounded-sm border border-slate-200 bg-white px-3 py-3 text-xs text-slate-500">你还没有可用于结算的优惠码。</p>
+                            @endforelse
+                            @error('coupon_selections')
                                 <p class="text-sm text-red-600">{{ $message }}</p>
                             @enderror
                         </div>
@@ -356,8 +355,8 @@
 
                 const subtotal = Number(summary.dataset.subtotalCents || 0);
                 const grossTotal = subtotal + shippingTotal;
-                const couponDiscount = Array.from(document.querySelectorAll('[data-coupon-select]'))
-                    .reduce((total, select) => total + Number(select.selectedOptions?.[0]?.dataset.discountCents || 0), 0);
+                const couponDiscount = Array.from(document.querySelectorAll('[data-coupon-select]:checked'))
+                    .reduce((total, input) => total + Number(input.dataset.discountCents || 0), 0);
                 const discountedTotal = Math.max(0, grossTotal - couponDiscount);
                 const walletBalance = Number(summary.dataset.walletBalanceCents || 0);
                 const canUseFullWallet = walletBalance >= discountedTotal && discountedTotal > 0;

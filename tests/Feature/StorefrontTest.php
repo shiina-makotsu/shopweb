@@ -1,11 +1,13 @@
 <?php
 
 use App\Filament\Resources\ProductResource\Pages\EditProduct;
+use App\Filament\Resources\ReferralRewardRuleResource;
 use App\Filament\Resources\FlashSaleCampaignResource\Pages\CreateFlashSaleCampaign;
 use App\Filament\Pages\HomeContentPage;
 use App\Filament\Pages\ProductDiscountPage;
 use App\Models\Category;
 use App\Models\Coupon;
+use App\Models\EventRewardGrant;
 use App\Models\FlashSale;
 use App\Models\FlashSaleCampaign;
 use App\Models\FlashSaleCampaignItem;
@@ -447,10 +449,11 @@ it('attributes referral registrations and issues configured coupon and wallet re
             'type' => Coupon::TYPE_FIXED,
             'value' => 1000,
             'scope' => Coupon::SCOPE_GLOBAL,
-            'minimum_order_cents' => 0,
+            'minimum_order_cents' => 2000,
+            'valid_days' => 30,
             'quantity' => 1,
             'usage_limit' => 1,
-            'is_stackable' => false,
+            'is_stackable' => true,
         ]],
         'wallet_amount_cents' => 500,
         'is_active' => true,
@@ -484,8 +487,9 @@ it('attributes referral registrations and issues configured coupon and wallet re
 
     expect($userCoupon->coupon)->not->toBeNull()
         ->and($userCoupon->coupon->code)->toStartWith('ER')
-        ->and($userCoupon->coupon->name)->toContain('Invite fixed reward')
-        ->and($userCoupon->coupon->value)->toBe(1000);
+        ->and($userCoupon->coupon->name)->toBe('Invite reward ¥10.00')
+        ->and($userCoupon->coupon->value)->toBe(1000)
+        ->and($userCoupon->coupon->ends_at)->not->toBeNull();
 
     $this->assertDatabaseHas('user_coupons', [
         'user_id' => $inviter->id,
@@ -497,12 +501,33 @@ it('attributes referral registrations and issues configured coupon and wallet re
         'amount_cents' => 500,
         'source' => WalletTransaction::SOURCE_REFERRAL,
     ]);
-    $this->assertDatabaseHas('event_reward_grants', [
+    $grant = EventRewardGrant::query()->where([
         'user_id' => $inviter->id,
         'event' => ReferralRewardRule::EVENT_REFERRAL_REGISTERED,
         'subject_type' => User::class,
         'subject_id' => $invitee->id,
-    ]);
+    ])->firstOrFail();
+
+    expect($grant->status)->toBe(EventRewardGrant::STATUS_COMPLETED)
+        ->and($grant->coupon_ids)->toBe([$userCoupon->coupon_id])
+        ->and($grant->wallet_amount_cents)->toBe(500)
+        ->and(data_get($grant->reward_snapshot, 'issued_coupons.0.name'))->toBe('Invite reward ¥10.00')
+        ->and($grant->completed_at)->not->toBeNull();
+
+    $this->actingAs($inviter)->get(route('user.section', 'coupons'))
+        ->assertOk()
+        ->assertSee('Invite reward ¥10.00')
+        ->assertSee('¥10.00')
+        ->assertSee('最低金额')
+        ->assertSee('¥20.00')
+        ->assertSee('叠加使用')
+        ->assertSee('剩余 30 天')
+        ->assertDontSee($userCoupon->coupon->code);
+
+    $admin = User::factory()->create(['role' => 'admin']);
+    $this->actingAs($admin)->get(ReferralRewardRuleResource::getUrl('index'))
+        ->assertOk()
+        ->assertSee('发放记录');
 });
 
 it('grants configured event rewards for product purchases and wallet payments once', function (): void {
@@ -574,11 +599,58 @@ it('grants configured event rewards for product purchases and wallet payments on
 
     expect($eventCoupon)->not->toBeNull()
         ->and($eventCoupon->code)->toStartWith('ER')
-        ->and($eventCoupon->name)->toContain('Product generated reward')
+        ->and($eventCoupon->name)->toBe('Product event reward ¥1.00')
         ->and($eventCoupon->scope)->toBe(Coupon::SCOPE_PRODUCT)
         ->and($eventCoupon->products->pluck('id')->all())->toBe([$product->id]);
 
     $this->assertDatabaseCount('event_reward_grants', 2);
+    expect(EventRewardGrant::query()->where('status', EventRewardGrant::STATUS_COMPLETED)->count())->toBe(2)
+        ->and(EventRewardGrant::query()->whereJsonContains('coupon_ids', $eventCoupon->id)->exists())->toBeTrue()
+        ->and(EventRewardGrant::query()->sum('wallet_amount_cents'))->toBe(500);
+});
+
+it('clones legacy reward coupons into new coupons instead of issuing the configured coupon directly', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+    $legacyCoupon = Coupon::query()->create([
+        'code' => 'LEGACYREWARD',
+        'name' => 'Legacy reward coupon',
+        'type' => Coupon::TYPE_FIXED,
+        'value' => 800,
+        'scope' => Coupon::SCOPE_GLOBAL,
+        'minimum_order_cents' => 3000,
+        'usage_limit' => 2,
+        'is_stackable' => false,
+        'is_active' => true,
+    ]);
+    $rule = ReferralRewardRule::query()->create([
+        'name' => 'Legacy compatible reward',
+        'trigger_events' => [ReferralRewardRule::EVENT_FORUM_THREAD_CREATED],
+        'coupon_id' => $legacyCoupon->id,
+        'coupon_reward_enabled' => false,
+        'wallet_amount_cents' => 0,
+        'is_active' => true,
+    ]);
+
+    app(\App\Services\ReferralRewardService::class)->grantForEvent(
+        $user,
+        ReferralRewardRule::EVENT_FORUM_THREAD_CREATED,
+        $user,
+    );
+
+    $issued = UserCoupon::query()->whereBelongsTo($user)->firstOrFail()->coupon;
+    $grant = EventRewardGrant::query()->whereBelongsTo($rule, 'rule')->firstOrFail();
+
+    expect($issued->id)->not->toBe($legacyCoupon->id)
+        ->and($issued->code)->not->toBe($legacyCoupon->code)
+        ->and($issued->name)->toBe('Legacy compatible reward ¥8.00')
+        ->and($issued->minimum_order_cents)->toBe(3000)
+        ->and($issued->usage_limit)->toBe(2)
+        ->and($grant->coupon_ids)->toBe([$issued->id]);
+
+    $this->assertDatabaseMissing('user_coupons', [
+        'user_id' => $user->id,
+        'coupon_id' => $legacyCoupon->id,
+    ]);
 });
 
 it('renders referral copy links with an absolute local-aware host', function (): void {
@@ -2423,7 +2495,7 @@ it('uses sku images as product detail fallback and gallery entries', function ()
         ->assertSee('SKU 图');
 });
 
-it('applies global coupons and restricts product coupons to a single matching cart item', function (): void {
+it('applies global coupons and product scoped coupons by matching order items', function (): void {
     $this->seed();
 
     $user = User::factory()->create(['role' => 'customer']);
@@ -2473,6 +2545,8 @@ it('applies global coupons and restricts product coupons to a single matching ca
         'value' => 1000,
         'scope' => Coupon::SCOPE_PRODUCT,
         'product_id' => $productA->id,
+        'usage_limit' => 2,
+        'per_user_limit' => 2,
         'is_active' => true,
     ]);
 
@@ -2511,7 +2585,24 @@ it('applies global coupons and restricts product coupons to a single matching ca
         'contact_name' => '优惠用户',
         'contact_phone' => '13800000000',
         'coupon_code' => 'ONLYA',
-    ])->assertInvalid(['coupon_code']);
+    ])->assertRedirect();
+
+    $this->assertDatabaseHas('orders', [
+        'user_id' => $user->id,
+        'coupon_code' => 'ONLYA',
+        'discount_cents' => 1000,
+        'total_cents' => 14000,
+    ]);
+    $this->assertDatabaseHas('order_items', [
+        'variant_sku' => 'COUPON-A',
+        'coupon_code' => 'ONLYA',
+        'discount_cents' => 1000,
+    ]);
+    $this->assertDatabaseHas('order_items', [
+        'variant_sku' => 'COUPON-B',
+        'coupon_code' => null,
+        'discount_cents' => 0,
+    ]);
 
     $this->flushSession();
     $this->post(route('cart.items.store'), ['variant_id' => $variantA->id, 'quantity' => 1]);
@@ -2641,7 +2732,7 @@ it('refreshes cached storefront prices when the discount page updates a sku', fu
         ->and($lowVariant->fresh()->discount_ends_at)->toBeNull();
 });
 
-it('lets users claim coupons and apply one coupon per cart sku', function (): void {
+it('lets users claim coupons and apply order and product scoped coupons at checkout', function (): void {
     $this->seed();
 
     $user = User::factory()->create(['role' => 'customer']);
@@ -2682,15 +2773,16 @@ it('lets users claim coupons and apply one coupon per cart sku', function (): vo
         'value' => 1000,
         'scope' => Coupon::SCOPE_PRODUCT,
         'product_id' => $productA->id,
+        'is_stackable' => true,
         'is_active' => true,
     ]);
-    $couponA->products()->sync([$productA->id, $productB->id]);
     $couponB = Coupon::query()->create([
         'code' => 'WALLETB',
         'name' => '全场九折',
         'type' => Coupon::TYPE_PERCENT,
         'value' => 10,
         'scope' => Coupon::SCOPE_GLOBAL,
+        'is_stackable' => true,
         'is_active' => true,
     ]);
 
@@ -2706,9 +2798,11 @@ it('lets users claim coupons and apply one coupon per cart sku', function (): vo
         ->assertOk()
         ->assertSee('A 商品券')
         ->assertSee('券包商品 A')
-        ->assertSee('券包商品 B')
         ->assertSee('全场九折')
-        ->assertSee('可与其它优惠码同单使用');
+        ->assertSee('叠加使用')
+        ->assertSee('允许')
+        ->assertDontSee('WALLETA')
+        ->assertDontSee('WALLETB');
 
     $userCouponA = UserCoupon::query()->whereBelongsTo($user)->whereBelongsTo($couponA)->firstOrFail();
     $userCouponB = UserCoupon::query()->whereBelongsTo($user)->whereBelongsTo($couponB)->firstOrFail();
@@ -2719,25 +2813,25 @@ it('lets users claim coupons and apply one coupon per cart sku', function (): vo
     $this->actingAs($user)
         ->get(route('checkout.create'))
         ->assertOk()
-        ->assertSee('name="coupon_items['.$variantA->id.']"', false)
-        ->assertSee('name="coupon_items['.$variantB->id.']"', false)
-        ->assertSee('WALLETA')
-        ->assertSee('WALLETB')
-        ->assertSee('可叠加使用');
+        ->assertSee('name="coupon_selections[]"', false)
+        ->assertSee('A 商品券')
+        ->assertSee('全场九折')
+        ->assertDontSee('WALLETA')
+        ->assertDontSee('WALLETB')
+        ->assertSee('按订单商品总价抵扣')
+        ->assertSee('按订单内匹配商品抵扣');
 
     $this->actingAs($user)->post(route('checkout.store'), [
         'contact_name' => '券包用户',
         'contact_phone' => '13800000000',
-        'coupon_items' => [
-            $variantA->id => $userCouponA->id,
-            $variantB->id => $userCouponB->id,
-        ],
+        'coupon_selections' => [$userCouponA->id, $userCouponB->id],
     ])->assertRedirect();
 
     $this->assertDatabaseHas('orders', [
         'user_id' => $user->id,
-        'discount_cents' => 1500,
-        'total_cents' => 13500,
+        'coupon_code' => 'WALLETB',
+        'discount_cents' => 2500,
+        'total_cents' => 12500,
     ]);
     $this->assertDatabaseHas('order_items', [
         'variant_sku' => 'WALLET-A',
@@ -2746,9 +2840,22 @@ it('lets users claim coupons and apply one coupon per cart sku', function (): vo
     ]);
     $this->assertDatabaseHas('order_items', [
         'variant_sku' => 'WALLET-B',
-        'coupon_code' => 'WALLETB',
-        'discount_cents' => 500,
+        'coupon_code' => null,
+        'discount_cents' => 0,
     ]);
+    $this->assertDatabaseHas('coupon_redemptions', [
+        'coupon_id' => $couponB->id,
+        'order_item_id' => null,
+        'discount_cents' => 1500,
+    ]);
+
+    $order = Order::query()->whereBelongsTo($user)->latest('id')->firstOrFail();
+
+    $this->actingAs($user)->get(route('orders.show', $order))
+        ->assertOk()
+        ->assertSee('A 商品券')
+        ->assertDontSee('WALLETA')
+        ->assertDontSee('WALLETB');
 });
 
 it('prevents non stackable coupons from being used with another coupon in one order', function (): void {
@@ -2806,13 +2913,11 @@ it('prevents non stackable coupons from being used with another coupon in one or
         ['variant' => $variantB, 'product' => $productB, 'line_total_cents' => 5000],
     ]);
 
-    app(CouponService::class)->resolveForCart($user, $cartItems, [
-        $variantA->id => $userCouponA->id,
-    ]);
+    app(CouponService::class)->resolveForOrder($user, $cartItems, [$userCouponA->id]);
 
-    expect(fn () => app(CouponService::class)->resolveForCart($user, $cartItems, [
-        $variantA->id => $userCouponA->id,
-        $variantB->id => $userCouponB->id,
+    expect(fn () => app(CouponService::class)->resolveForOrder($user, $cartItems, [
+        $userCouponA->id,
+        $userCouponB->id,
     ]))->toThrow(ValidationException::class);
 });
 
@@ -2876,16 +2981,207 @@ it('shows checkout coupon choices with unavailable reasons and live discount dat
         ->get(route('checkout.create'))
         ->assertOk()
         ->assertSee('data-coupon-select', false)
+        ->assertSee('name="coupon_selections[]"', false)
         ->assertSee('value="'.$usableUserCoupon->id.'"', false)
         ->assertSee('data-discount-cents="500"', false)
-        ->assertSee('UIMINIMUM')
-        ->assertSee('UIMISMATCH')
+        ->assertSee('UI minimum coupon')
+        ->assertSee('UI mismatch coupon')
+        ->assertDontSee('UIUSABLE')
+        ->assertDontSee('UIMINIMUM')
+        ->assertDontSee('UIMISMATCH')
         ->assertSee('不可用：未满')
-        ->assertSee('不可用：不适用于该商品')
+        ->assertSee('不可用：不适用于本订单商品')
         ->assertSee('data-coupon-discount', false)
         ->assertSee('data-wallet-full-option', false)
         ->assertSee('text-xl font-bold text-red-700', false)
         ->assertSee('商品和邮费总价');
+});
+
+it('hides exhausted and expired coupons from customers while keeping them visible in the backoffice', function (): void {
+    $this->seed();
+
+    $user = User::factory()->create(['role' => 'customer']);
+    $admin = User::factory()->create(['role' => 'admin']);
+    $category = Category::query()->firstOrFail();
+    $product = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => 'Exhausted coupon product',
+        'slug' => 'exhausted-coupon-product',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_ONLINE,
+    ]);
+    $variant = ProductVariant::query()->create([
+        'product_id' => $product->id,
+        'sku' => 'EXHAUSTED-COUPON-SKU',
+        'price_cents' => 2000,
+        'stock' => 5,
+        'is_active' => true,
+    ]);
+    $coupon = Coupon::query()->create([
+        'code' => 'EXHAUSTEDHIDDEN',
+        'name' => 'Exhausted hidden coupon',
+        'type' => Coupon::TYPE_FIXED,
+        'value' => 500,
+        'scope' => Coupon::SCOPE_GLOBAL,
+        'usage_limit' => 1,
+        'is_active' => true,
+    ]);
+    $userCoupon = app(CouponService::class)->issueToUser($coupon, $user);
+    $expiredCoupon = Coupon::query()->create([
+        'code' => 'EXPIREDHIDDEN',
+        'name' => 'Expired hidden coupon',
+        'type' => Coupon::TYPE_FIXED,
+        'value' => 300,
+        'scope' => Coupon::SCOPE_GLOBAL,
+        'ends_at' => now()->subMinute(),
+        'is_active' => true,
+    ]);
+    app(CouponService::class)->issueToUser($expiredCoupon, $user);
+
+    $this->actingAs($user)->post(route('cart.items.store'), [
+        'variant_id' => $variant->id,
+        'quantity' => 1,
+    ]);
+    $this->actingAs($user)->post(route('checkout.store'), [
+        'contact_name' => 'Coupon user',
+        'contact_phone' => '13800000000',
+        'coupon_selections' => [$userCoupon->id],
+    ])->assertRedirect();
+
+    $this->actingAs($user)->get(route('user.section', 'coupons'))
+        ->assertOk()
+        ->assertDontSee('EXHAUSTEDHIDDEN')
+        ->assertDontSee('EXPIREDHIDDEN');
+
+    $this->actingAs($user)->post(route('cart.items.store'), [
+        'variant_id' => $variant->id,
+        'quantity' => 1,
+    ]);
+    $this->actingAs($user)->get(route('checkout.create'))
+        ->assertOk()
+        ->assertDontSee('EXHAUSTEDHIDDEN')
+        ->assertDontSee('EXPIREDHIDDEN');
+
+    $this->actingAs($admin)->get('/admin/coupons')
+        ->assertOk()
+        ->assertSee('EXHAUSTEDHIDDEN')
+        ->assertSee('EXPIREDHIDDEN');
+});
+
+it('restores a coupon after both usage limits are increased and removes the exhausted holder', function (): void {
+    $this->seed();
+
+    $user = User::factory()->create(['role' => 'customer']);
+    $category = Category::query()->firstOrFail();
+    $product = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => 'Reusable coupon product',
+        'slug' => 'reusable-coupon-product',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_ONLINE,
+    ]);
+    $variant = ProductVariant::query()->create([
+        'product_id' => $product->id,
+        'sku' => 'REUSABLE-COUPON-SKU',
+        'price_cents' => 2000,
+        'stock' => 5,
+        'is_active' => true,
+    ]);
+    $coupon = Coupon::query()->create([
+        'code' => 'REUSABLE999',
+        'name' => 'Reusable coupon',
+        'type' => Coupon::TYPE_FIXED,
+        'value' => 200,
+        'scope' => Coupon::SCOPE_GLOBAL,
+        'usage_limit' => 1,
+        'per_user_limit' => 1,
+        'is_active' => true,
+    ]);
+    $userCoupon = app(CouponService::class)->issueToUser($coupon, $user);
+
+    $placeOrder = function () use ($user, $variant, $userCoupon): void {
+        $this->actingAs($user)->post(route('cart.items.store'), [
+            'variant_id' => $variant->id,
+            'quantity' => 1,
+        ]);
+        $this->actingAs($user)->post(route('checkout.store'), [
+            'contact_name' => 'Reusable coupon user',
+            'contact_phone' => '13800000000',
+            'coupon_selections' => [$userCoupon->id],
+        ])->assertRedirect();
+    };
+
+    $placeOrder();
+
+    $this->actingAs($user)->post(route('cart.items.store'), [
+        'variant_id' => $variant->id,
+        'quantity' => 1,
+    ]);
+    $this->actingAs($user)->get(route('checkout.create'))
+        ->assertOk()
+        ->assertDontSee('value="'.$userCoupon->id.'"', false);
+
+    $coupon->update(['usage_limit' => 999]);
+
+    $this->actingAs($user)->get(route('checkout.create'))
+        ->assertOk()
+        ->assertDontSee('value="'.$userCoupon->id.'"', false);
+
+    $coupon->update(['per_user_limit' => 2]);
+
+    $this->actingAs($user)->get(route('checkout.create'))
+        ->assertOk()
+        ->assertSee('Reusable coupon')
+        ->assertSee('value="'.$userCoupon->id.'"', false)
+        ->assertDontSee('已使用')
+        ->assertDontSee('已达到每人使用次数上限');
+
+    $this->actingAs($user)->post(route('checkout.store'), [
+        'contact_name' => 'Reusable coupon user',
+        'contact_phone' => '13800000000',
+        'coupon_selections' => [$userCoupon->id],
+    ])->assertRedirect();
+
+    expect($coupon->redemptions()
+        ->whereIn('status', [\App\Models\CouponRedemption::STATUS_RESERVED, \App\Models\CouponRedemption::STATUS_CONFIRMED])
+        ->count())->toBe(2);
+
+    $latestOrder = Order::query()->whereBelongsTo($user)->latest('id')->firstOrFail();
+    app(OrderService::class)->confirmPayment($latestOrder, $user);
+
+    expect($userCoupon->fresh()->exhausted_at)->not->toBeNull();
+
+    $this->actingAs($user)->get(route('user.section', 'coupons'))
+        ->assertOk()
+        ->assertDontSee('Reusable coupon');
+});
+
+it('enforces coupon holder capacity and keeps per user usage at or below the total limit', function (): void {
+    $firstUser = User::factory()->create(['role' => 'customer']);
+    $secondUser = User::factory()->create(['role' => 'customer']);
+    $coupon = Coupon::query()->create([
+        'code' => 'CAPACITYLIMIT',
+        'name' => 'Capacity limited coupon',
+        'type' => Coupon::TYPE_FIXED,
+        'value' => 100,
+        'scope' => Coupon::SCOPE_GLOBAL,
+        'usage_limit' => 2,
+        'per_user_limit' => 2,
+        'is_active' => true,
+    ]);
+
+    app(CouponService::class)->issueToUser($coupon, $firstUser);
+
+    expect(fn () => app(CouponService::class)->issueToUser($coupon, $secondUser))
+        ->toThrow(ValidationException::class)
+        ->and(fn () => $coupon->update([
+            'usage_limit' => 2,
+            'per_user_limit' => 3,
+        ]))->toThrow(ValidationException::class);
+
+    expect($coupon->fresh()->usage_limit)->toBe(2)
+        ->and($coupon->fresh()->per_user_limit)->toBe(2)
+        ->and($coupon->userCoupons()->whereNull('exhausted_at')->count())->toBe(1);
 });
 
 it('cleans stale product links from global coupons and tracks coupon holders', function (): void {
@@ -2965,10 +3261,16 @@ it('shows concrete coupon holder details in the backoffice coupon list', functio
         ->get('/admin/coupons')
         ->assertOk()
         ->assertSee('HOLDERLIST')
+        ->assertSee('1 人')
+        ->assertSee('data-shopweb-coupon-template', false)
+        ->assertSee('shopweb-coupon-submenu', false)
         ->assertSee('Coupon Holder')
         ->assertSee('holder_001')
         ->assertSee('holder@example.com')
-        ->assertSee('查看持有人');
+        ->assertDontSee('查看持有人');
+
+    expect(file_get_contents(app_path('Filament/Resources/CouponResource.php')))
+        ->not->toContain("TextColumn::make('coupon_holders')");
 });
 
 it('does not show coupon controls during flash sale checkout', function (): void {

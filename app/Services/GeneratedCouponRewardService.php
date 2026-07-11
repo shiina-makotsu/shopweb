@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Coupon;
 use App\Models\User;
 use App\Models\UserCoupon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class GeneratedCouponRewardService
@@ -22,32 +23,59 @@ class GeneratedCouponRewardService
         ?User $actor = null,
         string $codePrefix = 'RW',
     ): int {
-        $issued = 0;
+        return count($this->issueToUserWithDetails(
+            $user,
+            $rules,
+            $source,
+            $note,
+            $nameResolver,
+            $actor,
+            $codePrefix,
+        ));
+    }
+
+    /**
+     * @param  iterable<int, array<string, mixed>>  $rules
+     * @param  callable(array<string, mixed>, int, int, int): string  $nameResolver
+     * @return array<int, Coupon>
+     */
+    public function issueToUserWithDetails(
+        User $user,
+        iterable $rules,
+        string $source,
+        string $note,
+        callable $nameResolver,
+        ?User $actor = null,
+        string $codePrefix = 'RW',
+    ): array {
+        $issuedCoupons = [];
 
         foreach ($rules as $ruleIndex => $rule) {
             $quantity = max(1, (int) ($rule['quantity'] ?? 1));
 
             for ($index = 1; $index <= $quantity; $index++) {
-                $coupon = $this->createCoupon(
-                    $rule,
-                    $nameResolver($rule, $ruleIndex + 1, $index, $quantity),
-                    $codePrefix,
-                );
+                $issuedCoupons[] = DB::transaction(function () use ($rule, $nameResolver, $ruleIndex, $index, $quantity, $codePrefix, $user, $source, $actor, $note): Coupon {
+                    $coupon = $this->createCoupon(
+                        $rule,
+                        $nameResolver($rule, $ruleIndex + 1, $index, $quantity),
+                        $codePrefix,
+                    );
 
-                app(CouponService::class)->issueToUser(
-                    $coupon,
-                    $user,
-                    $source,
-                    $actor,
-                    null,
-                    $note,
-                );
+                    app(CouponService::class)->issueToUser(
+                        $coupon,
+                        $user,
+                        $source,
+                        $actor,
+                        null,
+                        $note,
+                    );
 
-                $issued++;
+                    return $coupon;
+                });
             }
         }
 
-        return $issued;
+        return $issuedCoupons;
     }
 
     /**
@@ -63,6 +91,9 @@ class GeneratedCouponRewardService
             $value = min(100, $value);
         }
 
+        $usageLimit = max(1, (int) ($rule['usage_limit'] ?? 1));
+        $perUserLimit = max(1, min($usageLimit, (int) ($rule['per_user_limit'] ?? 1)));
+
         $coupon = Coupon::query()->create([
             'code' => $this->nextCouponCode($codePrefix),
             'name' => $name,
@@ -70,8 +101,8 @@ class GeneratedCouponRewardService
             'value' => $value,
             'scope' => $scope,
             'minimum_order_cents' => max(0, (int) ($rule['minimum_order_cents'] ?? 0)),
-            'usage_limit' => max(1, (int) ($rule['usage_limit'] ?? 1)),
-            'per_user_limit' => 1,
+            'usage_limit' => $usageLimit,
+            'per_user_limit' => $perUserLimit,
             'is_stackable' => (bool) ($rule['is_stackable'] ?? false),
             'starts_at' => now(),
             'ends_at' => (int) ($rule['valid_days'] ?? 0) > 0 ? now()->addDays((int) $rule['valid_days']) : null,

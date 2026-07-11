@@ -81,7 +81,7 @@
                                             {{ $statusPresenter->label($item->status) }}
                                         </p>
                                         @if($item->coupon_code)
-                                            <p class="mt-1 text-xs text-emerald-700">优惠码 {{ $item->coupon_code }}：- @money($item->discount_cents)</p>
+                                            <p class="mt-1 text-xs text-emerald-700">{{ $item->coupon?->name ?? '优惠码抵扣' }}：- @money($item->discount_cents)</p>
                                         @endif
                                     </div>
                                     <p class="shrink-0 font-semibold">@money($item->line_total_cents)</p>
@@ -114,7 +114,7 @@
                                             {{ $item->variant_sku }} /
                                             {{ \App\Models\ProductVariant::specsLabel($item->variant_specs ?? []) }}
                                             @if($item->coupon_code)
-                                                <p class="mt-1 text-xs text-emerald-700">优惠码 {{ $item->coupon_code }}：- @money($item->discount_cents)</p>
+                                                <p class="mt-1 text-xs text-emerald-700">{{ $item->coupon?->name ?? '优惠码抵扣' }}：- @money($item->discount_cents)</p>
                                             @endif
                                         </td>
                                         <td class="px-4 py-3 text-slate-600">

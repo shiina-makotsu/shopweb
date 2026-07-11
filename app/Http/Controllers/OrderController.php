@@ -45,7 +45,7 @@ class OrderController extends Controller
         }
 
         return view('orders.show', [
-            'order' => $order->load(['items.incomingProduct', 'items.product', 'shippingCarrier']),
+            'order' => $order->load(['items.incomingProduct', 'items.product', 'items.coupon', 'shippingCarrier']),
             'settings' => $settings,
             'privacy' => $privacy,
         ]);

@@ -153,6 +153,47 @@ class ReferralRewardRule extends Model
     }
 
     /**
+     * @return array<int, array<string, mixed>>
+     */
+    public function couponRulesForIssuance(): array
+    {
+        if ($this->couponRewardEnabled()) {
+            return $this->couponRewardRules();
+        }
+
+        $coupon = $this->coupon;
+
+        if (! $coupon) {
+            return [];
+        }
+
+        $coupon->loadMissing('products');
+        $productIds = $coupon->products->pluck('id')->map(fn ($id): int => (int) $id);
+
+        if ($productIds->isEmpty() && $coupon->product_id) {
+            $productIds->push((int) $coupon->product_id);
+        }
+
+        return [[
+            'name' => '',
+            'currency_code' => 'CNY',
+            'currency_unit' => 'yuan',
+            'type' => $coupon->type,
+            'value' => (int) $coupon->value,
+            'valid_days' => $coupon->ends_at && $coupon->ends_at->isFuture()
+                ? max(1, now()->diffInDays($coupon->ends_at, false))
+                : null,
+            'scope' => $coupon->scope ?? Coupon::SCOPE_GLOBAL,
+            'product_ids' => $productIds->unique()->values()->all(),
+            'minimum_order_cents' => (int) $coupon->minimum_order_cents,
+            'quantity' => 1,
+            'usage_limit' => max(1, (int) ($coupon->usage_limit ?? 1)),
+            'per_user_limit' => max(1, (int) ($coupon->per_user_limit ?? 1)),
+            'is_stackable' => (bool) $coupon->is_stackable,
+        ]];
+    }
+
+    /**
      * @param  array<string, mixed>  $rule
      * @return array<string, mixed>
      */
@@ -160,6 +201,7 @@ class ReferralRewardRule extends Model
     {
         $type = ($rule['type'] ?? Coupon::TYPE_FIXED) === Coupon::TYPE_PERCENT ? Coupon::TYPE_PERCENT : Coupon::TYPE_FIXED;
         $scope = ($rule['scope'] ?? Coupon::SCOPE_GLOBAL) === Coupon::SCOPE_PRODUCT ? Coupon::SCOPE_PRODUCT : Coupon::SCOPE_GLOBAL;
+        $usageLimit = max(1, (int) ($rule['usage_limit'] ?? 1));
 
         return [
             'name' => trim((string) ($rule['name'] ?? '')),
@@ -174,7 +216,8 @@ class ReferralRewardRule extends Model
             'product_ids' => array_values(array_filter(array_map('intval', $rule['product_ids'] ?? []))),
             'minimum_order_cents' => max(0, (int) ($rule['minimum_order_cents'] ?? 0)),
             'quantity' => max(1, (int) ($rule['quantity'] ?? 1)),
-            'usage_limit' => max(1, (int) ($rule['usage_limit'] ?? 1)),
+            'usage_limit' => $usageLimit,
+            'per_user_limit' => max(1, min($usageLimit, (int) ($rule['per_user_limit'] ?? 1))),
             'is_stackable' => (bool) ($rule['is_stackable'] ?? false),
         ];
     }

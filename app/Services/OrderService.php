@@ -39,16 +39,18 @@ class OrderService
             $subtotalCents = (int) $cartItems->sum('line_total_cents');
             $coupon = $this->coupons->resolve($data['coupon_code'] ?? null, $user, $subtotalCents, $cartItems);
             $couponAllocations = $coupon
-                ? []
-                : $this->coupons->resolveForCart($user, $cartItems, $data['coupon_items'] ?? []);
-            $discountCents = $coupon
-                ? $coupon->discountFor($subtotalCents)
-                : collect($couponAllocations)->sum('discount_cents');
+                ? $this->coupons->resolveCouponForOrder($coupon, $cartItems)
+                : $this->coupons->resolveForOrder($user, $cartItems, $data['coupon_selections'] ?? ($data['coupon_items'] ?? []));
+            $discountCents = (int) $couponAllocations['discount_cents'];
             $shippingProvince = $data['shipping_province'] ?? ChinaRegions::guessProvinceFromAddress($data['shipping_address'] ?? null);
             $shippingQuote = $this->shippingQuotes->quote($cartItems, $shippingProvince, $data['shipping_carriers'] ?? [], $data['shipping_city'] ?? null);
             $shippingFeeCents = (int) $shippingQuote['shipping_fee_cents'];
             $totalCents = max(0, $subtotalCents - $discountCents + $shippingFeeCents);
             $shippingAddress = $this->shippingAddressText($data);
+            $summaryItemAllocation = collect($couponAllocations['items'])
+                ->flatMap(fn (array $item): array => $item['allocations'])
+                ->first();
+            $summaryCoupon = $couponAllocations['order'][0]['coupon'] ?? ($summaryItemAllocation['coupon'] ?? null);
 
             $order = Order::query()->create([
                 'user_id' => $user->id,
@@ -66,8 +68,8 @@ class OrderService
                 'shipment_notice' => $shippingQuote['notice'],
                 'shipping_carrier_id' => $shippingQuote['shipping_carrier_id'],
                 'total_cents' => $totalCents,
-                'coupon_id' => $coupon?->id,
-                'coupon_code' => $coupon?->code,
+                'coupon_id' => $summaryCoupon?->id,
+                'coupon_code' => $summaryCoupon?->code,
                 'contact_name' => $data['contact_name'],
                 'contact_phone' => $data['contact_phone'],
                 'contact_email' => $data['contact_email'] ?? null,
@@ -111,40 +113,45 @@ class OrderService
                     'quantity' => $cartItem['quantity'],
                     'line_total_cents' => $variant->effectivePriceCents() * $cartItem['quantity'],
                     'status' => Order::STATUS_PENDING_PAYMENT,
-                    'coupon_id' => $couponAllocations[$variant->id]['coupon']->id ?? null,
-                    'coupon_code' => $couponAllocations[$variant->id]['coupon']->code ?? null,
-                    'discount_cents' => $couponAllocations[$variant->id]['discount_cents'] ?? 0,
+                    'coupon_id' => $couponAllocations['items'][$variant->id]['coupon_ids'][0] ?? null,
+                    'coupon_code' => filled($couponAllocations['items'][$variant->id]['coupon_codes'] ?? [])
+                        ? implode(',', $couponAllocations['items'][$variant->id]['coupon_codes'])
+                        : null,
+                    'discount_cents' => $couponAllocations['items'][$variant->id]['discount_cents'] ?? 0,
                 ]);
 
                 $orderItemsByVariantId[(int) $variant->id] = $orderItem;
             }
 
-            if ($coupon) {
+            foreach ($couponAllocations['order'] as $allocation) {
                 CouponRedemption::query()->create([
-                    'coupon_id' => $coupon->id,
+                    'coupon_id' => $allocation['coupon']->id,
                     'user_id' => $user->id,
                     'order_id' => $order->id,
+                    'user_coupon_id' => $allocation['user_coupon']?->id,
                     'status' => CouponRedemption::STATUS_RESERVED,
-                    'discount_cents' => $discountCents,
+                    'discount_cents' => $allocation['discount_cents'],
                 ]);
             }
 
-            foreach ($couponAllocations as $variantId => $allocation) {
+            foreach ($couponAllocations['items'] as $variantId => $itemAllocation) {
                 $orderItem = $orderItemsByVariantId[(int) $variantId] ?? null;
 
                 if (! $orderItem) {
                     continue;
                 }
 
-                CouponRedemption::query()->create([
-                    'coupon_id' => $allocation['coupon']->id,
-                    'user_id' => $user->id,
-                    'order_id' => $order->id,
-                    'order_item_id' => $orderItem->id,
-                    'user_coupon_id' => $allocation['user_coupon']->id,
-                    'status' => CouponRedemption::STATUS_RESERVED,
-                    'discount_cents' => $allocation['discount_cents'],
-                ]);
+                foreach ($itemAllocation['allocations'] as $allocation) {
+                    CouponRedemption::query()->create([
+                        'coupon_id' => $allocation['coupon']->id,
+                        'user_id' => $user->id,
+                        'order_id' => $order->id,
+                        'order_item_id' => $orderItem->id,
+                        'user_coupon_id' => $allocation['user_coupon']?->id,
+                        'status' => CouponRedemption::STATUS_RESERVED,
+                        'discount_cents' => $allocation['discount_cents'],
+                    ]);
+                }
             }
 
             $paymentMethod = $data['payment_method'] ?? Order::PAYMENT_METHOD_QR_CODE;
@@ -281,9 +288,15 @@ class OrderService
                 'paid_at' => now(),
             ]);
 
+            $couponIds = $order->couponRedemptions()->pluck('coupon_id')->map(fn ($id): int => (int) $id)->all();
+
             $order->couponRedemptions()->update([
                 'status' => CouponRedemption::STATUS_CONFIRMED,
             ]);
+
+            if ($order->user && $couponIds !== []) {
+                $this->coupons->markExhaustedHoldings($order->user, $couponIds);
+            }
 
             if ($order->user) {
                 $productIds = $order->items
@@ -617,7 +630,7 @@ class OrderService
         }
 
         DB::transaction(function () use ($order, $actor, $note): void {
-            $order->loadMissing('items.product');
+            $order->loadMissing('items.product', 'user');
 
             foreach ($order->items as $item) {
                 if (! $order->stock_deducted_at) {
@@ -666,9 +679,15 @@ class OrderService
                 'admin_note' => $note ?: $order->admin_note,
             ]);
 
+            $couponIds = $order->couponRedemptions()->pluck('coupon_id')->map(fn ($id): int => (int) $id)->all();
+
             $order->couponRedemptions()->update([
                 'status' => CouponRedemption::STATUS_RELEASED,
             ]);
+
+            if ($order->user && $couponIds !== []) {
+                $this->coupons->restoreReleasedHoldings($order->user, $couponIds);
+            }
 
             app(WalletService::class)->refundOrderPayment(
                 $order,

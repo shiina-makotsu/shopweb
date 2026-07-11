@@ -2,11 +2,13 @@
 
 namespace App\Services;
 
+use App\Models\Coupon;
 use App\Models\EventRewardGrant;
 use App\Models\ReferralRewardRule;
 use App\Models\User;
 use App\Models\UserCoupon;
 use App\Models\WalletTransaction;
+use App\Support\Money;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Throwable;
@@ -24,7 +26,7 @@ class ReferralRewardService
     {
         ReferralRewardRule::query()
             ->active()
-            ->with('coupon')
+            ->with('coupon.products')
             ->orderBy('sort_order')
             ->orderBy('id')
             ->get()
@@ -50,34 +52,72 @@ class ReferralRewardService
                     $walletSource = $event === ReferralRewardRule::EVENT_REFERRAL_REGISTERED
                         ? WalletTransaction::SOURCE_REFERRAL
                         : WalletTransaction::SOURCE_EVENT_REWARD;
+                    $rewardRules = $rule->couponRulesForIssuance();
+                    $couponIds = [];
+                    $couponSnapshots = [];
+                    $walletAmountCents = 0;
+                    $errors = [];
 
-                    if ($rule->couponRewardEnabled()) {
+                    if ($rewardRules !== []) {
                         try {
-                            app(GeneratedCouponRewardService::class)->issueToUser(
+                            $issuedCoupons = app(GeneratedCouponRewardService::class)->issueToUserWithDetails(
                                 $user,
-                                $rule->couponRewardRules(),
+                                $rewardRules,
                                 $couponSource,
                                 $note,
-                                fn (array $rewardRule, int $ruleNumber, int $index, int $quantity): string => $this->eventRewardCouponName($rule, $rewardRule, $event, $ruleNumber, $index, $quantity),
+                                fn (array $rewardRule, int $ruleNumber, int $index, int $quantity): string => $this->eventRewardCouponName($rule, $rewardRule, $index, $quantity),
                                 null,
                                 'ER',
                             );
-                        } catch (Throwable) {
-                            // Coupon generation must not block the event flow.
-                        }
-                    }
 
-                    if ($rule->coupon) {
-                        try {
-                            app(CouponService::class)->issueToUser($rule->coupon, $user, $couponSource, note: $note);
-                        } catch (Throwable) {
-                            // A duplicate or exhausted coupon must not block the event flow.
+                            foreach ($issuedCoupons as $coupon) {
+                                $couponIds[] = (int) $coupon->id;
+                                $couponSnapshots[] = [
+                                    'id' => (int) $coupon->id,
+                                    'name' => (string) $coupon->name,
+                                    'type' => (string) $coupon->type,
+                                    'value' => (int) $coupon->value,
+                                    'scope' => (string) $coupon->scope,
+                                    'minimum_order_cents' => (int) $coupon->minimum_order_cents,
+                                    'usage_limit' => (int) $coupon->usage_limit,
+                                    'per_user_limit' => (int) $coupon->per_user_limit,
+                                    'is_stackable' => (bool) $coupon->is_stackable,
+                                    'ends_at' => $coupon->ends_at?->toIso8601String(),
+                                ];
+                            }
+                        } catch (Throwable $exception) {
+                            $errors[] = '优惠码发放失败：'.$exception->getMessage();
                         }
                     }
 
                     if ((int) $rule->wallet_amount_cents > 0) {
-                        app(WalletService::class)->credit($user, (int) $rule->wallet_amount_cents, $walletSource, $note);
+                        try {
+                            app(WalletService::class)->credit($user, (int) $rule->wallet_amount_cents, $walletSource, $note);
+                            $walletAmountCents = (int) $rule->wallet_amount_cents;
+                        } catch (Throwable $exception) {
+                            $errors[] = '钱包奖励发放失败：'.$exception->getMessage();
+                        }
                     }
+
+                    $hasDeliveredReward = $couponIds !== [] || $walletAmountCents > 0;
+                    $status = $errors === []
+                        ? EventRewardGrant::STATUS_COMPLETED
+                        : ($hasDeliveredReward ? EventRewardGrant::STATUS_PARTIAL : EventRewardGrant::STATUS_FAILED);
+
+                    $grant->forceFill([
+                        'status' => $status,
+                        'coupon_ids' => $couponIds,
+                        'wallet_amount_cents' => $walletAmountCents,
+                        'reward_snapshot' => [
+                            'rule_name' => $rule->name,
+                            'event' => $event,
+                            'coupon_rules' => $rewardRules,
+                            'issued_coupons' => $couponSnapshots,
+                            'wallet_amount_cents' => $walletAmountCents,
+                        ],
+                        'error_message' => $errors !== [] ? implode("\n", $errors) : null,
+                        'completed_at' => now(),
+                    ])->save();
                 });
             });
     }
@@ -85,13 +125,22 @@ class ReferralRewardService
     /**
      * @param  array<string, mixed>  $rewardRule
      */
-    private function eventRewardCouponName(ReferralRewardRule $rule, array $rewardRule, string $event, int $ruleNumber, int $index, int $quantity): string
+    private function eventRewardCouponName(ReferralRewardRule $rule, array $rewardRule, int $index, int $quantity): string
     {
         $suffix = $quantity > 1 ? " {$index}/{$quantity}" : '';
-        $ruleLabel = $ruleNumber > 1 ? " 瑙勫垯{$ruleNumber}" : '';
-        $name = trim((string) ($rewardRule['name'] ?? ''));
-        $name = $name !== '' ? ' '.$name : '';
 
-        return trim($rule->name.' '.ReferralRewardRule::eventLabel($event).'璧犲埜'.$ruleLabel.$name.$suffix);
+        return trim($rule->name.' '.$this->rewardDiscountLabel($rewardRule).$suffix);
+    }
+
+    /**
+     * @param  array<string, mixed>  $rewardRule
+     */
+    private function rewardDiscountLabel(array $rewardRule): string
+    {
+        if (($rewardRule['type'] ?? null) === Coupon::TYPE_PERCENT) {
+            return max(1, min(100, (int) ($rewardRule['value'] ?? 0))).'%';
+        }
+
+        return Money::format(max(0, (int) ($rewardRule['value'] ?? 0)));
     }
 }

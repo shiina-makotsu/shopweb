@@ -71,7 +71,11 @@ class UserCenterController extends Controller
             'addressProvinceOptions' => $section === 'addresses' ? ChinaRegions::provinceOptions() : [],
             'addressRegionTree' => $section === 'addresses' ? ChinaRegions::regionTreeForForms() : [],
             'coupons' => $section === 'coupons'
-                ? $user->coupons()->with(['coupon.products', 'coupon.product'])->latest()->get()
+                ? $user->coupons()
+                    ->visibleToCustomer()
+                    ->with(['coupon.products', 'coupon.product'])
+                    ->latest()
+                    ->get()
                 : null,
             'referrals' => $section === 'invitations'
                 ? $user->referrals()->latest()->paginate(20)

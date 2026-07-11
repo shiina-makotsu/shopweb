@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Validation\ValidationException;
 use App\Support\Money;
 
 class Coupon extends Model
@@ -45,6 +46,68 @@ class Coupon extends Model
         ];
     }
 
+    protected static function booted(): void
+    {
+        static::saving(function (Coupon $coupon): void {
+            $totalLimit = max(1, (int) ($coupon->usage_limit ?? 1));
+            $perUserLimit = max(1, (int) ($coupon->per_user_limit ?? 1));
+
+            if ($perUserLimit > $totalLimit) {
+                throw ValidationException::withMessages([
+                    'per_user_limit' => '单用户可使用次数不能超过总次数。',
+                ]);
+            }
+
+            if ($coupon->exists) {
+                $holderCount = $coupon->userCoupons()->whereNull('exhausted_at')->count();
+
+                if ($perUserLimit * $holderCount > $totalLimit) {
+                    throw ValidationException::withMessages([
+                        'per_user_limit' => '单用户次数 × 持有用户数不能超过总次数。',
+                    ]);
+                }
+            }
+
+            $coupon->usage_limit = $totalLimit;
+            $coupon->per_user_limit = $perUserLimit;
+        });
+
+        static::saved(function (Coupon $coupon): void {
+            $holdings = $coupon->userCoupons()->get();
+
+            foreach ($holdings as $holding) {
+                $usedByUser = $coupon->redemptions()
+                    ->where('user_id', $holding->user_id)
+                    ->whereIn('status', [CouponRedemption::STATUS_RESERVED, CouponRedemption::STATUS_CONFIRMED])
+                    ->count();
+
+                if ($usedByUser >= (int) $coupon->per_user_limit && ! $holding->exhausted_at) {
+                    $holding->forceFill(['exhausted_at' => now()])->save();
+                }
+            }
+
+            $activeHolderCount = $coupon->userCoupons()->whereNull('exhausted_at')->count();
+
+            foreach ($holdings->whereNotNull('exhausted_at') as $holding) {
+                $usedByUser = $coupon->redemptions()
+                    ->where('user_id', $holding->user_id)
+                    ->whereIn('status', [CouponRedemption::STATUS_RESERVED, CouponRedemption::STATUS_CONFIRMED])
+                    ->count();
+
+                if ($usedByUser >= (int) $coupon->per_user_limit) {
+                    continue;
+                }
+
+                if (((int) $coupon->per_user_limit * ($activeHolderCount + 1)) > (int) $coupon->usage_limit) {
+                    break;
+                }
+
+                $holding->forceFill(['exhausted_at' => null])->save();
+                $activeHolderCount++;
+            }
+        });
+    }
+
     public function redemptions(): HasMany
     {
         return $this->hasMany(CouponRedemption::class);
@@ -68,6 +131,39 @@ class Coupon extends Model
     public function scopeActive(Builder $query): Builder
     {
         return $query->where('is_active', true);
+    }
+
+    public function scopeVisibleToCustomers(Builder $query): Builder
+    {
+        return $query
+            ->where(function (Builder $query): void {
+                $query->whereNull('coupons.ends_at')
+                    ->orWhere('coupons.ends_at', '>', now());
+            })
+            ->where(function (Builder $query): void {
+                $query->whereNull('coupons.usage_limit')
+                    ->orWhereRaw(
+                        'coupons.usage_limit > (select count(*) from coupon_redemptions where coupon_redemptions.coupon_id = coupons.id and coupon_redemptions.status in (?, ?))',
+                        [CouponRedemption::STATUS_RESERVED, CouponRedemption::STATUS_CONFIRMED],
+                    );
+            });
+    }
+
+    public function remainingValidityLabel(): string
+    {
+        if (! $this->ends_at) {
+            return '永久有效';
+        }
+
+        $remainingSeconds = now()->diffInSeconds($this->ends_at, false);
+
+        if ($remainingSeconds <= 0) {
+            return '已到期';
+        }
+
+        $days = (int) ceil($remainingSeconds / 86400);
+
+        return '剩余 '.$days.' 天';
     }
 
     public function discountFor(int $subtotalCents): int

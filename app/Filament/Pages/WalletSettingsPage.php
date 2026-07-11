@@ -285,7 +285,14 @@ class WalletSettingsPage extends Page implements HasSchemas
                                                     ->label('每张总可用次数')
                                                     ->numeric()
                                                     ->minValue(1)
-                                                    ->default(1),
+                                                    ->default(1)
+                                                    ->live(),
+                                                TextInput::make('per_user_limit')
+                                                    ->label('每张单用户可用次数')
+                                                    ->numeric()
+                                                    ->minValue(1)
+                                                    ->default(1)
+                                                    ->maxValue(fn (Get $get): int => max(1, (int) ($get('usage_limit') ?? 1))),
                                                 Toggle::make('is_stackable')
                                                     ->label('允许该赠券同单叠加')
                                                     ->helperText('默认关闭；关闭后，该规则发放的每一张优惠券都不能和任意第二张优惠券在同一笔订单中同时使用，包括同规则发放的其它赠券。')
@@ -443,6 +450,7 @@ class WalletSettingsPage extends Page implements HasSchemas
             ->map(function (array $rule): array {
                 $type = ($rule['type'] ?? Coupon::TYPE_FIXED) === Coupon::TYPE_PERCENT ? Coupon::TYPE_PERCENT : Coupon::TYPE_FIXED;
                 $scope = ($rule['scope'] ?? Coupon::SCOPE_GLOBAL) === Coupon::SCOPE_PRODUCT ? Coupon::SCOPE_PRODUCT : Coupon::SCOPE_GLOBAL;
+                $usageLimit = max(1, (int) ($rule['usage_limit'] ?? 1));
 
                 return [
                     'name' => trim((string) ($rule['name'] ?? '')),
@@ -457,7 +465,8 @@ class WalletSettingsPage extends Page implements HasSchemas
                     'product_ids' => array_values(array_filter(array_map('intval', $rule['product_ids'] ?? []))),
                     'minimum_order_cents' => max(0, (int) ($rule['minimum_order_cents'] ?? 0)),
                     'quantity' => max(1, (int) ($rule['quantity'] ?? 1)),
-                    'usage_limit' => max(1, (int) ($rule['usage_limit'] ?? 1)),
+                    'usage_limit' => $usageLimit,
+                    'per_user_limit' => max(1, min($usageLimit, (int) ($rule['per_user_limit'] ?? 1))),
                     'is_stackable' => (bool) ($rule['is_stackable'] ?? false),
                 ];
             })

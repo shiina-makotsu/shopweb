@@ -7,6 +7,7 @@ use App\Filament\Resources\ReferralRewardRuleResource\Pages\CreateReferralReward
 use App\Filament\Resources\ReferralRewardRuleResource\Pages\EditReferralRewardRule;
 use App\Filament\Resources\ReferralRewardRuleResource\Pages\ListReferralRewardRules;
 use App\Models\Coupon;
+use App\Models\EventRewardGrant;
 use App\Models\Product;
 use App\Models\ReferralRewardRule;
 use App\Support\CurrencyUnit;
@@ -15,6 +16,7 @@ use App\Support\MoneyInput;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Actions\Action;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -28,6 +30,7 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Support\HtmlString;
 
 class ReferralRewardRuleResource extends Resource
 {
@@ -142,6 +145,14 @@ class ReferralRewardRuleResource extends Resource
             ])
             ->defaultSort('sort_order')
             ->recordActions([
+                Action::make('grantHistory')
+                    ->label('发放记录')
+                    ->icon(Heroicon::OutlinedClipboardDocumentList)
+                    ->modalHeading(fn (ReferralRewardRule $record): string => '发放记录：'.$record->name)
+                    ->modalSubmitAction(false)
+                    ->modalCancelActionLabel('关闭')
+                    ->modalWidth('6xl')
+                    ->modalContent(fn (ReferralRewardRule $record): HtmlString => static::grantHistoryHtml($record)),
                 EditAction::make(),
                 DeleteAction::make(),
             ])
@@ -234,8 +245,78 @@ class ReferralRewardRuleResource extends Resource
                     );
                 }),
             TextInput::make('quantity')->label('本规则发放张数')->numeric()->minValue(1)->default(1),
-            TextInput::make('usage_limit')->label('每张总可用次数')->numeric()->minValue(1)->default(1),
+            TextInput::make('usage_limit')->label('每张总可用次数')->numeric()->minValue(1)->default(1)->live(),
+            TextInput::make('per_user_limit')
+                ->label('每张单用户可用次数')
+                ->numeric()
+                ->minValue(1)
+                ->default(1)
+                ->maxValue(fn (Get $get): int => max(1, (int) ($get('usage_limit') ?? 1))),
             Toggle::make('is_stackable')->label('允许该赠券同单叠加')->default(false),
         ];
+    }
+
+    private static function grantHistoryHtml(ReferralRewardRule $rule): HtmlString
+    {
+        $grants = $rule->grants()
+            ->with('user')
+            ->latest('id')
+            ->limit(100)
+            ->get();
+
+        if ($grants->isEmpty()) {
+            return new HtmlString('<p style="margin:0;color:#64748b;">暂无发放记录。</p>');
+        }
+
+        $couponIds = $grants
+            ->flatMap(fn (EventRewardGrant $grant): array => $grant->coupon_ids ?? [])
+            ->map(fn ($id): int => (int) $id)
+            ->filter()
+            ->unique()
+            ->values();
+        $coupons = Coupon::query()
+            ->whereKey($couponIds)
+            ->get()
+            ->keyBy('id');
+
+        $rows = $grants->map(function (EventRewardGrant $grant) use ($coupons): string {
+            $user = $grant->user;
+            $userLabel = $user
+                ? e($user->displayName()).'<br><span style="color:#64748b;">'.e($user->public_id).' / '.e($user->email).'</span>'
+                : '<span style="color:#dc2626;">已删除用户 #'.e((string) $grant->user_id).'</span>';
+            $couponLabels = collect($grant->coupon_ids ?? [])
+                ->map(function ($couponId) use ($coupons): string {
+                    $coupon = $coupons->get((int) $couponId);
+
+                    return $coupon ? e($coupon->name).' <span style="color:#64748b;">('.e($coupon->code).')</span>' : '已删除优惠码 #'.e((string) $couponId);
+                })
+                ->implode('<br>') ?: '-';
+            $status = match ($grant->status) {
+                EventRewardGrant::STATUS_COMPLETED => '成功',
+                EventRewardGrant::STATUS_PARTIAL => '部分成功',
+                EventRewardGrant::STATUS_FAILED => '失败',
+                default => '处理中',
+            };
+            $error = filled($grant->error_message) ? '<br><span style="color:#dc2626;">'.nl2br(e($grant->error_message)).'</span>' : '';
+
+            return '<tr>'
+                .'<td style="padding:10px 12px;border-top:1px solid #e2e8f0;vertical-align:top;">'.$userLabel.'</td>'
+                .'<td style="padding:10px 12px;border-top:1px solid #e2e8f0;vertical-align:top;">'.e(ReferralRewardRule::eventLabel($grant->event)).'</td>'
+                .'<td style="padding:10px 12px;border-top:1px solid #e2e8f0;vertical-align:top;">'.$couponLabels.'</td>'
+                .'<td style="padding:10px 12px;border-top:1px solid #e2e8f0;vertical-align:top;white-space:nowrap;">'.e(Money::format((int) $grant->wallet_amount_cents)).'</td>'
+                .'<td style="padding:10px 12px;border-top:1px solid #e2e8f0;vertical-align:top;">'.e($status).$error.'</td>'
+                .'<td style="padding:10px 12px;border-top:1px solid #e2e8f0;vertical-align:top;white-space:nowrap;">'.e($grant->completed_at?->format('Y-m-d H:i') ?? $grant->created_at?->format('Y-m-d H:i') ?? '-').'</td>'
+                .'</tr>';
+        })->implode('');
+
+        return new HtmlString('<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;line-height:1.5;">'
+            .'<thead><tr style="background:#f8fafc;color:#334155;">'
+            .'<th style="padding:10px 12px;text-align:left;">用户</th>'
+            .'<th style="padding:10px 12px;text-align:left;">触发事件</th>'
+            .'<th style="padding:10px 12px;text-align:left;">新建优惠码</th>'
+            .'<th style="padding:10px 12px;text-align:left;">钱包奖励</th>'
+            .'<th style="padding:10px 12px;text-align:left;">状态</th>'
+            .'<th style="padding:10px 12px;text-align:left;">发放时间</th>'
+            .'</tr></thead><tbody>'.$rows.'</tbody></table></div>');
     }
 }

@@ -183,6 +183,7 @@ class WalletRechargeOption extends Model
     {
         $type = ($rule['type'] ?? Coupon::TYPE_FIXED) === Coupon::TYPE_PERCENT ? Coupon::TYPE_PERCENT : Coupon::TYPE_FIXED;
         $scope = ($rule['scope'] ?? Coupon::SCOPE_GLOBAL) === Coupon::SCOPE_PRODUCT ? Coupon::SCOPE_PRODUCT : Coupon::SCOPE_GLOBAL;
+        $usageLimit = max(1, (int) ($rule['usage_limit'] ?? 1));
 
         return [
             'name' => trim((string) ($rule['name'] ?? '')),
@@ -197,7 +198,8 @@ class WalletRechargeOption extends Model
             'product_ids' => array_values(array_filter(array_map('intval', $rule['product_ids'] ?? []))),
             'minimum_order_cents' => max(0, (int) ($rule['minimum_order_cents'] ?? 0)),
             'quantity' => max(1, (int) ($rule['quantity'] ?? 1)),
-            'usage_limit' => max(1, (int) ($rule['usage_limit'] ?? 1)),
+            'usage_limit' => $usageLimit,
+            'per_user_limit' => max(1, min($usageLimit, (int) ($rule['per_user_limit'] ?? 1))),
             'is_stackable' => (bool) ($rule['is_stackable'] ?? false),
         ];
     }

@@ -119,7 +119,22 @@ class CouponResource extends Resource
                 TextInput::make('minimum_order_cents')->label('最低订单金额')->default(0),
                 label: '最低订单金额'
             ),
-            TextInput::make('usage_limit')->label('总次数')->numeric(),
+            TextInput::make('usage_limit')
+                ->label('总次数')
+                ->numeric()
+                ->required()
+                ->minValue(1)
+                ->default(1)
+                ->live()
+                ->helperText('所有持有人合计可使用的次数，默认 1。每次占用或确认使用后，剩余次数会自动减少。'),
+            TextInput::make('per_user_limit')
+                ->label('单用户可使用次数')
+                ->numeric()
+                ->required()
+                ->minValue(1)
+                ->default(1)
+                ->maxValue(fn (Get $get): int => max(1, (int) ($get('usage_limit') ?? 1)))
+                ->helperText('默认 1，不能超过总次数；单用户次数 × 持有用户数也不能超过总次数。'),
             Toggle::make('is_stackable')
                 ->label('允许同单叠加使用')
                 ->helperText('关闭后，该优惠码不能和其它优惠码在同一笔订单中同时使用。')
@@ -133,10 +148,21 @@ class CouponResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
-            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with(['products', 'userCoupons.user'])->withCount('userCoupons'))
+            ->modifyQueryUsing(fn (Builder $query): Builder => $query
+                ->with([
+                    'products',
+                    'userCoupons' => fn ($query) => $query->whereNull('exhausted_at')->with(['user', 'issuer']),
+                ])
+                ->withCount([
+                    'userCoupons' => fn ($query) => $query->whereNull('exhausted_at'),
+                    'redemptions as used_redemptions_count' => fn ($query) => $query->whereIn('status', [\App\Models\CouponRedemption::STATUS_RESERVED, \App\Models\CouponRedemption::STATUS_CONFIRMED]),
+                ]))
             ->columns([
                 TextColumn::make('code')->label('代码')->searchable(),
-                TextColumn::make('name')->label('名称'),
+                TextColumn::make('name')
+                    ->label('名称')
+                    ->state(fn (Coupon $record): HtmlString => static::rowTriggerHtml($record))
+                    ->html(),
                 TextColumn::make('type')->label('类型'),
                 TextColumn::make('scope')
                     ->label('范围')
@@ -153,30 +179,22 @@ class CouponResource extends Resource
                 TextColumn::make('value')
                     ->label('值')
                     ->formatStateUsing(fn ($state, Coupon $record): string => $record->type === Coupon::TYPE_FIXED ? Money::format((int) $state) : ((int) $state).'%'),
+                TextColumn::make('usage_limit')->label('总次数')->sortable(),
+                TextColumn::make('per_user_limit')->label('单用户次数')->sortable(),
+                TextColumn::make('remaining_uses')
+                    ->label('剩余次数')
+                    ->state(fn (Coupon $record): int => max(0, (int) $record->usage_limit - (int) ($record->used_redemptions_count ?? 0)))
+                    ->badge(),
                 IconColumn::make('is_active')->label('启用')->boolean(),
                 TextColumn::make('user_coupons_count')
                     ->label('持有用户')
                     ->badge()
                     ->formatStateUsing(fn ($state): string => ((int) $state).' 人')
                     ->sortable(),
-                TextColumn::make('coupon_holders')
-                    ->label('持有人明细')
-                    ->state(fn (Coupon $record): array => static::couponHolderLabels($record, 5))
-                    ->listWithLineBreaks()
-                    ->limitList(5)
-                    ->placeholder('-')
-                    ->toggleable(),
-                TextColumn::make('redemptions_count')->counts('redemptions')->label('使用记录'),
+                TextColumn::make('used_redemptions_count')->label('已使用次数'),
             ])
+            ->recordUrl(null)
             ->recordActions([
-                Action::make('viewHolders')
-                    ->label('查看持有人')
-                    ->icon(Heroicon::OutlinedUsers)
-                    ->modalHeading(fn (Coupon $record): string => '优惠码持有人：'.$record->code)
-                    ->modalSubmitAction(false)
-                    ->modalCancelActionLabel('关闭')
-                    ->modalWidth('5xl')
-                    ->modalContent(fn (Coupon $record): HtmlString => static::couponHoldersHtml($record)),
                 Action::make('issueToUser')
                     ->label('发放给用户')
                     ->icon(Heroicon::OutlinedUserPlus)
@@ -242,38 +260,65 @@ class CouponResource extends Resource
             });
     }
 
-    /**
-     * @return array<int, string>
-     */
-    private static function couponHolderLabels(Coupon $coupon, int $limit = 5): array
+    private static function rowTriggerHtml(Coupon $coupon): HtmlString
     {
-        $coupon->loadMissing('userCoupons.user');
+        $label = e($coupon->name);
+        $details = static::couponHoldersHtml($coupon)->toHtml();
 
-        return $coupon->userCoupons
-            ->take($limit)
-            ->map(function (UserCoupon $userCoupon): string {
-                $user = $userCoupon->user;
+        return new HtmlString(<<<HTML
+            <span data-shopweb-coupon-trigger style="display:block;font-weight:600;color:#0f172a;">{$label}</span>
+            <template data-shopweb-coupon-template>{$details}</template>
+            <script>
+                if (! window.shopwebCouponRowToggleBound) {
+                    window.shopwebCouponRowToggleBound = true;
+                    document.addEventListener('click', function (event) {
+                        if (event.target.closest('a,button,input,select,textarea,label,[role="button"]')) {
+                            return;
+                        }
 
-                if (! $user) {
-                    return '已删除用户 #'.$userCoupon->user_id;
+                        var trigger = event.target.closest('[data-shopweb-coupon-trigger]');
+                        var row = trigger ? trigger.closest('tr') : event.target.closest('tr');
+                        if (! row || ! row.querySelector('[data-shopweb-coupon-template]')) {
+                            return;
+                        }
+
+                        var next = row.nextElementSibling;
+                        if (next && next.dataset.shopwebCouponExpanded === 'true') {
+                            next.remove();
+                            row.classList.remove('shopweb-coupon-row-open');
+                            return;
+                        }
+
+                        document.querySelectorAll('tr[data-shopweb-coupon-expanded="true"]').forEach(function (item) {
+                            item.previousElementSibling && item.previousElementSibling.classList.remove('shopweb-coupon-row-open');
+                            item.remove();
+                        });
+
+                        var template = row.querySelector('[data-shopweb-coupon-template]');
+                        var expanded = document.createElement('tr');
+                        expanded.dataset.shopwebCouponExpanded = 'true';
+                        var cell = document.createElement('td');
+                        cell.colSpan = row.children.length;
+                        cell.style.padding = '0';
+                        cell.innerHTML = template.innerHTML;
+                        expanded.appendChild(cell);
+                        row.insertAdjacentElement('afterend', expanded);
+                        row.classList.add('shopweb-coupon-row-open');
+                    });
                 }
-
-                return $user->displayName().' / '.$user->public_id.' / '.$user->email;
-            })
-            ->values()
-            ->all();
+            </script>
+        HTML);
     }
 
     private static function couponHoldersHtml(Coupon $coupon): HtmlString
     {
-        $holders = $coupon->userCoupons()
-            ->with(['user', 'issuer'])
-            ->latest('claimed_at')
-            ->latest('id')
-            ->get();
+        $coupon->loadMissing(['userCoupons.user', 'userCoupons.issuer']);
+        $holders = $coupon->userCoupons
+            ->sortByDesc(fn (UserCoupon $userCoupon): string => ($userCoupon->claimed_at?->format('Y-m-d H:i:s.u') ?? '').'-'.str_pad((string) $userCoupon->id, 20, '0', STR_PAD_LEFT))
+            ->values();
 
         if ($holders->isEmpty()) {
-            return new HtmlString('<p style="margin:0;color:#64748b;">暂无用户持有该优惠码。</p>');
+            return new HtmlString('<div class="shopweb-coupon-submenu" style="padding:14px 18px 14px 28px;background:#f8fafc;border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;border-left:3px solid #94a3b8;color:#64748b;font-size:13px;">暂无用户持有该优惠码。</div>');
         }
 
         $rows = $holders->map(function (UserCoupon $userCoupon): string {
@@ -298,8 +343,15 @@ class CouponResource extends Resource
             HTML;
         })->implode('');
 
+        $holderCount = e((string) $holders->count());
+
         return new HtmlString(<<<HTML
-            <div style="overflow-x:auto;">
+            <div class="shopweb-coupon-submenu" style="padding:14px 18px 14px 28px;background:#f8fafc;border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;border-left:3px solid #94a3b8;color:#0f172a;font-size:13px;line-height:1.5;">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;">
+                    <strong style="color:#334155;">持有人明细</strong>
+                    <span style="color:#64748b;">共 {$holderCount} 人</span>
+                </div>
+                <div style="overflow-x:auto;">
                 <table style="width:100%;border-collapse:collapse;font-size:13px;line-height:1.5;">
                     <thead>
                         <tr style="background:#f8fafc;color:#334155;">
@@ -312,6 +364,7 @@ class CouponResource extends Resource
                     </thead>
                     <tbody>{$rows}</tbody>
                 </table>
+                </div>
             </div>
         HTML);
     }

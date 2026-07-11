@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -25,6 +26,7 @@ class UserCoupon extends Model
         'after_sales_request_id',
         'source',
         'claimed_at',
+        'exhausted_at',
         'note',
     ];
 
@@ -32,6 +34,7 @@ class UserCoupon extends Model
     {
         return [
             'claimed_at' => 'datetime',
+            'exhausted_at' => 'datetime',
         ];
     }
 
@@ -60,6 +63,17 @@ class UserCoupon extends Model
         return $this->hasMany(CouponRedemption::class);
     }
 
+    public function scopeVisibleToCustomer(Builder $query): Builder
+    {
+        return $query
+            ->whereNull('user_coupons.exhausted_at')
+            ->whereHas('coupon', fn (Builder $query): Builder => $query->visibleToCustomers())
+            ->whereRaw(
+                '(select count(*) from coupon_redemptions where coupon_redemptions.coupon_id = user_coupons.coupon_id and coupon_redemptions.user_id = user_coupons.user_id and coupon_redemptions.status in (?, ?)) < (select coupons.per_user_limit from coupons where coupons.id = user_coupons.coupon_id)',
+                [CouponRedemption::STATUS_RESERVED, CouponRedemption::STATUS_CONFIRMED],
+            );
+    }
+
     public function statusLabel(): string
     {
         $coupon = $this->coupon;
@@ -76,10 +90,14 @@ class UserCoupon extends Model
             return '已过期';
         }
 
-        if ($this->redemptions()
-            ->whereIn('status', [CouponRedemption::STATUS_RESERVED, CouponRedemption::STATUS_CONFIRMED])
-            ->exists()) {
-            return '已使用';
+        if ($coupon->usage_limit !== null) {
+            $used = $coupon->redemptions()
+                ->whereIn('status', [CouponRedemption::STATUS_RESERVED, CouponRedemption::STATUS_CONFIRMED])
+                ->count();
+
+            if ($used >= (int) $coupon->usage_limit) {
+                return '已用完';
+            }
         }
 
         return '可用';

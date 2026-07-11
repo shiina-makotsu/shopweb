@@ -54,8 +54,7 @@ class CheckoutController extends Controller
             'shippingProvince' => $shippingQuote['province'],
             'shippingQuote' => $shippingQuote,
             'privateShippingDefault' => $cart->items()->contains(fn (array $item): bool => $item['product']->defaultsToPrivateShipping()),
-            'availableCouponsByVariant' => $coupons->availableForCart($request->user(), $cart->items()),
-            'couponChoicesByVariant' => $coupons->choicesForCart($request->user(), $cart->items()),
+            'couponChoices' => $coupons->choicesForOrder($request->user(), $cart->items()),
         ]);
     }
 
@@ -89,6 +88,8 @@ class CheckoutController extends Controller
                 Order::PAYMENT_METHOD_PAYPAL,
             ])],
             'coupon_code' => ['nullable', 'string', 'max:100'],
+            'coupon_selections' => ['nullable', 'array'],
+            'coupon_selections.*' => ['nullable', 'integer', 'exists:user_coupons,id'],
             'coupon_items' => ['nullable', 'array'],
             'coupon_items.*' => ['nullable', 'integer', 'exists:user_coupons,id'],
             'shipping_carriers' => ['nullable', 'array'],
