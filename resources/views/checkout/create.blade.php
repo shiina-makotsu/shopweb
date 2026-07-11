@@ -150,21 +150,36 @@
                                 <a class="text-xs font-medium text-blue-700 hover:text-blue-900" href="{{ route('user.section', 'coupons') }}">管理我的优惠码</a>
                             </div>
                             @foreach($items as $item)
-                                @php($lineCoupons = $availableCouponsByVariant[(int) $item['variant']->id] ?? [])
-                                @if($lineCoupons !== [])
-                                    <label class="block rounded-sm border border-slate-200 bg-white px-3 py-3">
-                                        <span class="block text-xs font-medium text-slate-700">{{ $item['product']->title }} / {{ $item['variant']->specLabel() }}</span>
-                                        <select class="mt-2 w-full rounded-sm border border-slate-300 bg-white px-3 py-2 text-sm" name="coupon_items[{{ $item['variant']->id }}]">
-                                            <option value="">不使用优惠码</option>
-                                            @foreach($lineCoupons as $userCoupon)
-                                                @php($coupon = $userCoupon->coupon)
-                                                <option value="{{ $userCoupon->id }}" @selected((string) old('coupon_items.'.$item['variant']->id) === (string) $userCoupon->id)>
-                                                    {{ $coupon->name }} / {{ $coupon->code }} / {{ $coupon->discountLabel() }} / {{ $coupon->scopeLabel() }} / {{ $coupon->is_stackable ? '可叠加使用' : '不可叠加使用' }}
+                                @php($lineChoices = $couponChoicesByVariant[(int) $item['variant']->id] ?? [])
+                                <label class="block rounded-sm border border-slate-200 bg-white px-3 py-3">
+                                    <span class="block text-xs font-medium text-slate-700">{{ $item['product']->title }} / {{ $item['variant']->specLabel() }}</span>
+                                    @if($lineChoices !== [])
+                                        <select class="mt-2 w-full rounded-sm border border-slate-300 bg-white px-3 py-2 text-sm" name="coupon_items[{{ $item['variant']->id }}]" data-coupon-select>
+                                            <option value="" data-discount-cents="0">不使用优惠码</option>
+                                            @foreach($lineChoices as $choice)
+                                                @php($coupon = $choice['coupon'])
+                                                @continue(! $coupon)
+                                                <option
+                                                    value="{{ $choice['user_coupon']->id }}"
+                                                    data-discount-cents="{{ (int) $choice['discount_cents'] }}"
+                                                    @disabled(! $choice['available'])
+                                                    @selected((string) old('coupon_items.'.$item['variant']->id) === (string) $choice['user_coupon']->id && $choice['available'])
+                                                >
+                                                    {{ $coupon->name }} / {{ $coupon->code }} / {{ $coupon->discountLabel() }} / {{ $coupon->scopeLabel() }} / {{ $coupon->is_stackable ? '可叠加使用' : '不可叠加使用' }}{{ $choice['available'] ? '' : ' / 不可用：'.$choice['reason'] }}
                                                 </option>
                                             @endforeach
                                         </select>
-                                    </label>
-                                @endif
+                                        <div class="mt-2 space-y-1 text-xs text-slate-500">
+                                            @foreach($lineChoices as $choice)
+                                                @php($coupon = $choice['coupon'])
+                                                @continue(! $coupon || $choice['available'])
+                                                <p><span class="font-medium text-slate-600">{{ $coupon->code }}</span> 不可用：{{ $choice['reason'] }}</p>
+                                            @endforeach
+                                        </div>
+                                    @else
+                                        <p class="mt-2 text-xs text-slate-500">你还没有可用于结算的优惠码。</p>
+                                    @endif
+                                </label>
                             @endforeach
                             @error('coupon_items')
                                 <p class="text-sm text-red-600">{{ $message }}</p>
@@ -184,12 +199,12 @@
                         @php($paypalEmail = ($siteSettings ?? null)?->paypalEmail())
                         @php($checkoutPayableCents = (int) $subtotalCents + (int) $shippingQuote['shipping_fee_cents'])
                         @php($walletCanCoverCheckout = (int) auth()->user()->wallet_balance_cents >= $checkoutPayableCents && $checkoutPayableCents > 0)
-                        @if($walletCanCoverCheckout)
-                            <label class="flex cursor-pointer gap-3 rounded-sm border border-emerald-300 bg-emerald-50 px-3 py-3 text-sm hover:bg-emerald-100">
+                        @if((int) auth()->user()->wallet_balance_cents > 0)
+                            <label class="flex cursor-pointer gap-3 rounded-sm border border-emerald-300 bg-emerald-50 px-3 py-3 text-sm hover:bg-emerald-100 {{ $walletCanCoverCheckout ? '' : 'hidden' }}" data-wallet-full-option>
                                 <input class="mt-1" type="radio" name="payment_method" value="{{ \App\Models\Order::PAYMENT_METHOD_WALLET }}" @checked($selectedPaymentMethod === \App\Models\Order::PAYMENT_METHOD_WALLET)>
                                 <span>
                                     <span class="block font-medium">钱包余额支付</span>
-                                    <span class="mt-1 block text-xs leading-5 text-emerald-900">当前余额 @money((int) auth()->user()->wallet_balance_cents)，可直接支付本单。</span>
+                                    <span class="mt-1 block text-xs leading-5 text-emerald-900">当前余额 @money((int) auth()->user()->wallet_balance_cents)，待付款金额不高于余额时可直接支付本单。</span>
                                 </span>
                             </label>
                         @endif
@@ -276,22 +291,103 @@
                             </div>
                         @endif
                     @endif
-                    <div class="mt-2 flex justify-between border-t border-slate-200 pt-3 text-sm">
-                        <span>付款总金额</span>
-                        <span class="font-semibold" data-order-total>@money($checkoutTotalCents)</span>
+                    <div class="mt-2 flex justify-between border-t border-slate-200 pt-3 text-sm text-emerald-700">
+                        <span>优惠券抵扣</span>
+                        <span class="font-semibold" data-coupon-discount>- @money(0)</span>
                     </div>
                     <div class="mt-2 flex justify-between text-sm text-emerald-700">
                         <span>钱包支付金额</span>
                         <span class="font-semibold" data-wallet-payment>@money($checkoutWalletCents)</span>
                     </div>
-                    <div class="mt-2 flex justify-between text-base font-semibold text-red-700">
+                    <div class="mt-3 flex justify-between text-xl font-bold text-red-700">
                         <span>待支付金额</span>
                         <span data-remaining-payment>@money(max(0, $checkoutTotalCents - $checkoutWalletCents))</span>
+                    </div>
+                    <div class="mt-1 flex justify-between text-sm text-red-600">
+                        <span>商品和邮费总价</span>
+                        <span data-order-total>@money($checkoutTotalCents)</span>
                     </div>
                 </div>
             </aside>
         </div>
     </section>
+
+    <script>
+        (() => {
+            const money = (cents) => new Intl.NumberFormat('zh-CN', {
+                style: 'currency',
+                currency: 'CNY',
+            }).format(Math.max(0, Number(cents || 0)) / 100);
+            const summary = document.querySelector('[data-checkout-summary]');
+            const shippingTotalNode = document.querySelector('[data-shipping-total]');
+            const orderTotalNode = document.querySelector('[data-order-total]');
+            const couponDiscountNode = document.querySelector('[data-coupon-discount]');
+            const walletPaymentNode = document.querySelector('[data-wallet-payment]');
+            const remainingPaymentNode = document.querySelector('[data-remaining-payment]');
+            const walletFullOption = document.querySelector('[data-wallet-full-option]');
+            const walletFullInput = walletFullOption?.querySelector('[name="payment_method"]');
+            const defaultPaymentInput = document.querySelector('[name="payment_method"][value="{{ \App\Models\Order::PAYMENT_METHOD_QR_CODE }}"]');
+
+            const updateCheckoutTotals = () => {
+                if (! summary || ! orderTotalNode) {
+                    return;
+                }
+
+                let shippingTotal = 0;
+
+                document.querySelectorAll('[data-shipping-shipment]').forEach((shipment) => {
+                    const extraFee = Number(shipment.dataset.extraFee || 0);
+                    const select = shipment.querySelector('[data-shipping-carrier-select]');
+                    const selectedOption = select?.selectedOptions?.[0];
+                    const baseFee = Number(selectedOption?.dataset.baseFee || 0);
+                    const fee = select ? baseFee + extraFee : Number(shipment.dataset.initialFee || 0);
+                    const feeNode = shipment.querySelector('[data-shipment-fee]');
+
+                    if (feeNode && select) {
+                        feeNode.textContent = money(fee);
+                    }
+
+                    shippingTotal += fee;
+                });
+
+                if (shippingTotalNode) {
+                    shippingTotalNode.textContent = money(shippingTotal);
+                }
+
+                const subtotal = Number(summary.dataset.subtotalCents || 0);
+                const grossTotal = subtotal + shippingTotal;
+                const couponDiscount = Array.from(document.querySelectorAll('[data-coupon-select]'))
+                    .reduce((total, select) => total + Number(select.selectedOptions?.[0]?.dataset.discountCents || 0), 0);
+                const discountedTotal = Math.max(0, grossTotal - couponDiscount);
+                const walletBalance = Number(summary.dataset.walletBalanceCents || 0);
+                const canUseFullWallet = walletBalance >= discountedTotal && discountedTotal > 0;
+
+                if (walletFullOption) {
+                    walletFullOption.classList.toggle('hidden', ! canUseFullWallet);
+                }
+
+                if (! canUseFullWallet && walletFullInput?.checked && defaultPaymentInput) {
+                    defaultPaymentInput.checked = true;
+                }
+
+                const selectedPayment = document.querySelector('[name="payment_method"]:checked')?.value || '';
+                const shouldUseWallet = selectedPayment === '{{ \App\Models\Order::PAYMENT_METHOD_WALLET }}' || (walletBalance > 0 && walletBalance < discountedTotal);
+                const walletPayment = shouldUseWallet ? Math.min(walletBalance, discountedTotal) : 0;
+                const remainingPayment = Math.max(0, discountedTotal - walletPayment);
+
+                orderTotalNode.textContent = money(grossTotal);
+                if (couponDiscountNode) couponDiscountNode.textContent = '- ' + money(couponDiscount);
+                if (walletPaymentNode) walletPaymentNode.textContent = money(walletPayment);
+                if (remainingPaymentNode) remainingPaymentNode.textContent = money(remainingPayment);
+            };
+
+            window.shopwebUpdateCheckoutTotals = updateCheckoutTotals;
+            document.querySelectorAll('[data-shipping-carrier-select], [data-coupon-select], [name="payment_method"]').forEach((input) => {
+                input.addEventListener('change', updateCheckoutTotals);
+            });
+            updateCheckoutTotals();
+        })();
+    </script>
 
     @if($requiresShipping)
         <script type="application/json" id="china-region-tree">@json($regionTree, JSON_UNESCAPED_UNICODE)</script>
@@ -307,6 +403,11 @@
                 const walletPaymentNode = document.querySelector('[data-wallet-payment]');
                 const remainingPaymentNode = document.querySelector('[data-remaining-payment]');
                 const updateShippingTotals = () => {
+                    if (window.shopwebUpdateCheckoutTotals) {
+                        window.shopwebUpdateCheckoutTotals();
+                        return;
+                    }
+
                     let shippingTotal = 0;
 
                     document.querySelectorAll('[data-shipping-shipment]').forEach((shipment) => {

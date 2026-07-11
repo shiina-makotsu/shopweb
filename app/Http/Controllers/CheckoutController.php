@@ -55,6 +55,7 @@ class CheckoutController extends Controller
             'shippingQuote' => $shippingQuote,
             'privateShippingDefault' => $cart->items()->contains(fn (array $item): bool => $item['product']->defaultsToPrivateShipping()),
             'availableCouponsByVariant' => $coupons->availableForCart($request->user(), $cart->items()),
+            'couponChoicesByVariant' => $coupons->choicesForCart($request->user(), $cart->items()),
         ]);
     }
 

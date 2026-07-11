@@ -22,6 +22,8 @@ class ReferralRewardRule extends Model
         'trigger_events',
         'product_ids',
         'coupon_id',
+        'coupon_reward_enabled',
+        'coupon_reward_rules',
         'wallet_amount_cents',
         'is_active',
         'sort_order',
@@ -33,6 +35,8 @@ class ReferralRewardRule extends Model
         return [
             'trigger_events' => 'array',
             'product_ids' => 'array',
+            'coupon_reward_enabled' => 'boolean',
+            'coupon_reward_rules' => 'array',
             'wallet_amount_cents' => 'integer',
             'is_active' => 'boolean',
             'sort_order' => 'integer',
@@ -129,5 +133,49 @@ class ReferralRewardRule extends Model
             ->values();
 
         return $eventProductIds->intersect($productIds)->isNotEmpty();
+    }
+
+    public function couponRewardEnabled(): bool
+    {
+        return (bool) $this->coupon_reward_enabled && $this->couponRewardRules() !== [];
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public function couponRewardRules(): array
+    {
+        return collect($this->coupon_reward_rules ?: [])
+            ->map(fn (array $rule): array => $this->normalizeCouponRewardRule($rule))
+            ->filter(fn (array $rule): bool => (int) $rule['value'] > 0 && (int) $rule['quantity'] > 0)
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  array<string, mixed>  $rule
+     * @return array<string, mixed>
+     */
+    private function normalizeCouponRewardRule(array $rule): array
+    {
+        $type = ($rule['type'] ?? Coupon::TYPE_FIXED) === Coupon::TYPE_PERCENT ? Coupon::TYPE_PERCENT : Coupon::TYPE_FIXED;
+        $scope = ($rule['scope'] ?? Coupon::SCOPE_GLOBAL) === Coupon::SCOPE_PRODUCT ? Coupon::SCOPE_PRODUCT : Coupon::SCOPE_GLOBAL;
+
+        return [
+            'name' => trim((string) ($rule['name'] ?? '')),
+            'currency_code' => (string) ($rule['currency_code'] ?? 'CNY'),
+            'currency_unit' => (string) ($rule['currency_unit'] ?? 'yuan'),
+            'type' => $type,
+            'value' => $type === Coupon::TYPE_PERCENT
+                ? max(0, min(100, (int) ($rule['value'] ?? 0)))
+                : max(0, (int) ($rule['value'] ?? 0)),
+            'valid_days' => filled($rule['valid_days'] ?? null) ? max(1, (int) $rule['valid_days']) : null,
+            'scope' => $scope,
+            'product_ids' => array_values(array_filter(array_map('intval', $rule['product_ids'] ?? []))),
+            'minimum_order_cents' => max(0, (int) ($rule['minimum_order_cents'] ?? 0)),
+            'quantity' => max(1, (int) ($rule['quantity'] ?? 1)),
+            'usage_limit' => max(1, (int) ($rule['usage_limit'] ?? 1)),
+            'is_stackable' => (bool) ($rule['is_stackable'] ?? false),
+        ];
     }
 }

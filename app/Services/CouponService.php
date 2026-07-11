@@ -6,6 +6,7 @@ use App\Models\Coupon;
 use App\Models\CouponRedemption;
 use App\Models\User;
 use App\Models\UserCoupon;
+use App\Support\Money;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
 
@@ -88,26 +89,56 @@ class CouponService
      */
     public function availableForCart(User $user, Collection $cartItems): array
     {
+        $choices = $this->choicesForCart($user, $cartItems);
+
+        $available = [];
+
+        foreach ($choices as $variantId => $lineChoices) {
+            $available[$variantId] = collect($lineChoices)
+                ->filter(fn (array $choice): bool => (bool) $choice['available'])
+                ->pluck('user_coupon')
+                ->values()
+                ->all();
+        }
+
+        return $available;
+    }
+
+    /**
+     * @return array<int, array<int, array{user_coupon:UserCoupon,coupon:?Coupon,available:bool,reason:?string,discount_cents:int}>>
+     */
+    public function choicesForCart(User $user, Collection $cartItems): array
+    {
         $userCoupons = $user->coupons()
             ->with(['coupon.products', 'coupon.product'])
             ->latest()
-            ->get()
-            ->filter(fn (UserCoupon $userCoupon): bool => $this->isUserCouponUsable($userCoupon, $user));
+            ->get();
 
-        $available = [];
+        $choices = [];
 
         foreach ($cartItems as $cartItem) {
             $variantId = (int) $cartItem['variant']->id;
             $productId = (int) $cartItem['product']->id;
             $lineTotal = (int) $cartItem['line_total_cents'];
 
-            $available[$variantId] = $userCoupons
-                ->filter(fn (UserCoupon $userCoupon): bool => $this->couponMatchesLine($userCoupon->coupon, $user, $productId, $lineTotal))
+            $choices[$variantId] = $userCoupons
+                ->map(function (UserCoupon $userCoupon) use ($user, $productId, $lineTotal): array {
+                    $coupon = $userCoupon->coupon;
+                    $reason = $this->unavailableReasonForLine($userCoupon, $user, $productId, $lineTotal);
+
+                    return [
+                        'user_coupon' => $userCoupon,
+                        'coupon' => $coupon,
+                        'available' => $reason === null,
+                        'reason' => $reason,
+                        'discount_cents' => $reason === null && $coupon ? $coupon->discountFor($lineTotal) : 0,
+                    ];
+                })
                 ->values()
                 ->all();
         }
 
-        return $available;
+        return $choices;
     }
 
     /**
@@ -235,50 +266,12 @@ class CouponService
 
     private function isUserCouponUsable(UserCoupon $userCoupon, User $user): bool
     {
-        $coupon = $userCoupon->coupon;
-
-        if (! $coupon) {
-            return false;
-        }
-
-        if ($userCoupon->user_id !== $user->id || ! $coupon->is_active) {
-            return false;
-        }
-
-        if ($coupon->starts_at && $coupon->starts_at->isFuture()) {
-            return false;
-        }
-
-        if ($coupon->ends_at && $coupon->ends_at->isPast()) {
-            return false;
-        }
-
-        if ($userCoupon->redemptions()
-            ->whereIn('status', [CouponRedemption::STATUS_RESERVED, CouponRedemption::STATUS_CONFIRMED])
-            ->exists()) {
-            return false;
-        }
-
-        return true;
+        return $this->baseUnavailableReason($userCoupon, $user) === null;
     }
 
     private function couponMatchesLine(Coupon $coupon, User $user, int $productId, int $lineTotalCents): bool
     {
-        try {
-            $this->assertUsageLimits($coupon);
-        } catch (ValidationException) {
-            return false;
-        }
-
-        if ($lineTotalCents < (int) $coupon->minimum_order_cents) {
-            return false;
-        }
-
-        if (! $coupon->appliesToProduct($productId)) {
-            return false;
-        }
-
-        return true;
+        return $this->lineUnavailableReason($coupon, $productId, $lineTotalCents) === null;
     }
 
     private function assertUsageLimits(Coupon $coupon): void
@@ -294,5 +287,83 @@ class CouponService
         if ($used >= $coupon->usage_limit) {
             throw ValidationException::withMessages(['coupon_code' => '优惠码已被使用完。']);
         }
+    }
+
+    private function unavailableReasonForLine(UserCoupon $userCoupon, User $user, int $productId, int $lineTotalCents): ?string
+    {
+        $baseReason = $this->baseUnavailableReason($userCoupon, $user);
+
+        if ($baseReason !== null) {
+            return $baseReason;
+        }
+
+        return $this->lineUnavailableReason($userCoupon->coupon, $productId, $lineTotalCents);
+    }
+
+    private function baseUnavailableReason(UserCoupon $userCoupon, User $user): ?string
+    {
+        $coupon = $userCoupon->coupon;
+
+        if (! $coupon) {
+            return '优惠码不存在';
+        }
+
+        if ($userCoupon->user_id !== $user->id) {
+            return '不属于当前用户';
+        }
+
+        if (! $coupon->is_active) {
+            return '优惠码已停用';
+        }
+
+        if ($coupon->starts_at && $coupon->starts_at->isFuture()) {
+            return '尚未开始';
+        }
+
+        if ($coupon->ends_at && $coupon->ends_at->isPast()) {
+            return '已过期';
+        }
+
+        if ($userCoupon->redemptions()
+            ->whereIn('status', [CouponRedemption::STATUS_RESERVED, CouponRedemption::STATUS_CONFIRMED])
+            ->exists()) {
+            return '已使用';
+        }
+
+        if ($coupon->per_user_limit !== null) {
+            $usedByUser = $coupon->redemptions()
+                ->where('user_id', $user->id)
+                ->whereIn('status', [CouponRedemption::STATUS_RESERVED, CouponRedemption::STATUS_CONFIRMED])
+                ->count();
+
+            if ($usedByUser >= (int) $coupon->per_user_limit) {
+                return '已达到每人使用次数上限';
+            }
+        }
+
+        return null;
+    }
+
+    private function lineUnavailableReason(?Coupon $coupon, int $productId, int $lineTotalCents): ?string
+    {
+        if (! $coupon) {
+            return '优惠码不存在';
+        }
+
+        try {
+            $this->assertUsageLimits($coupon);
+        } catch (ValidationException) {
+            return '优惠码已被使用完';
+        }
+
+        if ($lineTotalCents < (int) $coupon->minimum_order_cents) {
+            return '未满 '.Money::format((int) $coupon->minimum_order_cents);
+        }
+
+        if (! $coupon->appliesToProduct($productId)) {
+            return '不适用于该商品';
+        }
+
+        return null;
     }
 }

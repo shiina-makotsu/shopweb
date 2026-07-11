@@ -960,3 +960,14 @@ it('namespaces backoffice public ids away from customer ids', function (): void 
         ->and($operator->fresh()->public_id)->toStartWith('staff_')
         ->and($customer->fresh()->public_id)->toBe('customer_plain');
 });
+
+it('configures event reward generated coupons instead of requiring manual coupon selection', function (): void {
+    $source = file_get_contents(app_path('Filament/Resources/ReferralRewardRuleResource.php'));
+
+    expect($source)
+        ->toContain("Toggle::make('coupon_reward_enabled')")
+        ->toContain("Repeater::make('coupon_reward_rules')")
+        ->toContain("Select::make('coupon_id')")
+        ->toContain('->hidden()')
+        ->not->toContain("->label('自动发放优惠码')");
+});

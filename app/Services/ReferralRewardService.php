@@ -51,6 +51,22 @@ class ReferralRewardService
                         ? WalletTransaction::SOURCE_REFERRAL
                         : WalletTransaction::SOURCE_EVENT_REWARD;
 
+                    if ($rule->couponRewardEnabled()) {
+                        try {
+                            app(GeneratedCouponRewardService::class)->issueToUser(
+                                $user,
+                                $rule->couponRewardRules(),
+                                $couponSource,
+                                $note,
+                                fn (array $rewardRule, int $ruleNumber, int $index, int $quantity): string => $this->eventRewardCouponName($rule, $rewardRule, $event, $ruleNumber, $index, $quantity),
+                                null,
+                                'ER',
+                            );
+                        } catch (Throwable) {
+                            // Coupon generation must not block the event flow.
+                        }
+                    }
+
                     if ($rule->coupon) {
                         try {
                             app(CouponService::class)->issueToUser($rule->coupon, $user, $couponSource, note: $note);
@@ -64,5 +80,18 @@ class ReferralRewardService
                     }
                 });
             });
+    }
+
+    /**
+     * @param  array<string, mixed>  $rewardRule
+     */
+    private function eventRewardCouponName(ReferralRewardRule $rule, array $rewardRule, string $event, int $ruleNumber, int $index, int $quantity): string
+    {
+        $suffix = $quantity > 1 ? " {$index}/{$quantity}" : '';
+        $ruleLabel = $ruleNumber > 1 ? " 瑙勫垯{$ruleNumber}" : '';
+        $name = trim((string) ($rewardRule['name'] ?? ''));
+        $name = $name !== '' ? ' '.$name : '';
+
+        return trim($rule->name.' '.ReferralRewardRule::eventLabel($event).'璧犲埜'.$ruleLabel.$name.$suffix);
     }
 }

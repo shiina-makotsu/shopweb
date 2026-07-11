@@ -438,19 +438,20 @@ it('shows paypal checkout only after a paypal receiver email is configured', fun
 it('attributes referral registrations and issues configured coupon and wallet rewards', function (): void {
     $inviter = User::factory()->create(['role' => 'customer']);
     $inviter->ensureReferralCode();
-    $coupon = Coupon::query()->create([
-        'code' => 'INVITE10',
-        'name' => 'Invite reward',
-        'type' => Coupon::TYPE_FIXED,
-        'value' => 1000,
-        'scope' => Coupon::SCOPE_GLOBAL,
-        'minimum_order_cents' => 0,
-        'is_active' => true,
-    ]);
     ReferralRewardRule::query()->create([
         'name' => 'Invite reward',
         'trigger_events' => [ReferralRewardRule::EVENT_REFERRAL_REGISTERED],
-        'coupon_id' => $coupon->id,
+        'coupon_reward_enabled' => true,
+        'coupon_reward_rules' => [[
+            'name' => 'Invite fixed reward',
+            'type' => Coupon::TYPE_FIXED,
+            'value' => 1000,
+            'scope' => Coupon::SCOPE_GLOBAL,
+            'minimum_order_cents' => 0,
+            'quantity' => 1,
+            'usage_limit' => 1,
+            'is_stackable' => false,
+        ]],
         'wallet_amount_cents' => 500,
         'is_active' => true,
     ]);
@@ -476,9 +477,19 @@ it('attributes referral registrations and issues configured coupon and wallet re
     expect($invitee->referred_by_user_id)->toBe($inviter->id)
         ->and($inviter->fresh()->wallet_balance_cents)->toBe(500);
 
+    $userCoupon = UserCoupon::query()
+        ->where('user_id', $inviter->id)
+        ->where('source', UserCoupon::SOURCE_REFERRAL)
+        ->firstOrFail();
+
+    expect($userCoupon->coupon)->not->toBeNull()
+        ->and($userCoupon->coupon->code)->toStartWith('ER')
+        ->and($userCoupon->coupon->name)->toContain('Invite fixed reward')
+        ->and($userCoupon->coupon->value)->toBe(1000);
+
     $this->assertDatabaseHas('user_coupons', [
         'user_id' => $inviter->id,
-        'coupon_id' => $coupon->id,
+        'coupon_id' => $userCoupon->coupon_id,
         'source' => UserCoupon::SOURCE_REFERRAL,
     ]);
     $this->assertDatabaseHas('wallet_transactions', [
@@ -511,21 +522,22 @@ it('grants configured event rewards for product purchases and wallet payments on
         'stock' => 5,
         'is_active' => true,
     ]);
-    $coupon = Coupon::query()->create([
-        'code' => 'EVENT10',
-        'name' => 'Event reward',
-        'type' => Coupon::TYPE_FIXED,
-        'value' => 100,
-        'scope' => Coupon::SCOPE_GLOBAL,
-        'minimum_order_cents' => 0,
-        'is_active' => true,
-    ]);
-
     ReferralRewardRule::query()->create([
         'name' => 'Product event reward',
         'trigger_events' => [ReferralRewardRule::EVENT_ORDER_PAID_PRODUCT],
         'product_ids' => [$product->id],
-        'coupon_id' => $coupon->id,
+        'coupon_reward_enabled' => true,
+        'coupon_reward_rules' => [[
+            'name' => 'Product generated reward',
+            'type' => Coupon::TYPE_FIXED,
+            'value' => 100,
+            'scope' => Coupon::SCOPE_PRODUCT,
+            'product_ids' => [$product->id],
+            'minimum_order_cents' => 0,
+            'quantity' => 1,
+            'usage_limit' => 1,
+            'is_stackable' => false,
+        ]],
         'wallet_amount_cents' => 200,
         'is_active' => true,
     ]);
@@ -554,11 +566,18 @@ it('grants configured event rewards for product purchases and wallet payments on
 
     expect($user->fresh()->wallet_balance_cents)->toBe(500);
 
-    $this->assertDatabaseHas('user_coupons', [
-        'user_id' => $user->id,
-        'coupon_id' => $coupon->id,
-        'source' => UserCoupon::SOURCE_EVENT_REWARD,
-    ]);
+    $eventCoupon = UserCoupon::query()
+        ->where('user_id', $user->id)
+        ->where('source', UserCoupon::SOURCE_EVENT_REWARD)
+        ->firstOrFail()
+        ->coupon;
+
+    expect($eventCoupon)->not->toBeNull()
+        ->and($eventCoupon->code)->toStartWith('ER')
+        ->and($eventCoupon->name)->toContain('Product generated reward')
+        ->and($eventCoupon->scope)->toBe(Coupon::SCOPE_PRODUCT)
+        ->and($eventCoupon->products->pluck('id')->all())->toBe([$product->id]);
+
     $this->assertDatabaseCount('event_reward_grants', 2);
 });
 
@@ -2795,6 +2814,78 @@ it('prevents non stackable coupons from being used with another coupon in one or
         $variantA->id => $userCouponA->id,
         $variantB->id => $userCouponB->id,
     ]))->toThrow(ValidationException::class);
+});
+
+it('shows checkout coupon choices with unavailable reasons and live discount data', function (): void {
+    $user = User::factory()->create(['role' => 'customer', 'wallet_balance_cents' => 300]);
+    $category = Category::query()->create(['name' => 'Coupon UI', 'slug' => 'coupon-ui', 'is_active' => true]);
+    $product = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => 'Coupon UI product',
+        'slug' => 'coupon-ui-product',
+        'status' => Product::STATUS_PUBLISHED,
+        'fulfillment_type' => Product::FULFILLMENT_ONLINE,
+    ]);
+    $otherProduct = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => 'Other coupon product',
+        'slug' => 'other-coupon-product',
+        'status' => Product::STATUS_PUBLISHED,
+    ]);
+    $variant = ProductVariant::query()->create([
+        'product_id' => $product->id,
+        'sku' => 'COUPON-UI',
+        'price_cents' => 2000,
+        'stock' => 5,
+        'is_active' => true,
+    ]);
+    $usable = Coupon::query()->create([
+        'code' => 'UIUSABLE',
+        'name' => 'UI usable coupon',
+        'type' => Coupon::TYPE_FIXED,
+        'value' => 500,
+        'scope' => Coupon::SCOPE_GLOBAL,
+        'is_active' => true,
+    ]);
+    $minimum = Coupon::query()->create([
+        'code' => 'UIMINIMUM',
+        'name' => 'UI minimum coupon',
+        'type' => Coupon::TYPE_FIXED,
+        'value' => 500,
+        'scope' => Coupon::SCOPE_GLOBAL,
+        'minimum_order_cents' => 5000,
+        'is_active' => true,
+    ]);
+    $mismatch = Coupon::query()->create([
+        'code' => 'UIMISMATCH',
+        'name' => 'UI mismatch coupon',
+        'type' => Coupon::TYPE_FIXED,
+        'value' => 500,
+        'scope' => Coupon::SCOPE_PRODUCT,
+        'product_id' => $otherProduct->id,
+        'is_active' => true,
+    ]);
+
+    $usableUserCoupon = app(CouponService::class)->issueToUser($usable, $user);
+    app(CouponService::class)->issueToUser($minimum, $user);
+    app(CouponService::class)->issueToUser($mismatch, $user);
+
+    $this->actingAs($user)->post(route('cart.items.store'), ['variant_id' => $variant->id, 'quantity' => 1]);
+
+    $this->actingAs($user)
+        ->get(route('checkout.create'))
+        ->assertOk()
+        ->assertSee('data-coupon-select', false)
+        ->assertSee('value="'.$usableUserCoupon->id.'"', false)
+        ->assertSee('data-discount-cents="500"', false)
+        ->assertSee('UIMINIMUM')
+        ->assertSee('UIMISMATCH')
+        ->assertSee('不可用：未满')
+        ->assertSee('不可用：不适用于该商品')
+        ->assertSee('data-coupon-discount', false)
+        ->assertSee('data-wallet-full-option', false)
+        ->assertSee('text-xl font-bold text-red-700', false)
+        ->assertSee('商品和邮费总价');
 });
 
 it('cleans stale product links from global coupons and tracks coupon holders', function (): void {
