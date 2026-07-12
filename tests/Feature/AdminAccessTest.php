@@ -70,6 +70,7 @@ it('renders admin sidebar navigation for admins', function (): void {
         ->assertSee('shopweb:admin-prefetch:', false)
         ->assertSee('X-ShopWeb-Purpose', false)
         ->assertSee('requestIdleCallback', false)
+        ->assertSee('x-intersect', false)
         ->assertSee('shop-sidebar-collapsed-group-trigger', false)
         ->assertDontSee('shop-sidebar-collapsed-inline-items', false)
         ->assertDontSee('shop-sidebar-collapsed-inline-item', false)

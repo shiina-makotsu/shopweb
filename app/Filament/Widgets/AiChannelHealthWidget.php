@@ -7,7 +7,7 @@ use Filament\Widgets\Widget;
 
 class AiChannelHealthWidget extends Widget
 {
-    protected static bool $isLazy = false;
+    protected static bool $isLazy = true;
 
     protected ?string $pollingInterval = '30s';
 

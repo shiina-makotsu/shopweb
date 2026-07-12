@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Schema;
 
 class VisitSourceOverview extends Widget
 {
-    protected static bool $isLazy = false;
+    protected static bool $isLazy = true;
 
     protected ?string $pollingInterval = '60s';
 

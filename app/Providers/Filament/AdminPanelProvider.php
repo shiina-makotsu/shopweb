@@ -241,17 +241,21 @@ class AdminPanelProvider extends PanelProvider
                             document.addEventListener('livewire:update', syncAdminMenuOrder);
 
                             const adminPrefetchConfig = {
-                                maxPerPage: 60,
+                                maxPrimaryPerPage: 8,
+                                maxSecondaryPerPage: 12,
                                 cooldownMs: 10 * 60 * 1000,
-                                initialDelayMs: 900,
-                                betweenMs: 450,
+                                initialDelayMs: 1200,
+                                betweenMs: 700,
                                 timeoutMs: 9000,
                             };
                             const adminPrefetchRuntime = {
                                 started: false,
+                                pageReady: document.readyState === 'complete',
+                                navigating: false,
                                 queue: [],
                                 active: false,
                                 timer: null,
+                                controller: null,
                             };
                             const adminPrefetchKey = (url) => `shopweb:admin-prefetch:${normalizeUrl(url)}`;
                             const canAdminPrefetch = () => {
@@ -263,7 +267,13 @@ class AdminPanelProvider extends PanelProvider
                                     return false;
                                 }
 
-                                return document.visibilityState === 'visible';
+                                if (['slow-2g', '2g'].includes(navigator.connection?.effectiveType)) {
+                                    return false;
+                                }
+
+                                return adminPrefetchRuntime.pageReady
+                                    && ! adminPrefetchRuntime.navigating
+                                    && document.visibilityState === 'visible';
                             };
                             const rememberAdminPrefetch = (url) => {
                                 try {
@@ -281,24 +291,37 @@ class AdminPanelProvider extends PanelProvider
                                     return false;
                                 }
                             };
-                            const adminPrefetchUrls = () => {
+                            const normalizeAdminPrefetchUrls = (urls, currentPath) => [...new Set(urls)]
+                                .map((url) => {
+                                    try {
+                                        return new URL(url, window.location.origin);
+                                    } catch (error) {
+                                        return null;
+                                    }
+                                })
+                                .filter((url) => url && url.origin === window.location.origin)
+                                .filter((url) => url.pathname.startsWith('/admin'))
+                                .filter((url) => ! url.pathname.includes('/logout'))
+                                .filter((url) => normalizeUrl(url.href) !== currentPath)
+                                .map((url) => url.href);
+                            const adminPrefetchUrlGroups = () => {
                                 const currentPath = normalizeUrl(window.location.href);
                                 const configUrls = (adminMenuConfig.items || []).map((item) => item.url).filter(Boolean);
-                                const sidebarUrls = Array.from(document.querySelectorAll('.fi-sidebar a[href]')).map((link) => link.href);
+                                const sidebarLinks = Array.from(document.querySelectorAll('.fi-sidebar a[href]'));
+                                const activeLink = sidebarLinks.find((link) => link.getAttribute('aria-current') === 'page'
+                                    || normalizeUrl(link.href) === currentPath);
+                                const activeGroup = activeLink?.closest('.fi-sidebar-group');
+                                const primaryLinks = activeGroup
+                                    ? Array.from(activeGroup.querySelectorAll('a[href]'))
+                                    : sidebarLinks.filter((link) => link.getClientRects().length > 0);
+                                const primary = normalizeAdminPrefetchUrls(primaryLinks.map((link) => link.href), currentPath);
+                                const primarySet = new Set(primary.map(normalizeUrl));
+                                const secondary = normalizeAdminPrefetchUrls(
+                                    [...sidebarLinks.map((link) => link.href), ...configUrls],
+                                    currentPath,
+                                ).filter((url) => ! primarySet.has(normalizeUrl(url)));
 
-                                return [...new Set([...sidebarUrls, ...configUrls])]
-                                    .map((url) => {
-                                        try {
-                                            return new URL(url, window.location.origin);
-                                        } catch (error) {
-                                            return null;
-                                        }
-                                    })
-                                    .filter((url) => url && url.origin === window.location.origin)
-                                    .filter((url) => url.pathname.startsWith('/admin'))
-                                    .filter((url) => ! url.pathname.includes('/logout'))
-                                    .filter((url) => normalizeUrl(url.href) !== currentPath)
-                                    .map((url) => url.href);
+                                return { primary, secondary };
                             };
                             const runAdminPrefetchQueue = () => {
                                 if (adminPrefetchRuntime.active || ! adminPrefetchRuntime.queue.length || ! canAdminPrefetch()) {
@@ -317,6 +340,7 @@ class AdminPanelProvider extends PanelProvider
                                 rememberAdminPrefetch(url);
 
                                 const controller = new AbortController();
+                                adminPrefetchRuntime.controller = controller;
                                 const timeout = window.setTimeout(() => controller.abort(), adminPrefetchConfig.timeoutMs);
 
                                 fetch(url, {
@@ -329,10 +353,11 @@ class AdminPanelProvider extends PanelProvider
                                         Accept: 'text/html,application/xhtml+xml',
                                         'X-ShopWeb-Purpose': 'admin-prefetch',
                                     },
-                                }).catch(() => {
+                                }).then((response) => response.ok ? response.text() : null).catch(() => {
                                     // Prefetch is opportunistic and must never affect interactive admin work.
                                 }).finally(() => {
                                     window.clearTimeout(timeout);
+                                    adminPrefetchRuntime.controller = null;
                                     adminPrefetchRuntime.active = false;
                                     adminPrefetchRuntime.timer = window.setTimeout(runAdminPrefetchQueue, adminPrefetchConfig.betweenMs);
                                 });
@@ -364,7 +389,11 @@ class AdminPanelProvider extends PanelProvider
 
                                 adminPrefetchRuntime.started = true;
                                 const start = () => {
-                                    enqueueAdminPrefetch(adminPrefetchUrls().slice(0, adminPrefetchConfig.maxPerPage), true);
+                                    const groups = adminPrefetchUrlGroups();
+                                    enqueueAdminPrefetch([
+                                        ...groups.primary.slice(0, adminPrefetchConfig.maxPrimaryPerPage),
+                                        ...groups.secondary.slice(0, adminPrefetchConfig.maxSecondaryPerPage),
+                                    ], true);
                                 };
 
                                 if ('requestIdleCallback' in window) {
@@ -387,12 +416,28 @@ class AdminPanelProvider extends PanelProvider
                                 });
                             };
 
-                            document.addEventListener('DOMContentLoaded', () => {
+                            const markAdminPageReady = () => {
+                                adminPrefetchRuntime.pageReady = true;
+                                adminPrefetchRuntime.navigating = false;
                                 bindAdminPrefetchHints();
                                 window.setTimeout(scheduleAdminPrefetch, adminPrefetchConfig.initialDelayMs);
+                            };
+
+                            if (adminPrefetchRuntime.pageReady) {
+                                markAdminPageReady();
+                            } else {
+                                window.addEventListener('load', markAdminPageReady, { once: true });
+                            }
+                            document.addEventListener('livewire:navigating', () => {
+                                adminPrefetchRuntime.navigating = true;
+                                adminPrefetchRuntime.pageReady = false;
+                                adminPrefetchRuntime.controller?.abort();
+                                window.clearTimeout(adminPrefetchRuntime.timer);
                             });
                             document.addEventListener('livewire:navigated', () => {
                                 adminPrefetchRuntime.started = false;
+                                adminPrefetchRuntime.pageReady = true;
+                                adminPrefetchRuntime.navigating = false;
                                 adminPrefetchRuntime.queue = [];
                                 bindAdminPrefetchHints();
                                 window.setTimeout(scheduleAdminPrefetch, adminPrefetchConfig.initialDelayMs);

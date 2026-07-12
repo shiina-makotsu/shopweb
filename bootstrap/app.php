@@ -1,11 +1,13 @@
 <?php
 
 use App\Http\Middleware\EnsureInstalled;
+use App\Http\Middleware\HandleNavigationPrefetch;
 use App\Http\Middleware\ProtectAgainstRequestAvalanche;
 use App\Http\Middleware\ShowFirstVisitLoadingPage;
 use App\Http\Middleware\TrackPageVisits;
 use Illuminate\Foundation\Application;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
@@ -57,6 +59,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(append: [
             EnsureInstalled::class,
             ShowFirstVisitLoadingPage::class,
+            HandleNavigationPrefetch::class,
         ]);
 
         $middleware->alias([
@@ -64,6 +67,14 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        $exceptions->render(function (AuthenticationException $exception, Request $request) {
+            if (in_array($request->header('X-ShopWeb-Purpose'), ['storefront-prefetch', 'admin-prefetch'], true)) {
+                return response()->noContent()->header('X-ShopWeb-Prefetch', 'authentication-skipped');
+            }
+
+            return null;
+        });
+
         $exceptions->respond(function ($response) {
             if (config('app.debug')) {
                 return $response;

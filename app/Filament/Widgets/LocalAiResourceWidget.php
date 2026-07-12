@@ -7,7 +7,7 @@ use Filament\Widgets\Widget;
 
 class LocalAiResourceWidget extends Widget
 {
-    protected static bool $isLazy = false;
+    protected static bool $isLazy = true;
 
     protected ?string $pollingInterval = '15s';
 

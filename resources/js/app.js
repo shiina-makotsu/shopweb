@@ -508,6 +508,182 @@ document.addEventListener('submit', async (event) => {
     }
 });
 
+const setupStorefrontNavigationPrefetch = () => {
+    const config = {
+        maxPerPage: 12,
+        cooldownMs: 10 * 60 * 1000,
+        betweenMs: 700,
+        timeoutMs: 8000,
+    };
+    const runtime = {
+        pageReady: document.readyState === 'complete',
+        queue: [],
+        active: false,
+        stopped: false,
+    };
+    const normalizeUrl = (value) => {
+        const url = new URL(value, window.location.origin);
+        url.hash = '';
+
+        return url.href;
+    };
+    const storageKey = (url) => `shopweb:storefront-prefetch:${normalizeUrl(url)}`;
+    const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    const canPrefetch = () => Boolean(window.fetch && window.AbortController)
+        && runtime.pageReady
+        && !runtime.stopped
+        && document.visibilityState === 'visible'
+        && !connection?.saveData
+        && !['slow-2g', '2g'].includes(connection?.effectiveType);
+    const wasPrefetchedRecently = (url) => {
+        try {
+            const timestamp = Number(sessionStorage.getItem(storageKey(url)) || 0);
+
+            return timestamp > 0 && Date.now() - timestamp < config.cooldownMs;
+        } catch (error) {
+            return false;
+        }
+    };
+    const rememberPrefetch = (url) => {
+        try {
+            sessionStorage.setItem(storageKey(url), String(Date.now()));
+        } catch (error) {
+            // Storage can be unavailable in hardened browsing modes.
+        }
+    };
+    const eligibleUrl = (link) => {
+        if (!(link instanceof HTMLAnchorElement)
+            || link.target === '_blank'
+            || link.hasAttribute('download')
+            || link.dataset.noPrefetch !== undefined) {
+            return null;
+        }
+
+        let url;
+
+        try {
+            url = new URL(link.href, window.location.origin);
+        } catch (error) {
+            return null;
+        }
+
+        const excludedPaths = ['/admin', '/login', '/register', '/logout', '/loading', '/checkout', '/payment'];
+
+        if (!['http:', 'https:'].includes(url.protocol)
+            || url.origin !== window.location.origin
+            || excludedPaths.some((path) => url.pathname === path || url.pathname.startsWith(`${path}/`))
+            || normalizeUrl(url.href) === normalizeUrl(window.location.href)) {
+            return null;
+        }
+
+        return normalizeUrl(url.href);
+    };
+    const runQueue = () => {
+        if (runtime.active || runtime.queue.length === 0 || !canPrefetch()) {
+            return;
+        }
+
+        const url = runtime.queue.shift();
+
+        if (!url || wasPrefetchedRecently(url)) {
+            runQueue();
+            return;
+        }
+
+        runtime.active = true;
+        rememberPrefetch(url);
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), config.timeoutMs);
+
+        fetch(url, {
+            method: 'GET',
+            credentials: 'same-origin',
+            cache: 'force-cache',
+            priority: 'low',
+            signal: controller.signal,
+            headers: {
+                Accept: 'text/html,application/xhtml+xml',
+                'X-ShopWeb-Purpose': 'storefront-prefetch',
+            },
+        }).then((response) => response.ok ? response.text() : null).catch(() => {
+            // Prefetch is opportunistic and never blocks normal navigation.
+        }).finally(() => {
+            window.clearTimeout(timeout);
+            runtime.active = false;
+            window.setTimeout(runQueue, config.betweenMs);
+        });
+    };
+    const enqueue = (links, immediate = false) => {
+        const urls = (Array.isArray(links) ? links : [links])
+            .map((link) => link instanceof HTMLAnchorElement ? eligibleUrl(link) : link)
+            .filter(Boolean);
+        const known = new Set(runtime.queue);
+
+        urls.forEach((url) => {
+            if (known.has(url) || wasPrefetchedRecently(url)) {
+                return;
+            }
+
+            if (immediate) {
+                runtime.queue.unshift(url);
+            } else {
+                runtime.queue.push(url);
+            }
+            known.add(url);
+        });
+
+        if (immediate) {
+            runQueue();
+        }
+    };
+    const navigationLinks = () => Array.from(document.querySelectorAll('header nav a[href], main aside nav a[href]'));
+    const schedule = () => {
+        const start = () => {
+            const links = navigationLinks();
+            const visible = links.filter((link) => link.getClientRects().length > 0);
+            const hidden = links.filter((link) => link.getClientRects().length === 0);
+
+            enqueue([...visible, ...hidden].slice(0, config.maxPerPage));
+            runQueue();
+        };
+
+        if ('requestIdleCallback' in window) {
+            window.requestIdleCallback(start, { timeout: 4000 });
+        } else {
+            window.setTimeout(start, 1200);
+        }
+    };
+    const markReady = () => {
+        runtime.pageReady = true;
+        schedule();
+    };
+
+    document.addEventListener('pointerover', (event) => {
+        const link = event.target.closest?.('a[href]');
+        if (link) enqueue(link, true);
+    }, { passive: true });
+    document.addEventListener('focusin', (event) => {
+        const link = event.target.closest?.('a[href]');
+        if (link) enqueue(link, true);
+    });
+    document.addEventListener('touchstart', (event) => {
+        const link = event.target.closest?.('a[href]');
+        if (link) enqueue(link, true);
+    }, { passive: true });
+    window.addEventListener('pagehide', () => {
+        runtime.stopped = true;
+        runtime.queue = [];
+    }, { once: true });
+
+    if (runtime.pageReady) {
+        schedule();
+    } else {
+        window.addEventListener('load', markReady, { once: true });
+    }
+};
+
+setupStorefrontNavigationPrefetch();
+
 document.addEventListener('submit', async (event) => {
     const form = event.target;
 

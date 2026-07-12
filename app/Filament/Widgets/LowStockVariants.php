@@ -13,7 +13,7 @@ use Illuminate\Database\Eloquent\Builder;
 
 class LowStockVariants extends TableWidget
 {
-    protected static bool $isLazy = false;
+    protected static bool $isLazy = true;
 
     protected static ?string $heading = '低库存提醒';
 
