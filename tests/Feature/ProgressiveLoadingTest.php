@@ -9,15 +9,21 @@ use App\Filament\Widgets\SystemLoadStats;
 use App\Filament\Widgets\VisitSourceOverview;
 
 it('waits for the storefront page before progressively prefetching navigation', function (): void {
-    $script = file_get_contents(resource_path('js/app.js'));
+    $entry = file_get_contents(resource_path('js/app.js'));
+    $script = file_get_contents(resource_path('js/storefront/navigation-prefetch.js'));
+    $queue = file_get_contents(resource_path('js/core/prefetch-queue.js'));
 
-    expect($script)
-        ->toContain('shopweb:storefront-prefetch:')
-        ->toContain("'X-ShopWeb-Purpose': 'storefront-prefetch'")
-        ->toContain("window.addEventListener('load', markReady")
+    expect($entry)
+        ->toContain("import('./storefront/navigation-prefetch')")
+        ->toContain('runIsolatedModule')
+        ->and($script)
+        ->toContain("storagePrefix: 'shopweb:storefront-prefetch'")
+        ->toContain("window.addEventListener('load'")
         ->toContain("window.requestIdleCallback(start")
+        ->and($queue)
+        ->toContain("'X-ShopWeb-Purpose': purpose")
         ->toContain("['slow-2g', '2g']")
-        ->toContain('runtime.active || runtime.queue.length === 0');
+        ->toContain('state.active || state.queue.length === 0');
 });
 
 it('does not let a guest prefetch replace the intended login destination', function (): void {
@@ -48,11 +54,15 @@ it('keeps dashboard display order while lazily loading realtime sections', funct
     }
 
     $provider = file_get_contents(app_path('Providers/Filament/AdminPanelProvider.php'));
+    $adminScript = file_get_contents(resource_path('js/admin.js'));
 
     expect(strpos($provider, 'SystemLoadStats::class'))->toBeLessThan(strpos($provider, 'ActionRequiredList::class'))
         ->and(strpos($provider, 'VisitSourceOverview::class'))->toBeLessThan(strpos($provider, 'PendingPaymentOrders::class'))
-        ->and($provider)->toContain('adminPrefetchUrlGroups')
-        ->toContain('maxPrimaryPerPage')
+        ->and($provider)->toContain('adminModuleTag')
+        ->toContain('Vite asset missing')
+        ->not->toContain('adminPrefetchRuntime')
+        ->and($adminScript)->toContain("storagePrefix: 'shopweb:admin-prefetch'")
+        ->toContain('groupedUrls')
         ->toContain("document.addEventListener('livewire:navigating'")
-        ->toContain('adminPrefetchRuntime.controller?.abort()');
+        ->toContain('queue.pause({ clear: true })');
 });
