@@ -27,6 +27,7 @@ class AfterSalesRequest extends Model
         'subject',
         'message',
         'admin_note',
+        'customer_read_at',
         'resolution_type',
         'refund_amount_cents',
         'refund_status',
@@ -44,7 +45,17 @@ class AfterSalesRequest extends Model
             'refund_requested_at' => 'datetime',
             'refund_reviewed_at' => 'datetime',
             'resolved_at' => 'datetime',
+            'customer_read_at' => 'datetime',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::saving(function (AfterSalesRequest $request): void {
+            if ($request->isDirty('admin_note') && filled($request->admin_note)) {
+                $request->customer_read_at = null;
+            }
+        });
     }
 
     public function user(): BelongsTo

@@ -2,6 +2,8 @@
 
 use App\Models\Category;
 use App\Models\AdminActivityLog;
+use App\Models\Coupon;
+use App\Models\CouponRedemption;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\PaymentVerificationLog;
@@ -11,8 +13,16 @@ use App\Models\ShippingCarrier;
 use App\Models\SiteSetting;
 use App\Models\SupportTicket;
 use App\Models\User;
+use App\Models\UserCoupon;
+use App\Models\WalletRechargeOption;
+use App\Models\WalletTransaction;
+use App\Filament\Resources\OrderResource;
+use App\Notifications\OrderPaymentTimeoutNotification;
 use App\Services\OrderService;
+use App\Services\PaymentProofVerificationResult;
+use App\Services\PaymentProofVerifier;
 use App\Services\PaymentProofStorage;
+use App\Services\WalletService;
 use App\Support\OrderPrivacy;
 use App\Support\Url;
 use App\Filament\Resources\OrderResource\Pages\EditOrder;
@@ -98,7 +108,7 @@ it('auto checks payment proof for user display while keeping backend payment sub
 
     expect($order->fresh()->payment_status)->toBe(Order::PAYMENT_SUBMITTED)
         ->and($order->fresh()->payment_auto_check_status)->toBe(Order::AUTO_CHECK_PASSED)
-        ->and($order->fresh()->userPaymentLabel())->toBe('付款凭证已提交')
+        ->and($order->fresh()->userPaymentLabel())->toBe('已付款')
         ->and($order->fresh()->userStatusLabel())->toBe('待发货');
 
     $this->assertDatabaseHas('payment_verification_logs', [
@@ -221,14 +231,18 @@ it('shows payment proof images to admins and a payment success state to customer
     expect($order->fresh()->payment_proof_path)->not->toBeNull()
         ->and($order->fresh()->payment_status)->toBe(Order::PAYMENT_SUBMITTED)
         ->and($order->fresh()->payment_auto_check_status)->toBe(Order::AUTO_CHECK_PASSED)
-        ->and($order->fresh()->userPaymentLabel())->toBe('付款凭证已提交');
+        ->and($order->fresh()->userPaymentLabel())->toBe('已付款');
 
     $this->actingAs($user)
         ->get(route('orders.show', $order))
         ->assertOk()
         ->assertSee('付款成功')
         ->assertSee('待发货')
-        ->assertSee('付款凭证已提交')
+        ->assertSee('已付款')
+        ->assertSee('已付款金额')
+        ->assertDontSee('待支付金额')
+        ->assertDontSee('付款倒计时')
+        ->assertDontSee('data-payment-code-src=', false)
         ->assertDontSee('待确认收款')
         ->assertSee('data-payment-redirect-url="/forum"', false)
         ->assertDontSee('待后台人工复核')
@@ -277,7 +291,7 @@ it('does not count submitted payment proof orders as pending payment notices for
         ->get(route('orders.index'))
         ->assertOk()
         ->assertSee('待发货')
-        ->assertSee('付款凭证已提交')
+        ->assertSee('已付款')
         ->assertDontSee('待确认收款')
         ->assertDontSee('>待支付<', false);
 
@@ -287,7 +301,7 @@ it('does not count submitted payment proof orders as pending payment notices for
         ->assertSee('待付款')
         ->assertSee('>0<', false);
 
-    expect($order->fresh()->userPaymentLabel())->toBe('付款凭证已提交')
+    expect($order->fresh()->userPaymentLabel())->toBe('已付款')
         ->and($order->fresh()->userStatusLabel())->toBe('待发货');
 });
 
@@ -375,6 +389,10 @@ it('preloads payment codes and accepts red packet text as a manual payment fallb
         ->assertSee('/uploads/payments/main.png', false)
         ->assertSee('/uploads/payments/fallback.png', false)
         ->assertSee('/uploads/payments/friend.png', false)
+        ->assertSee('data-payment-code-open', false)
+        ->assertSee('data-payment-code-modal', false)
+        ->assertSee('fa-magnifying-glass-plus', false)
+        ->assertSee("event.key === 'Escape'", false)
         ->assertSee('data-payment-countdown', false)
         ->assertSee('支付受限时的备选方案')
         ->assertSee('支付失败时请提交口令红包。')
@@ -422,6 +440,30 @@ it('keeps payment submission successful when verification logging is unavailable
 
     expect($order->fresh()->payment_status)->toBe(Order::PAYMENT_SUBMITTED)
         ->and($order->fresh()->payment_text_proof)->toBe('red-packet-code-114514');
+
+    $walletOrder = Order::query()->create([
+        'user_id' => $user->id,
+        'order_number' => 'WALLET-LOG-MISSING-1',
+        'status' => Order::STATUS_PENDING_PAYMENT,
+        'payment_status' => Order::PAYMENT_PENDING,
+        'subtotal_cents' => 1000,
+        'total_cents' => 1000,
+        'wallet_recharge_cents' => 1000,
+        'is_wallet_recharge' => true,
+        'contact_name' => 'Missing Log Wallet',
+        'contact_phone' => '10086',
+    ]);
+    $verifier = Mockery::mock(PaymentProofVerifier::class);
+    $verifier->shouldReceive('verify')
+        ->once()
+        ->andReturn(new PaymentProofVerificationResult(true, $walletOrder->order_number, 1000, 'ocr'));
+    $this->app->instance(PaymentProofVerifier::class, $verifier);
+
+    app(OrderService::class)->markPaymentSubmitted($walletOrder, 'wallet/log-missing.png');
+
+    expect($walletOrder->fresh()->payment_status)->toBe(Order::PAYMENT_SUBMITTED)
+        ->and($walletOrder->fresh()->payment_auto_check_status)->toBe(Order::AUTO_CHECK_PENDING)
+        ->and($user->fresh()->wallet_balance_cents)->toBe(0);
 });
 
 it('returns a validation error when payment proof submission is empty', function (): void {
@@ -453,16 +495,50 @@ it('auto closes pending payment orders without proof after the configured timeou
         'site_name' => 'ShopWeb',
         'payment_pending_timeout_minutes' => 10,
     ]);
-    $user = User::factory()->create(['role' => 'customer']);
+    $user = User::factory()->create(['role' => 'customer', 'wallet_balance_cents' => 2000]);
     $expired = Order::query()->create([
         'user_id' => $user->id,
         'order_number' => 'TIMEOUT-1',
         'status' => Order::STATUS_PENDING_PAYMENT,
         'payment_status' => Order::PAYMENT_PENDING,
-        'subtotal_cents' => 1000,
-        'total_cents' => 1000,
+        'subtotal_cents' => 10000,
+        'discount_cents' => 1000,
+        'wallet_payment_cents' => 3000,
+        'total_cents' => 6000,
         'contact_name' => 'A',
         'contact_phone' => '1',
+    ]);
+    WalletTransaction::query()->create([
+        'user_id' => $user->id,
+        'order_id' => $expired->id,
+        'type' => WalletTransaction::TYPE_DEBIT,
+        'amount_cents' => -3000,
+        'balance_after_cents' => 2000,
+        'source' => WalletTransaction::SOURCE_ORDER_PAYMENT,
+    ]);
+    $coupon = Coupon::query()->create([
+        'code' => 'TIMEOUT-COUPON',
+        'name' => '超时退回测试券',
+        'type' => Coupon::TYPE_FIXED,
+        'value' => 1000,
+        'usage_limit' => 1,
+        'per_user_limit' => 1,
+        'is_active' => true,
+    ]);
+    $holding = UserCoupon::query()->create([
+        'user_id' => $user->id,
+        'coupon_id' => $coupon->id,
+        'source' => UserCoupon::SOURCE_ADMIN,
+        'claimed_at' => now()->subDay(),
+        'exhausted_at' => now(),
+    ]);
+    CouponRedemption::query()->create([
+        'coupon_id' => $coupon->id,
+        'user_id' => $user->id,
+        'order_id' => $expired->id,
+        'user_coupon_id' => $holding->id,
+        'status' => CouponRedemption::STATUS_RESERVED,
+        'discount_cents' => 1000,
     ]);
     $expired->forceFill(['created_at' => now()->subMinutes(11), 'updated_at' => now()->subMinutes(11)])->save();
     $submitted = Order::query()->create([
@@ -493,15 +569,288 @@ it('auto closes pending payment orders without proof after the configured timeou
 
     expect($expired->fresh()->status)->toBe(Order::STATUS_CANCELLED)
         ->and($expired->fresh()->user_deleted_at)->not->toBeNull()
+        ->and($user->fresh()->wallet_balance_cents)->toBe(5000)
+        ->and($holding->fresh()->exhausted_at)->toBeNull()
         ->and($submitted->fresh()->status)->toBe(Order::STATUS_PENDING_PAYMENT)
         ->and($confirmed->fresh()->payment_status)->toBe(Order::PAYMENT_CONFIRMED);
+
+    $this->assertDatabaseHas('coupon_redemptions', [
+        'id' => $holding->redemptions()->firstOrFail()->id,
+        'status' => CouponRedemption::STATUS_RELEASED,
+    ]);
+    $this->assertDatabaseHas('wallet_transactions', [
+        'order_id' => $expired->id,
+        'source' => WalletTransaction::SOURCE_ORDER_REFUND,
+        'amount_cents' => 3000,
+    ]);
+
+    $notification = $user->notifications()
+        ->where('type', OrderPaymentTimeoutNotification::class)
+        ->firstOrFail();
+
+    expect($notification->data['wallet_refunded_cents'])->toBe(3000)
+        ->and($notification->data['coupon_count'])->toBe(1)
+        ->and($notification->read_at)->toBeNull();
 
     $this->actingAs($user)
         ->get(route('orders.index'))
         ->assertOk()
-        ->assertDontSee('TIMEOUT-1');
+        ->assertSee('待付款订单已超时关闭')
+        ->assertSee('钱包已退回')
+        ->assertSee('已退回 1 张优惠券')
+        ->assertDontSee(route('orders.show', $expired), false);
+
+    $otherUser = User::factory()->create(['role' => 'customer']);
+    $this->actingAs($otherUser)
+        ->post(route('user.notifications.read', $notification->id))
+        ->assertNotFound();
+
+    $this->actingAs($user)
+        ->post(route('user.notifications.read', $notification->id))
+        ->assertRedirect();
+
+    expect($notification->fresh()->read_at)->not->toBeNull();
+
+    $this->artisan('shop:orders-expire-pending-payments')->assertSuccessful();
+
+    expect(WalletTransaction::query()
+        ->where('order_id', $expired->id)
+        ->where('source', WalletTransaction::SOURCE_ORDER_REFUND)
+        ->count())->toBe(1)
+        ->and($user->notifications()->where('type', OrderPaymentTimeoutNotification::class)->count())->toBe(1);
 
     expect(Order::query()->where('user_id', $user->id)->whereNull('user_deleted_at')->count())->toBe(2);
+});
+
+it('auto confirms only wallet recharge proofs with matching order number and amount', function (): void {
+    SiteSetting::query()->create([
+        'site_name' => 'ShopWeb',
+        'payment_auto_check_enabled' => true,
+    ]);
+    $user = User::factory()->create(['role' => 'customer', 'wallet_balance_cents' => 0]);
+    $matched = Order::query()->create([
+        'user_id' => $user->id,
+        'order_number' => 'WALLET-AUTO-1',
+        'status' => Order::STATUS_PENDING_PAYMENT,
+        'payment_status' => Order::PAYMENT_PENDING,
+        'subtotal_cents' => 1000,
+        'total_cents' => 1000,
+        'wallet_recharge_cents' => 1200,
+        'is_wallet_recharge' => true,
+        'contact_name' => 'Wallet Auto',
+        'contact_phone' => '1',
+    ]);
+    $unmatched = Order::query()->create([
+        'user_id' => $user->id,
+        'order_number' => 'WALLET-MANUAL-1',
+        'status' => Order::STATUS_PENDING_PAYMENT,
+        'payment_status' => Order::PAYMENT_PENDING,
+        'subtotal_cents' => 2000,
+        'total_cents' => 2000,
+        'wallet_recharge_cents' => 2000,
+        'is_wallet_recharge' => true,
+        'contact_name' => 'Wallet Manual',
+        'contact_phone' => '1',
+    ]);
+
+    $verifier = Mockery::mock(PaymentProofVerifier::class);
+    $verifier->shouldReceive('verify')
+        ->once()
+        ->with(Mockery::on(fn (Order $order): bool => $order->is($matched)), 'wallet/matched.png', '')
+        ->andReturn(new PaymentProofVerificationResult(true, 'WALLET-AUTO-1', 1000, 'ocr'));
+    $verifier->shouldReceive('verify')
+        ->once()
+        ->with(Mockery::on(fn (Order $order): bool => $order->is($unmatched)), 'wallet/unmatched.png', '')
+        ->andReturn(new PaymentProofVerificationResult(false, 'WALLET-MANUAL-1', null, 'ocr'));
+    $this->app->instance(PaymentProofVerifier::class, $verifier);
+
+    app(OrderService::class)->markPaymentSubmitted($matched, 'wallet/matched.png');
+    app(OrderService::class)->markPaymentSubmitted($unmatched, 'wallet/unmatched.png');
+
+    expect($matched->fresh()->payment_status)->toBe(Order::PAYMENT_CONFIRMED)
+        ->and($matched->fresh()->status)->toBe(Order::STATUS_FULFILLED)
+        ->and($user->fresh()->wallet_balance_cents)->toBe(1200)
+        ->and($unmatched->fresh()->payment_status)->toBe(Order::PAYMENT_SUBMITTED)
+        ->and($user->fresh()->wallet_balance_cents)->toBe(1200);
+
+    $this->assertDatabaseHas('payment_verification_logs', [
+        'order_id' => $matched->id,
+        'detected_order_number' => 'WALLET-AUTO-1',
+        'expected_amount_cents' => 1000,
+        'detected_amount_cents' => 1000,
+        'auto_result' => PaymentVerificationLog::AUTO_PASSED,
+        'manual_result' => null,
+    ]);
+    $this->assertDatabaseHas('payment_verification_logs', [
+        'order_id' => $unmatched->id,
+        'auto_result' => PaymentVerificationLog::AUTO_PENDING,
+    ]);
+    expect(WalletTransaction::query()
+        ->where('order_id', $matched->id)
+        ->where('source', WalletTransaction::SOURCE_WALLET_RECHARGE)
+        ->count())->toBe(1);
+});
+
+it('keeps automatically confirmed wallet recharges available for manual confirmation without issuing benefits twice', function (): void {
+    SiteSetting::query()->create(['site_name' => 'ShopWeb', 'payment_auto_check_enabled' => true]);
+    $admin = User::factory()->create(['role' => 'admin']);
+    $user = User::factory()->create(['role' => 'customer', 'wallet_balance_cents' => 0]);
+    $order = Order::query()->create([
+        'user_id' => $user->id,
+        'order_number' => 'WALLET-REVIEW-CONFIRM',
+        'status' => Order::STATUS_PENDING_PAYMENT,
+        'payment_status' => Order::PAYMENT_PENDING,
+        'subtotal_cents' => 1000,
+        'total_cents' => 1000,
+        'wallet_recharge_cents' => 1200,
+        'is_wallet_recharge' => true,
+        'contact_name' => 'Wallet Review',
+        'contact_phone' => '1',
+    ]);
+
+    $verifier = Mockery::mock(PaymentProofVerifier::class);
+    $verifier->shouldReceive('verify')
+        ->once()
+        ->andReturn(new PaymentProofVerificationResult(true, $order->order_number, 1000, 'ocr'));
+    $this->app->instance(PaymentProofVerifier::class, $verifier);
+
+    app(OrderService::class)->markPaymentSubmitted($order, 'wallet/review-confirm.png');
+
+    $order->refresh();
+    expect($order->payment_status)->toBe(Order::PAYMENT_CONFIRMED)
+        ->and($order->isAwaitingAutoConfirmedPaymentReview())->toBeTrue()
+        ->and(Order::query()->awaitingPaymentReview()->whereKey($order->id)->exists())->toBeTrue()
+        ->and($user->fresh()->wallet_balance_cents)->toBe(1200);
+
+    $order->forceFill(['user_deleted_at' => now()])->save();
+    expect(Order::query()->awaitingPaymentReview()->whereKey($order->id)->exists())->toBeTrue();
+
+    $this->actingAs($admin)
+        ->get(OrderResource::getUrl('index'))
+        ->assertOk()
+        ->assertSee('确认收款')
+        ->assertSee('驳回凭证');
+
+    app(OrderService::class)->confirmPayment($order, $admin);
+
+    $order->refresh();
+    expect($order->payment_status)->toBe(Order::PAYMENT_CONFIRMED)
+        ->and($order->isAwaitingAutoConfirmedPaymentReview())->toBeFalse()
+        ->and($user->fresh()->wallet_balance_cents)->toBe(1200)
+        ->and(WalletTransaction::query()
+            ->where('order_id', $order->id)
+            ->where('source', WalletTransaction::SOURCE_WALLET_RECHARGE)
+            ->count())->toBe(1)
+        ->and($order->paymentVerificationLogs()->latest('id')->value('manual_result'))->toBe(PaymentVerificationLog::MANUAL_CONFIRMED);
+});
+
+it('reverses wallet balance and generated coupons when an automatically confirmed recharge is rejected', function (): void {
+    SiteSetting::query()->create(['site_name' => 'ShopWeb', 'payment_auto_check_enabled' => true]);
+    $admin = User::factory()->create(['role' => 'admin']);
+    $user = User::factory()->create(['role' => 'customer', 'wallet_balance_cents' => 0]);
+    $option = WalletRechargeOption::query()->create([
+        'name' => '自动复核充值',
+        'currency_code' => 'CNY',
+        'currency_unit' => 'yuan',
+        'amount_cents' => 1000,
+        'bonus_cents' => 200,
+        'is_active' => true,
+        'coupon_reward_enabled' => true,
+        'coupon_reward_rules' => [[
+            'name' => '自动复核赠券',
+            'type' => Coupon::TYPE_FIXED,
+            'value' => 500,
+            'scope' => Coupon::SCOPE_GLOBAL,
+            'quantity' => 1,
+            'usage_limit' => 1,
+        ]],
+    ]);
+    $order = Order::query()->create([
+        'user_id' => $user->id,
+        'order_number' => 'WALLET-REVIEW-REJECT',
+        'status' => Order::STATUS_PENDING_PAYMENT,
+        'payment_status' => Order::PAYMENT_PENDING,
+        'subtotal_cents' => 1000,
+        'total_cents' => 1000,
+        'wallet_recharge_cents' => 1200,
+        'is_wallet_recharge' => true,
+        'wallet_recharge_option_id' => $option->id,
+        'contact_name' => 'Wallet Review',
+        'contact_phone' => '1',
+    ]);
+
+    $verifier = Mockery::mock(PaymentProofVerifier::class);
+    $verifier->shouldReceive('verify')
+        ->twice()
+        ->andReturn(new PaymentProofVerificationResult(true, $order->order_number, 1000, 'ocr'));
+    $this->app->instance(PaymentProofVerifier::class, $verifier);
+
+    app(OrderService::class)->markPaymentSubmitted($order, 'wallet/review-reject.png');
+    app(WalletService::class)->debit(
+        $user->fresh(),
+        1000,
+        WalletTransaction::SOURCE_ORDER_PAYMENT,
+        '模拟自动入账后已消费',
+    );
+
+    $holding = UserCoupon::query()
+        ->whereBelongsTo($user)
+        ->where('source', UserCoupon::SOURCE_WALLET_RECHARGE)
+        ->with('coupon')
+        ->firstOrFail();
+
+    app(OrderService::class)->rejectPayment($order->fresh(), '识别结果复核不通过', $admin);
+    app(OrderService::class)->rejectPayment($order->fresh(), '重复驳回', $admin);
+
+    $order->refresh();
+    expect($order->status)->toBe(Order::STATUS_PENDING_PAYMENT)
+        ->and($order->payment_status)->toBe(Order::PAYMENT_PENDING)
+        ->and($order->paid_at)->toBeNull()
+        ->and($order->fulfilled_at)->toBeNull()
+        ->and($user->fresh()->wallet_balance_cents)->toBe(-1000)
+        ->and($holding->fresh()->exhausted_at)->not->toBeNull()
+        ->and($holding->coupon->fresh()->is_active)->toBeFalse()
+        ->and(WalletTransaction::query()
+            ->where('order_id', $order->id)
+            ->where('source', WalletTransaction::SOURCE_WALLET_RECHARGE_REVERSAL)
+            ->count())->toBe(1)
+        ->and($order->paymentVerificationLogs()->latest('id')->value('manual_result'))->toBe(PaymentVerificationLog::MANUAL_REJECTED);
+
+    app(OrderService::class)->markPaymentSubmitted($order, 'wallet/review-rejected-resubmission.png');
+
+    $order->refresh();
+    expect($order->payment_status)->toBe(Order::PAYMENT_SUBMITTED)
+        ->and($order->payment_auto_check_status)->toBe(Order::AUTO_CHECK_PENDING)
+        ->and($user->fresh()->wallet_balance_cents)->toBe(-1000)
+        ->and(WalletTransaction::query()
+            ->where('order_id', $order->id)
+            ->where('source', WalletTransaction::SOURCE_WALLET_RECHARGE)
+            ->count())->toBe(1)
+        ->and(UserCoupon::query()
+            ->whereBelongsTo($user)
+            ->where('source', UserCoupon::SOURCE_WALLET_RECHARGE)
+            ->count())->toBe(1);
+});
+
+it('requires both the order number and amount in strict wallet proof text matching', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+    $order = Order::query()->create([
+        'user_id' => $user->id,
+        'order_number' => 'WALLET-TEXT-1',
+        'status' => Order::STATUS_PENDING_PAYMENT,
+        'payment_status' => Order::PAYMENT_PENDING,
+        'subtotal_cents' => 1000,
+        'total_cents' => 1000,
+        'wallet_recharge_cents' => 1000,
+        'is_wallet_recharge' => true,
+        'contact_name' => 'Wallet Text',
+        'contact_phone' => '1',
+    ]);
+    $verifier = app(PaymentProofVerifier::class);
+
+    expect($verifier->verify($order, null, '订单号 WALLET-TEXT-1，实付 ¥10.00')->exactMatch)->toBeTrue()
+        ->and($verifier->verify($order, null, '订单号 WALLET-TEXT-1，实付 ¥9.99')->exactMatch)->toBeFalse()
+        ->and($verifier->verify($order, null, '实付 ¥10.00')->exactMatch)->toBeFalse();
 });
 
 it('lets admins add shipping information from the expanded order row', function (): void {

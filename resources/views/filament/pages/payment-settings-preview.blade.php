@@ -93,6 +93,7 @@
                     </div>
                     @if($preview['support_enabled'] ?? true)
                         <p class="mt-3 text-xs">显示联系客服入口</p>
+                        <x-support.contact-methods compact class="mt-2" />
                     @endif
                 </div>
             @endif

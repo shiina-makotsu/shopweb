@@ -42,6 +42,18 @@ class AfterSalesRequestResource extends Resource
     protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedLifebuoy;
     protected static ?int $navigationSort = 10;
 
+    public static function getNavigationBadge(): ?string
+    {
+        $count = AfterSalesRequest::query()->where('status', AfterSalesRequest::STATUS_OPEN)->count();
+
+        return $count > 0 ? (string) $count : null;
+    }
+
+    public static function getNavigationBadgeColor(): string|array|null
+    {
+        return 'danger';
+    }
+
     public static function canCreate(): bool
     {
         return false;

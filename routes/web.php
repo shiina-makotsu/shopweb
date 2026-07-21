@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\BackupController;
+use App\Http\Controllers\Admin\AdminNotificationController;
 use App\Http\Controllers\Admin\CsvExportController;
 use App\Http\Controllers\Admin\CustomerQuickUpdateController;
 use App\Http\Controllers\Admin\OrderQuickShippingController;
@@ -33,6 +34,7 @@ use App\Http\Controllers\SearchController;
 use App\Http\Controllers\ShipmentController;
 use App\Http\Controllers\SupportTicketController;
 use App\Http\Controllers\UserCenterController;
+use App\Http\Controllers\UserNotificationController;
 use App\Http\Controllers\UserProfileController;
 use App\Http\Controllers\VoteController;
 use Illuminate\Support\Facades\Route;
@@ -123,6 +125,7 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/user/wallet/redeem', [UserCenterController::class, 'redeemWalletCode'])->name('user.wallet.redeem');
     Route::post('/user/wallet/recharge', [UserCenterController::class, 'rechargeWallet'])->name('user.wallet.recharge');
     Route::post('/user/wallet/recharge-option', [UserCenterController::class, 'rechargeWalletOption'])->name('user.wallet.recharge-option');
+    Route::post('/user/notifications/{notification}/read', [UserNotificationController::class, 'markRead'])->name('user.notifications.read');
     Route::get('/user/addresses/create', [UserCenterController::class, 'createAddress'])->name('user.addresses.create');
     Route::get('/user/addresses/{address}/edit', [UserCenterController::class, 'editAddress'])->name('user.addresses.edit');
     Route::post('/user/addresses', [UserCenterController::class, 'storeAddress'])->name('user.addresses.store');
@@ -174,6 +177,10 @@ Route::middleware(['auth', 'admin'])->prefix('admin/exports')->name('admin.expor
     Route::get('/products', [CsvExportController::class, 'products'])->name('products');
     Route::get('/customers', [CsvExportController::class, 'customers'])->name('customers');
 });
+
+Route::get('/admin/notification-summary', AdminNotificationController::class)
+    ->middleware(['auth', 'admin'])
+    ->name('admin.notification-summary');
 
 Route::middleware(['auth', 'admin'])->prefix('admin/payment-proofs')->name('admin.payment-proofs.')->group(function (): void {
     Route::get('/orders/{order}', [PaymentProofController::class, 'show'])->name('show');

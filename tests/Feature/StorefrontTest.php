@@ -3842,6 +3842,8 @@ it('shows order details without payment blocks after payment is confirmed', func
         ->assertSee('创建时间')
         ->assertSee('完成时间')
         ->assertSee('确认收货')
+        ->assertSee('已付款金额')
+        ->assertDontSee('待支付金额')
         ->assertDontSee('付款说明')
         ->assertDontSee('付款凭证')
         ->assertDontSee('/uploads/payments/main.png', false)

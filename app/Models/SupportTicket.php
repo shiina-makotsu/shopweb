@@ -21,6 +21,7 @@ class SupportTicket extends Model
         'message',
         'status',
         'admin_reply',
+        'customer_read_at',
         'closed_at',
     ];
 
@@ -28,7 +29,17 @@ class SupportTicket extends Model
     {
         return [
             'closed_at' => 'datetime',
+            'customer_read_at' => 'datetime',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::saving(function (SupportTicket $ticket): void {
+            if ($ticket->isDirty('admin_reply') && filled($ticket->admin_reply)) {
+                $ticket->customer_read_at = null;
+            }
+        });
     }
 
     public function user(): BelongsTo

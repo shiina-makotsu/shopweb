@@ -30,10 +30,8 @@ use App\Filament\Pages\SupportAiSettingsPage;
 use App\Filament\Pages\SystemInfoPage;
 use App\Filament\Pages\UserAiPage;
 use App\Filament\Pages\WalletSettingsPage;
-use App\Models\Order;
 use App\Models\SiteSetting;
-use App\Models\SupportChatMessage;
-use App\Models\SupportChatSession;
+use App\Services\AdminNotificationSummary;
 use App\Services\StorefrontCache;
 use App\Support\AdminMenuRegistry;
 use Filament\Http\Middleware\Authenticate;
@@ -55,9 +53,6 @@ use Illuminate\Foundation\Http\Middleware\PreventRequestsDuringMaintenance;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Vite;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 use Throwable;
@@ -124,9 +119,10 @@ class AdminPanelProvider extends PanelProvider
                 PanelsRenderHook::HEAD_END,
                 fn (): HtmlString => new HtmlString(
                     str_replace(
-                        ['__SHOPWEB_ADMIN_GROUP_BADGES__', '__SHOPWEB_ADMIN_MENU_CONFIG__', '__SHOPWEB_ADMIN_MODULE_TAG__'],
+                        ['__SHOPWEB_ADMIN_GROUP_BADGES__', '__SHOPWEB_ADMIN_NOTIFICATION_URL__', '__SHOPWEB_ADMIN_MENU_CONFIG__', '__SHOPWEB_ADMIN_MODULE_TAG__'],
                         [
-                            json_encode($this->adminNavigationGroupBadges(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}',
+                            json_encode(app(AdminNotificationSummary::class)->data()['groups'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{}',
+                            json_encode(route('admin.notification-summary', absolute: false), JSON_UNESCAPED_SLASHES) ?: '"/admin/notification-summary"',
                             json_encode(app(AdminMenuRegistry::class)->browserConfig(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '{"groups":[],"items":[]}',
                             $this->adminModuleTag(),
                         ],
@@ -138,7 +134,8 @@ class AdminPanelProvider extends PanelProvider
                             const adminMenuConfig = __SHOPWEB_ADMIN_MENU_CONFIG__;
                             window.shopwebAdminRuntime = { menu: adminMenuConfig };
                             const defaultCollapsedGroups = (adminMenuConfig.groups || []).map((group) => group.label).filter(Boolean);
-                            const groupBadges = __SHOPWEB_ADMIN_GROUP_BADGES__;
+                            let groupBadges = __SHOPWEB_ADMIN_GROUP_BADGES__;
+                            const notificationSummaryUrl = __SHOPWEB_ADMIN_NOTIFICATION_URL__;
                             const reportAdminModuleError = (name, error) => {
                                 console.error(`[ShopWeb:${name}]`, error);
                                 window.dispatchEvent(new CustomEvent('shopweb:module-error', {
@@ -245,6 +242,82 @@ class AdminPanelProvider extends PanelProvider
                                 });
                             };
 
+                            const syncNavigationItemBadges = (items = []) => {
+                                items.forEach((item) => {
+                                    const link = findSidebarItem(item.url, item.label);
+                                    const container = link?.closest('.fi-sidebar-item, li');
+
+                                    if (! link || ! container) {
+                                        return;
+                                    }
+
+                                    let badge = container.querySelector('[data-shopweb-live-badge], .fi-badge');
+
+                                    if (! item.count) {
+                                        badge?.remove();
+                                        return;
+                                    }
+
+                                    if (! badge) {
+                                        badge = document.createElement('span');
+                                        badge.className = 'shopweb-admin-item-badge';
+                                        link.appendChild(badge);
+                                    }
+
+                                    badge.dataset.shopwebLiveBadge = 'true';
+                                    badge.textContent = item.badge || (item.count > 99 ? '99+' : String(item.count));
+                                    badge.setAttribute('aria-label', `${item.label}待处理 ${badge.textContent}`);
+                                });
+                            };
+
+                            let notificationRefreshTimer = null;
+                            let notificationRefreshController = null;
+
+                            const refreshAdminNotifications = async (fresh = false) => {
+                                if (document.hidden || ! notificationSummaryUrl || ! document.querySelector('.fi-sidebar')) {
+                                    return;
+                                }
+
+                                notificationRefreshController?.abort();
+                                notificationRefreshController = new AbortController();
+
+                                try {
+                                    const separator = notificationSummaryUrl.includes('?') ? '&' : '?';
+                                    const response = await fetch(`${notificationSummaryUrl}${fresh ? `${separator}fresh=1` : ''}`, {
+                                        headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                                        credentials: 'same-origin',
+                                        signal: notificationRefreshController.signal,
+                                    });
+
+                                    if (! response.ok) {
+                                        return;
+                                    }
+
+                                    const summary = await response.json();
+                                    groupBadges = summary.groups || {};
+                                    syncNavigationGroupBadges();
+                                    syncNavigationItemBadges(summary.items || []);
+                                } catch (error) {
+                                    // Navigation and tab suspension may cancel a harmless badge refresh.
+                                }
+                            };
+
+                            const scheduleNotificationRefresh = (fresh = false, delay = 200) => {
+                                window.clearTimeout(notificationRefreshTimer);
+                                notificationRefreshTimer = window.setTimeout(() => refreshAdminNotifications(fresh), delay);
+                            };
+
+                            const bindLivewireNotificationRefresh = () => {
+                                if (! window.Livewire?.hook || window.shopwebAdminNotificationHookBound) {
+                                    return;
+                                }
+
+                                window.shopwebAdminNotificationHookBound = true;
+                                window.Livewire.hook('commit', ({ succeed }) => {
+                                    succeed(() => scheduleNotificationRefresh(true, 100));
+                                });
+                            };
+
                             safeAdminHandler('admin-sidebar', () => {
                                 syncAdminMenuOrder();
                                 syncNavigationGroupBadges();
@@ -254,6 +327,26 @@ class AdminPanelProvider extends PanelProvider
                                 document.addEventListener('livewire:navigated', safeAdminHandler('admin-sidebar-order', syncAdminMenuOrder));
                                 document.addEventListener('livewire:update', safeAdminHandler('admin-sidebar-badges', syncNavigationGroupBadges));
                                 document.addEventListener('livewire:update', safeAdminHandler('admin-sidebar-order', syncAdminMenuOrder));
+                                document.addEventListener('DOMContentLoaded', () => scheduleNotificationRefresh(false, 0));
+                                document.addEventListener('livewire:navigated', () => scheduleNotificationRefresh(false, 50));
+                                document.addEventListener('livewire:update', () => scheduleNotificationRefresh(true, 250));
+                                document.addEventListener('livewire:init', bindLivewireNotificationRefresh);
+                                document.addEventListener('DOMContentLoaded', bindLivewireNotificationRefresh);
+                                document.addEventListener('click', (event) => {
+                                    if (! event.target.closest('[wire\\:click], .fi-modal button[type="submit"]')) {
+                                        return;
+                                    }
+
+                                    window.setTimeout(() => refreshAdminNotifications(true), 900);
+                                    window.setTimeout(() => refreshAdminNotifications(true), 1800);
+                                }, true);
+                                window.addEventListener('shopweb:admin-notifications-refresh', () => scheduleNotificationRefresh(true, 0));
+                                document.addEventListener('visibilitychange', () => {
+                                    if (! document.hidden) {
+                                        scheduleNotificationRefresh(true, 0);
+                                    }
+                                });
+                                window.setInterval(() => refreshAdminNotifications(false), 15000);
                             })();
 
                             try {
@@ -915,65 +1008,24 @@ class AdminPanelProvider extends PanelProvider
                 .dark .shopweb-admin-group-badge {
                     box-shadow: 0 0 0 2px #111827;
                 }
+
+                .shopweb-admin-item-badge {
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    min-width: 1.25rem;
+                    height: 1.25rem;
+                    margin-inline-start: auto;
+                    padding-inline: .35rem;
+                    border-radius: 999px;
+                    background: #dc2626;
+                    color: #fff;
+                    font-size: .6875rem;
+                    font-weight: 700;
+                    line-height: 1;
+                }
             </style>
             HTML;
-    }
-
-    /**
-     * @return array<string, int>
-     */
-    private function adminNavigationGroupBadges(): array
-    {
-        return Cache::remember('shop:admin:navigation-group-badges', now()->addSeconds(15), fn (): array => [
-            '???' => $this->pendingAdminOrderCount(),
-            '???' => $this->pendingAdminSupportCount(),
-        ]);
-    }
-
-    private function pendingAdminOrderCount(): int
-    {
-        try {
-            if (! Schema::hasTable('orders')) {
-                return 0;
-            }
-
-            return Order::query()
-                ->where('payment_status', Order::PAYMENT_SUBMITTED)
-                ->where('status', '!=', Order::STATUS_CANCELLED)
-                ->count();
-        } catch (Throwable) {
-            return 0;
-        }
-    }
-
-    private function pendingAdminSupportCount(): int
-    {
-        try {
-            if (! Schema::hasTable('support_chat_sessions') || ! Schema::hasTable('support_chat_messages')) {
-                return 0;
-            }
-
-            $customerSessions = SupportChatSession::query()
-                ->whereNotNull('user_id')
-                ->whereNotIn('status', [SupportChatSession::STATUS_ENDED, SupportChatSession::STATUS_CLOSED])
-                ->whereHas('messages', fn (Builder $query): Builder => $query
-                    ->where('sender_type', SupportChatMessage::SENDER_CUSTOMER)
-                    ->whereNull('read_at'))
-                ->count();
-
-            $guestSessions = SupportChatSession::query()
-                ->whereNull('user_id')
-                ->whereNotNull('guest_id')
-                ->whereNotIn('status', [SupportChatSession::STATUS_ENDED, SupportChatSession::STATUS_CLOSED])
-                ->whereHas('messages', fn (Builder $query): Builder => $query
-                    ->where('sender_type', SupportChatMessage::SENDER_GUEST)
-                    ->whereNull('read_at'))
-                ->count();
-
-            return $customerSessions + $guestSessions;
-        } catch (Throwable) {
-            return 0;
-        }
     }
 
     private function adminBrandName(): string

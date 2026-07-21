@@ -38,6 +38,7 @@ use App\Filament\Resources\SiteSettingResource;
 use App\Filament\Resources\SoldOutStatusResource;
 use App\Filament\Resources\SupplierResource;
 use App\Filament\Resources\SupportChatSessionResource;
+use App\Filament\Resources\SupportContactMethodResource;
 use App\Filament\Resources\SupportTicketResource;
 use App\Filament\Resources\WarehouseResource;
 use App\Filament\Resources\WarehouseMovementResource;
@@ -132,6 +133,7 @@ class AdminSearchPage extends Page
             ['group' => 'AI', 'label' => 'AI 工作流', 'keywords' => 'AI 工作流 comfyui 画布 节点 lora 语言模型 画图模型 串联', 'url' => AiWorkflowResource::getUrl()],
             ['group' => 'AI', 'label' => '导购 AI', 'keywords' => '导购 桌宠 AI 工作流 商品推荐', 'url' => GuideAiSettingsPage::getUrl()],
             ['group' => '客服', 'label' => '客服会话', 'keywords' => '即时聊天 图片 文件 接待 结束', 'url' => SupportChatSessionResource::getUrl()],
+            ['group' => '客服', 'label' => '联系方式', 'keywords' => '客服 联系软件 账号 群号 链接 Font Awesome 图标', 'url' => SupportContactMethodResource::getUrl()],
             ['group' => '客服', 'label' => '游客会话', 'keywords' => '游客 客服 即时聊天 游客ID', 'url' => GuestSupportChatSessionResource::getUrl()],
             ['group' => '客服', 'label' => '售后需求', 'keywords' => '订单售后 退款 补偿 优惠券 处理留言', 'url' => AfterSalesRequestResource::getUrl()],
             ['group' => '客服', 'label' => '客服工单', 'keywords' => '投诉 反馈 工单 支持 提需求', 'url' => SupportTicketResource::getUrl()],

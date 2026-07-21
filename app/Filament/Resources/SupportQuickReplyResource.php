@@ -7,6 +7,7 @@ use App\Filament\Resources\SupportQuickReplyResource\Pages\CreateSupportQuickRep
 use App\Filament\Resources\SupportQuickReplyResource\Pages\EditSupportQuickReply;
 use App\Filament\Resources\SupportQuickReplyResource\Pages\ListSupportQuickReplies;
 use App\Models\SupportQuickReply;
+use App\Models\SupportContactMethod;
 use App\Support\RegexSearch;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
@@ -17,6 +18,7 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
@@ -41,6 +43,15 @@ class SupportQuickReplyResource extends Resource
         return $schema->components([
             Section::make('规则设置')->schema([
                 TextInput::make('title')->label('规则名称')->required()->maxLength(255),
+                Select::make('trigger_event')
+                    ->label('触发时机')
+                    ->options([
+                        SupportQuickReply::TRIGGER_MESSAGE => '用户消息命中规则',
+                        SupportQuickReply::TRIGGER_SESSION_ENTRY => '用户进入客服会话',
+                    ])
+                    ->default(SupportQuickReply::TRIGGER_MESSAGE)
+                    ->required()
+                    ->live(),
                 Select::make('match_mode')
                     ->label('匹配方式')
                     ->options([
@@ -48,13 +59,15 @@ class SupportQuickReplyResource extends Resource
                         SupportQuickReply::MATCH_REGEX => '正则',
                     ])
                     ->default(SupportQuickReply::MATCH_KEYWORD)
-                    ->required(),
+                    ->required(fn (Get $get): bool => $get('trigger_event') === SupportQuickReply::TRIGGER_MESSAGE)
+                    ->visible(fn (Get $get): bool => $get('trigger_event') === SupportQuickReply::TRIGGER_MESSAGE),
                 Textarea::make('match_pattern')
                     ->label('检测语句')
                     ->helperText('关键词模式可用逗号或换行分隔；正则模式支持直接写表达式。')
-                    ->required()
+                    ->required(fn (Get $get): bool => $get('trigger_event') === SupportQuickReply::TRIGGER_MESSAGE)
                     ->rows(4)
-                    ->columnSpanFull(),
+                    ->columnSpanFull()
+                    ->visible(fn (Get $get): bool => $get('trigger_event') === SupportQuickReply::TRIGGER_MESSAGE),
                 Select::make('trigger_action')
                     ->label('命中动作')
                     ->options([
@@ -63,12 +76,28 @@ class SupportQuickReplyResource extends Resource
                         SupportQuickReply::ACTION_NOTIFY_STAFF => '提醒客服接待',
                     ])
                     ->default(SupportQuickReply::ACTION_REPLY)
-                    ->required(),
+                    ->required()
+                    ->visible(fn (Get $get): bool => $get('trigger_event') === SupportQuickReply::TRIGGER_MESSAGE),
                 Textarea::make('body')
                     ->label('回复词 / 提示内容')
                     ->helperText('自动回复会直接发送这段内容；AI 接入和提醒客服也可用作提示文本。')
                     ->required()
                     ->rows(5)
+                    ->columnSpanFull(),
+                Select::make('contact_method_ids')
+                    ->label('引用联系方式')
+                    ->multiple()
+                    ->searchable()
+                    ->preload()
+                    ->options(fn (): array => SupportContactMethod::query()
+                        ->orderBy('sort_order')
+                        ->orderBy('id')
+                        ->get()
+                        ->mapWithKeys(fn (SupportContactMethod $method): array => [
+                            $method->id => $method->name.(filled($method->account) ? ' / '.$method->account : ''),
+                        ])
+                        ->all())
+                    ->helperText('被引用的联系方式会随回复显示为可点击的软件图标和名称。')
                     ->columnSpanFull(),
                 TextInput::make('sort_order')->label('排序')->numeric()->default(0),
                 Toggle::make('is_active')->label('启用')->default(true),
@@ -88,6 +117,7 @@ class SupportQuickReplyResource extends Resource
                     ->label('规则名称')
                     ->searchable(query: fn (Builder $query, string $search): Builder => RegexSearch::where($query, ['title', 'match_pattern', 'body', 'category'], $search))
                     ->sortable(),
+                TextColumn::make('trigger_event')->label('触发时机')->formatStateUsing(fn (SupportQuickReply $record): string => $record->triggerEventLabel())->badge(),
                 TextColumn::make('match_mode')->label('匹配方式')->formatStateUsing(fn (string $state): string => $state === SupportQuickReply::MATCH_REGEX ? '正则' : '关键词'),
                 TextColumn::make('trigger_action')->label('命中动作')->formatStateUsing(fn (string $state): string => match ($state) {
                     SupportQuickReply::ACTION_AI => '接入 AI',

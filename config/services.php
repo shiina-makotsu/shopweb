@@ -23,4 +23,10 @@ return [
         'stop_timeout' => env('LOCAL_AI_STOP_TIMEOUT', 5),
         'cooldown_seconds' => env('LOCAL_AI_COOLDOWN_SECONDS', 600),
     ],
+
+    'payment_proof_ocr' => [
+        'binary' => env('PAYMENT_PROOF_OCR_BINARY', 'tesseract'),
+        'languages' => env('PAYMENT_PROOF_OCR_LANGUAGES', 'chi_sim+eng'),
+        'timeout' => env('PAYMENT_PROOF_OCR_TIMEOUT', 10),
+    ],
 ];

@@ -16,6 +16,7 @@ class WalletTransaction extends Model
     public const SOURCE_ORDER_PAYMENT = 'order_payment';
     public const SOURCE_ORDER_REFUND = 'order_refund';
     public const SOURCE_WALLET_RECHARGE = 'wallet_recharge';
+    public const SOURCE_WALLET_RECHARGE_REVERSAL = 'wallet_recharge_reversal';
     public const SOURCE_ADMIN = 'admin';
     public const SOURCE_SYSTEM = 'system';
     public const SOURCE_REFERRAL = 'referral';

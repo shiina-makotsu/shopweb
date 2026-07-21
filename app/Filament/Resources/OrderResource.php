@@ -12,6 +12,7 @@ use App\Services\OrderService;
 use App\Support\AdminAccess;
 use App\Support\Money;
 use App\Support\OrderStatusPresenter;
+use App\Support\PaymentStatusPresenter;
 use App\Support\OrderTimeline;
 use App\Support\RegexSearch;
 use App\Support\Url;
@@ -23,6 +24,7 @@ use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Notifications\Notification;
 use Illuminate\Support\HtmlString;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Section;
@@ -78,12 +80,7 @@ class OrderResource extends Resource
                     ->required(),
                 Select::make('payment_status')
                     ->label('付款状态')
-                    ->options([
-                        Order::PAYMENT_PENDING => '待付款',
-                        Order::PAYMENT_SUBMITTED => '已提交凭证',
-                        Order::PAYMENT_CONFIRMED => '已确认付款',
-                        Order::PAYMENT_REJECTED => '已驳回',
-                    ])
+                    ->options(fn (): array => app(PaymentStatusPresenter::class)->options())
                     ->required(),
                 TextInput::make('subtotal_cents')->label('小计')->disabled()->formatStateUsing(fn ($state): string => Money::format((int) $state)),
                 TextInput::make('discount_cents')->label('优惠')->disabled()->formatStateUsing(fn ($state): string => Money::format((int) $state)),
@@ -316,7 +313,7 @@ class OrderResource extends Resource
 
         $items = nl2br(e(static::orderItemsSummary($record)));
         $status = e(app(OrderStatusPresenter::class)->label($record->status));
-        $payment = e($record->payment_status ?: '-');
+        $payment = e(app(PaymentStatusPresenter::class)->label($record->payment_status));
         $paymentTotal = e(Money::format($record->paymentTotalCents()));
         $walletPayment = e(Money::format($record->walletPaymentCents()));
         $remainingPayment = e(Money::format($record->remainingPaymentCents()));
@@ -491,7 +488,7 @@ class OrderResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
-            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with(['items.productVariant']))
+            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with(['items.productVariant', 'latestPaymentVerificationLog']))
             ->columns([
                 TextColumn::make('order_number')
                     ->label('订单号')
@@ -509,6 +506,11 @@ class OrderResource extends Resource
                     ->label('订单状态')
                     ->formatStateUsing(fn (?string $state): string => app(OrderStatusPresenter::class)->label($state))
                     ->color(fn (?string $state): string => app(OrderStatusPresenter::class)->color($state))
+                    ->badge(),
+                TextColumn::make('payment_status')
+                    ->label('付款状态')
+                    ->formatStateUsing(fn (?string $state): string => app(PaymentStatusPresenter::class)->label($state))
+                    ->color(fn (?string $state): string => app(PaymentStatusPresenter::class)->color($state))
                     ->badge(),
                 TextColumn::make('user_deleted_at')
                     ->label('用户可见')
@@ -530,12 +532,7 @@ class OrderResource extends Resource
                     ->options(fn (): array => app(OrderStatusPresenter::class)->options()),
                 SelectFilter::make('payment_status')
                     ->label('付款状态')
-                    ->options([
-                        Order::PAYMENT_PENDING => '待付款',
-                        Order::PAYMENT_SUBMITTED => '已提交凭证',
-                        Order::PAYMENT_CONFIRMED => '已确认付款',
-                        Order::PAYMENT_REJECTED => '已驳回',
-                    ]),
+                    ->options(fn (): array => app(PaymentStatusPresenter::class)->options()),
                 SelectFilter::make('user_visibility')
                     ->label('用户可见')
                     ->options([
@@ -567,8 +564,18 @@ class OrderResource extends Resource
                 Action::make('confirmPayment')
                     ->label('确认收款')
                     ->requiresConfirmation()
-                    ->visible(fn (Order $record): bool => AdminAccess::canAction('orders.confirm_payment') && $record->payment_status !== Order::PAYMENT_CONFIRMED && $record->status !== Order::STATUS_CANCELLED)
-                    ->action(fn (Order $record) => app(OrderService::class)->confirmPayment($record, auth()->user())),
+                    ->visible(fn (Order $record): bool => AdminAccess::canAction('orders.confirm_payment')
+                        && $record->status !== Order::STATUS_CANCELLED
+                        && ($record->payment_status !== Order::PAYMENT_CONFIRMED || $record->isAwaitingAutoConfirmedPaymentReview()))
+                    ->action(function (Order $record): void {
+                        $wasAutoConfirmedReview = $record->isAwaitingAutoConfirmedPaymentReview();
+                        app(OrderService::class)->confirmPayment($record, auth()->user());
+
+                        Notification::make()
+                            ->title($wasAutoConfirmedReview ? '自动确认付款已复核' : '付款已确认')
+                            ->success()
+                            ->send();
+                    }),
                 Action::make('ship')
                     ->label('发货')
                     ->color('info')
@@ -640,8 +647,17 @@ class OrderResource extends Resource
                     ->form([
                         Textarea::make('admin_note')->label('驳回说明')->rows(3),
                     ])
-                    ->visible(fn (Order $record): bool => AdminAccess::canAction('orders.reject_payment') && $record->payment_status === Order::PAYMENT_SUBMITTED)
-                    ->action(fn (Order $record, array $data) => app(OrderService::class)->rejectPayment($record, $data['admin_note'] ?? null, auth()->user())),
+                    ->visible(fn (Order $record): bool => AdminAccess::canAction('orders.reject_payment')
+                        && ($record->payment_status === Order::PAYMENT_SUBMITTED || $record->isAwaitingAutoConfirmedPaymentReview()))
+                    ->action(function (Order $record, array $data): void {
+                        $reversesAutoConfirmation = $record->isAwaitingAutoConfirmedPaymentReview();
+                        app(OrderService::class)->rejectPayment($record, $data['admin_note'] ?? null, auth()->user());
+
+                        Notification::make()
+                            ->title($reversesAutoConfirmation ? '自动确认付款已驳回，充值权益已收回' : '付款凭证已驳回')
+                            ->warning()
+                            ->send();
+                    }),
                 Action::make('fulfill')
                     ->label('标记完成')
                     ->form([

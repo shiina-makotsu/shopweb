@@ -100,6 +100,24 @@ class PaymentProofStorage
         }
     }
 
+    public function contents(string $path): ?string
+    {
+        if ($this->isDatabasePath($path)) {
+            $encoded = PaymentProofFile::query()->whereKey($this->databaseIdFromPath($path))->value('content');
+            $contents = is_string($encoded) ? base64_decode($encoded, true) : false;
+
+            return is_string($contents) ? $contents : null;
+        }
+
+        try {
+            $contents = $this->disk()->get($this->normalizePath($path));
+
+            return is_string($contents) ? $contents : null;
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
     public function response(string $path): StreamedResponse|Response
     {
         if ($this->isDatabasePath($path)) {

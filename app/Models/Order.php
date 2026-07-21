@@ -154,6 +154,11 @@ class Order extends Model
         return $this->hasMany(PaymentVerificationLog::class);
     }
 
+    public function latestPaymentVerificationLog(): HasOne
+    {
+        return $this->hasOne(PaymentVerificationLog::class)->latestOfMany();
+    }
+
     public function paymentProofFiles(): HasMany
     {
         return $this->hasMany(PaymentProofFile::class);
@@ -161,10 +166,45 @@ class Order extends Model
 
     public function scopeAwaitingPaymentReview(Builder $query): Builder
     {
-        return $query
-            ->where('payment_status', self::PAYMENT_SUBMITTED)
-            ->where('status', '!=', self::STATUS_CANCELLED)
-            ->whereNull('user_deleted_at');
+        return $query->where(function (Builder $query): void {
+            $query
+                ->where(function (Builder $query): void {
+                    $query
+                    ->where('payment_status', self::PAYMENT_SUBMITTED)
+                        ->where('status', '!=', self::STATUS_CANCELLED)
+                        ->whereNull('user_deleted_at');
+                })
+                ->orWhere(function (Builder $query): void {
+                    $query
+                        ->where('payment_status', self::PAYMENT_CONFIRMED)
+                        ->where('status', '!=', self::STATUS_CANCELLED)
+                        ->where(function (Builder $query): void {
+                            $query
+                                ->where('is_wallet_recharge', true)
+                                ->orWhere('wallet_recharge_cents', '>', 0);
+                        })
+                        ->where('payment_auto_check_status', self::AUTO_CHECK_PASSED)
+                        ->whereHas('paymentVerificationLogs', fn (Builder $query): Builder => $query
+                            ->where('auto_result', PaymentVerificationLog::AUTO_PASSED)
+                            ->whereNull('manual_result'));
+                });
+        });
+    }
+
+    public function isAwaitingAutoConfirmedPaymentReview(): bool
+    {
+        if ($this->payment_status !== self::PAYMENT_CONFIRMED
+            || ! $this->isWalletRecharge()
+            || $this->payment_auto_check_status !== self::AUTO_CHECK_PASSED) {
+            return false;
+        }
+
+        $log = $this->relationLoaded('latestPaymentVerificationLog')
+            ? $this->latestPaymentVerificationLog
+            : $this->latestPaymentVerificationLog()->first();
+
+        return $log?->auto_result === PaymentVerificationLog::AUTO_PASSED
+            && $log->manual_result === null;
     }
 
     public function afterSalesRequests(): HasMany

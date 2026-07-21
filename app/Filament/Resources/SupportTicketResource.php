@@ -38,6 +38,18 @@ class SupportTicketResource extends Resource
         return false;
     }
 
+    public static function getNavigationBadge(): ?string
+    {
+        $count = SupportTicket::query()->where('status', SupportTicket::STATUS_OPEN)->count();
+
+        return $count > 0 ? (string) $count : null;
+    }
+
+    public static function getNavigationBadgeColor(): string|array|null
+    {
+        return 'danger';
+    }
+
     public static function canDelete(Model $record): bool
     {
         return false;

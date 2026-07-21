@@ -14,12 +14,14 @@ use App\Models\ProductVariant;
 use App\Models\ReferralRewardRule;
 use App\Models\SupportChatMessage;
 use App\Models\SupportChatSession;
+use App\Models\SupportContactMethod;
 use App\Models\SupportTicket;
 use App\Models\SiteSetting;
 use App\Models\SupportQuickReply;
 use App\Models\User;
 use App\Models\WalletTransaction;
 use App\Support\ForumThreadTemplate;
+use App\Support\StorefrontViewData;
 use App\Support\Url;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -1207,4 +1209,152 @@ it('matches support quick replies by keyword and regex rules', function (): void
     expect($session->fresh()->messages()->where('sender_type', SupportChatMessage::SENDER_SYSTEM)->count())->toBeGreaterThanOrEqual(2)
         ->and($session->fresh()->messages()->where('sender_type', SupportChatMessage::SENDER_SYSTEM)->where('body', 'like', '%已提醒客服尽快接待%')->exists())
         ->toBeTrue();
+});
+
+it('shows contact methods and sends entry quick replies once without unread alerts', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+    $contact = SupportContactMethod::query()->create([
+        'name' => '客服 Telegram',
+        'account' => '@shop_support',
+        'url' => 'https://t.me/shop_support',
+        'icon' => 'fa-brands fa-telegram',
+        'sort_order' => -10,
+        'is_active' => true,
+    ]);
+    $quickReply = SupportQuickReply::query()->create([
+        'title' => '进入客服欢迎语',
+        'body' => '欢迎进入客服页面，可通过下方方式联系我们。',
+        'trigger_event' => SupportQuickReply::TRIGGER_SESSION_ENTRY,
+        'trigger_action' => SupportQuickReply::ACTION_REPLY,
+        'contact_method_ids' => [$contact->id],
+        'sort_order' => 1,
+        'is_active' => true,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('support.index'))
+        ->assertOk()
+        ->assertSee('欢迎进入客服页面')
+        ->assertSee('客服 Telegram')
+        ->assertSee('@shop_support')
+        ->assertSee('https://t.me/shop_support', false)
+        ->assertSee('fa-brands fa-telegram', false);
+
+    $session = SupportChatSession::query()->whereBelongsTo($user)->firstOrFail();
+    $message = $session->messages()->where('support_quick_reply_id', $quickReply->id)->firstOrFail();
+
+    expect($message->contact_links)->toBe([
+        [
+            'name' => '客服 Telegram',
+            'account' => '@shop_support',
+            'url' => 'https://t.me/shop_support',
+            'icon' => 'fa-brands fa-telegram',
+        ],
+    ]);
+
+    $message->update(['read_at' => null]);
+    app()->forgetInstance(StorefrontViewData::class);
+    expect(app(StorefrontViewData::class)->data()['supportUnreadMessageCount'])->toBe(0);
+
+    $this->actingAs($user)->get(route('support.index'))->assertOk();
+    expect($session->messages()->where('support_quick_reply_id', $quickReply->id)->count())->toBe(1);
+
+    $session->messages()->create([
+        'sender_type' => SupportChatMessage::SENDER_ADMIN,
+        'body' => '这是人工客服消息。',
+    ]);
+    app()->forgetInstance(StorefrontViewData::class);
+
+    expect(app(StorefrontViewData::class)->data()['supportChatUnreadMessageCount'])->toBe(1)
+        ->and(app(StorefrontViewData::class)->data()['supportUnreadMessageCount'])->toBe(1);
+});
+
+it('tracks support ticket and after sales replies until their pages are opened', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+    $order = \App\Models\Order::query()->create([
+        'user_id' => $user->id,
+        'order_number' => 'SUPPORT-NOTICE-1',
+        'status' => \App\Models\Order::STATUS_FULFILLED,
+        'payment_status' => \App\Models\Order::PAYMENT_CONFIRMED,
+        'subtotal_cents' => 1000,
+        'total_cents' => 1000,
+        'contact_name' => 'Notice User',
+        'contact_phone' => '10000',
+    ]);
+    $ticket = SupportTicket::query()->create([
+        'user_id' => $user->id,
+        'order_id' => $order->id,
+        'category' => 'after_sale',
+        'subject' => '工单提醒测试',
+        'message' => '请处理工单。',
+        'status' => SupportTicket::STATUS_REPLIED,
+        'admin_reply' => '工单已有客服回复。',
+    ]);
+    $afterSales = \App\Models\AfterSalesRequest::query()->create([
+        'user_id' => $user->id,
+        'order_id' => $order->id,
+        'type' => 'refund',
+        'status' => \App\Models\AfterSalesRequest::STATUS_CONTACTING,
+        'subject' => '售后提醒测试',
+        'message' => '请处理售后。',
+        'admin_note' => '售后已有处理留言。',
+    ]);
+
+    $this->actingAs($user);
+    app()->forgetInstance(StorefrontViewData::class);
+    $counts = app(StorefrontViewData::class)->data();
+
+    expect($counts['supportTicketUnreadCount'])->toBe(1)
+        ->and($counts['afterSalesUnreadCount'])->toBe(1)
+        ->and($counts['supportCaseUnreadCount'])->toBe(2)
+        ->and($counts['supportUnreadMessageCount'])->toBe(2);
+
+    $this->get(route('support.demands'))
+        ->assertOk()
+        ->assertSee('工单已有客服回复。');
+
+    expect($ticket->fresh()->customer_read_at)->not->toBeNull()
+        ->and($afterSales->fresh()->customer_read_at)->toBeNull();
+
+    $this->get(route('orders.after-sales', $order))
+        ->assertOk()
+        ->assertSee('售后已有处理留言。');
+
+    expect($afterSales->fresh()->customer_read_at)->not->toBeNull();
+});
+
+it('renders support contact and entry reply settings for admins', function (): void {
+    $admin = User::factory()->create(['role' => 'admin']);
+    SupportTicket::query()->create([
+        'user_id' => User::factory()->create(['role' => 'customer'])->id,
+        'category' => 'consultation',
+        'subject' => '后台工单提示',
+        'message' => '等待客服处理。',
+        'status' => SupportTicket::STATUS_OPEN,
+    ]);
+    \App\Models\AfterSalesRequest::query()->create([
+        'user_id' => User::factory()->create(['role' => 'customer'])->id,
+        'type' => 'other',
+        'status' => \App\Models\AfterSalesRequest::STATUS_OPEN,
+        'subject' => '后台售后提示',
+        'message' => '等待售后处理。',
+    ]);
+
+    $this->actingAs($admin)
+        ->get('/admin/support-contact-methods/create')
+        ->assertOk()
+        ->assertSee('联系软件名称')
+        ->assertSee('账号 / 群号')
+        ->assertSee('Font Awesome 图标')
+        ->assertSee('fa-solid fa-comments', false);
+
+    $this->actingAs($admin)
+        ->get('/admin/support-quick-replies/create')
+        ->assertOk()
+        ->assertSee('触发时机')
+        ->assertSee('用户进入客服会话')
+        ->assertSee('引用联系方式');
+
+    expect(\App\Filament\Resources\SupportTicketResource::getNavigationBadge())->toBe('1')
+        ->and(\App\Filament\Resources\AfterSalesRequestResource::getNavigationBadge())->toBe('1');
 });

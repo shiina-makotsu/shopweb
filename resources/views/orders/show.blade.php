@@ -2,7 +2,10 @@
     @php($statusPresenter = app(\App\Support\OrderStatusPresenter::class))
     @php($pendingFlashSaleItem = $order->items->first(fn ($item) => $item->flash_sale_id && ! $item->product_variant_id))
     @php($productStatuses = \App\Models\Product::statusOptions())
-    @php($isPaymentPage = $order->status === \App\Models\Order::STATUS_PENDING_PAYMENT && ! in_array($order->payment_status, ['confirmed'], true))
+    @php($needsPayment = $order->status === \App\Models\Order::STATUS_PENDING_PAYMENT && in_array($order->payment_status, [\App\Models\Order::PAYMENT_PENDING, \App\Models\Order::PAYMENT_REJECTED], true))
+    @php($hasSubmittedPayment = $order->status === \App\Models\Order::STATUS_PENDING_PAYMENT && $order->payment_status === \App\Models\Order::PAYMENT_SUBMITTED)
+    @php($showPaymentProof = $needsPayment || $hasSubmittedPayment)
+    @php($remainingPaymentLabel = in_array($order->payment_status, [\App\Models\Order::PAYMENT_SUBMITTED, \App\Models\Order::PAYMENT_CONFIRMED], true) ? '已付款金额' : '待支付金额')
     @php($fallbackPayment = $settings?->payment_fallback_config ?: [])
     @php($paymentQrUrl = $settings?->paymentQrUrl())
     @php($fallbackQrUrl = $settings?->paymentFallbackQrUrl())
@@ -12,9 +15,9 @@
     @php($isWalletRecharge = $order->isWalletRecharge())
     @php($walletRechargeSuccessMessage = $settings?->wallet_recharge_success_message ?: '钱包充值已到账，余额已经更新。')
     @php($paymentTimeoutMinutes = max(1, (int) ($settings?->payment_pending_timeout_minutes ?: 10)))
-    @php($paymentExpiresAt = $isPaymentPage ? $order->created_at?->copy()->addMinutes($paymentTimeoutMinutes) : null)
+    @php($paymentExpiresAt = $needsPayment ? $order->created_at?->copy()->addMinutes($paymentTimeoutMinutes) : null)
 
-    @if($isPaymentPage)
+    @if($needsPayment)
         @push('head')
             @foreach(array_filter([$paymentQrUrl, $fallbackQrUrl, $friendQrUrl]) as $preloadPaymentImage)
                 <link rel="preload" as="image" href="{{ $preloadPaymentImage }}">
@@ -45,7 +48,7 @@
                         <p class="mt-1 whitespace-pre-line">{{ $order->admin_note }}</p>
                     </div>
                 @endif
-                @if($isPaymentPage && $paymentExpiresAt)
+                @if($needsPayment && $paymentExpiresAt)
                     <div
                         class="rounded-sm border border-amber-300 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-950"
                         data-payment-countdown
@@ -135,7 +138,7 @@
                     @endif
                 </div>
 
-                @if($isPaymentPage)
+                @if($needsPayment)
                     <div class="rounded-sm border border-slate-300">
                         <h2 class="border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold">付款说明</h2>
                         <div class="content-body px-4 py-4 text-sm">
@@ -146,7 +149,7 @@
                                 <div class="mb-4 rounded-sm border border-emerald-200 bg-emerald-50 px-3 py-3 text-emerald-900">
                                     <div class="flex justify-between gap-3"><span>付款总金额</span><span class="font-semibold">@money($order->paymentTotalCents())</span></div>
                                     <div class="mt-1 flex justify-between gap-3"><span>钱包支付金额</span><span class="font-semibold">@money($order->walletPaymentCents())</span></div>
-                                    <div class="mt-1 flex justify-between gap-3"><span>待支付金额</span><span class="font-semibold">@money($order->remainingPaymentCents())</span></div>
+                                    <div class="mt-1 flex justify-between gap-3"><span>{{ $remainingPaymentLabel }}</span><span class="font-semibold">@money($order->remainingPaymentCents())</span></div>
                                 </div>
                             @endif
                             @if(! $paymentQrUrl && $paypalEmail)
@@ -174,9 +177,9 @@
                                     <p class="mt-1 whitespace-pre-line">{{ $fallbackPayment['password_red_packet_note'] ?? '请在下方填写口令红包内容，后台会人工确认收款。' }}</p>
                                 </div>
                             @elseif($order->payment_method === \App\Models\Order::PAYMENT_METHOD_FALLBACK_QR && $fallbackQrUrl)
-                                <img class="mb-4 h-40 w-40 rounded-sm border border-slate-200 object-contain" src="{{ $fallbackQrUrl }}" alt="备用付款二维码" loading="eager" fetchpriority="high" decoding="async">
+                                <x-payment.code-image :src="$fallbackQrUrl" alt="备用付款二维码" />
                             @elseif($paymentQrUrl && ! in_array($order->payment_method, [\App\Models\Order::PAYMENT_METHOD_RED_PACKET, \App\Models\Order::PAYMENT_METHOD_PAYPAL], true))
-                                <img class="mb-4 h-40 w-40 rounded-sm border border-slate-200 object-contain" src="{{ $paymentQrUrl }}" alt="付款二维码" loading="eager" fetchpriority="high" decoding="async">
+                                <x-payment.code-image :src="$paymentQrUrl" alt="付款二维码" />
                             @endif
                             <div class="mb-4 rounded-sm border border-blue-200 bg-blue-50 px-3 py-3 text-blue-900">
                                 <p class="font-medium">付款备注单号：{{ $order->order_number }}</p>
@@ -198,7 +201,7 @@
                                         @if($fallbackQrUrl)
                                             <div>
                                                 <p class="mb-2 text-xs font-medium text-amber-900">备用付款码</p>
-                                                <img class="h-32 w-32 rounded-sm border border-amber-200 bg-white object-contain" src="{{ $fallbackQrUrl }}" alt="备用付款码" loading="eager" fetchpriority="high" decoding="async">
+                                                <x-payment.code-image :src="$fallbackQrUrl" alt="备用付款码" size="secondary" />
                                                 <form class="mt-2" method="post" action="{{ route('orders.payment-method', $order) }}">
                                                     @csrf
                                                     <input type="hidden" name="payment_method" value="{{ \App\Models\Order::PAYMENT_METHOD_FALLBACK_QR }}">
@@ -209,7 +212,7 @@
                                         @if($friendQrUrl)
                                             <div>
                                                 <p class="mb-2 text-xs font-medium text-amber-900">好友码 / 联系码</p>
-                                                <img class="h-32 w-32 rounded-sm border border-amber-200 bg-white object-contain" src="{{ $friendQrUrl }}" alt="好友码" loading="eager" fetchpriority="high" decoding="async">
+                                                <x-payment.code-image :src="$friendQrUrl" alt="好友码" size="secondary" />
                                             </div>
                                         @endif
                                     </div>
@@ -231,6 +234,7 @@
                                     @endif
                                     @if($fallbackPayment['support_enabled'] ?? true)
                                         <a class="mt-3 inline-flex rounded-sm border border-amber-700 bg-white px-3 py-2 text-xs font-medium text-amber-900 hover:bg-amber-100" href="{{ route('support.index') }}">联系客服处理支付问题</a>
+                                        <x-support.contact-methods compact class="mt-2" />
                                     @endif
                                 </div>
                             @endif
@@ -316,9 +320,9 @@
                         @endif
                         <div class="flex justify-between border-t border-slate-200 pt-2"><dt>付款总金额</dt><dd>@money($order->paymentTotalCents())</dd></div>
                         <div class="flex justify-between text-emerald-700"><dt>钱包支付金额</dt><dd>@money($order->walletPaymentCents())</dd></div>
-                        <div class="flex justify-between text-base font-semibold text-red-700"><dt>待支付金额</dt><dd>@money($order->remainingPaymentCents())</dd></div>
+                        <div class="flex justify-between text-base font-semibold text-red-700"><dt>{{ $remainingPaymentLabel }}</dt><dd>@money($order->remainingPaymentCents())</dd></div>
                     </dl>
-                    @if($isPaymentPage)
+                    @if($showPaymentProof)
                         <div class="border-t border-slate-200 px-4 py-4">
                             <form method="post" action="{{ route('orders.cancel', $order) }}">
                                 @csrf
@@ -330,7 +334,7 @@
                     @endif
                 </div>
 
-                @if($isPaymentPage)
+                @if($showPaymentProof)
                     <div class="rounded-sm border border-slate-300">
                         <h2 class="border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold">付款凭证</h2>
                         <div class="px-4 py-4 text-sm">
@@ -347,7 +351,7 @@
                             @endif
                             @if($pendingFlashSaleItem)
                                 <p class="text-slate-600">请先选择规格后再上传付款凭证。</p>
-                            @elseif(! in_array($order->payment_status, ['confirmed'], true))
+                            @elseif($needsPayment)
                                 <form method="post" action="{{ route('orders.payment-proof', $order) }}" enctype="multipart/form-data" class="space-y-3" data-payment-proof-form>
                                     @csrf
                                     @if($order->payment_method !== \App\Models\Order::PAYMENT_METHOD_RED_PACKET)
@@ -358,14 +362,12 @@
                                     @endif
                                     <button class="rounded-sm border border-emerald-700 bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800" type="submit" data-payment-proof-submit>提交付款信息</button>
                                 </form>
-                            @else
-                                <p class="text-emerald-700">付款已确认。</p>
                             @endif
                         </div>
                     </div>
                 @endif
 
-                @unless($isPaymentPage || $isWalletRecharge)
+                @unless($needsPayment || $isWalletRecharge)
                 <div class="rounded-sm border border-slate-300">
                     <h2 class="border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold">物流信息</h2>
                     <div class="space-y-2 px-4 py-4 text-sm text-slate-700">
@@ -442,6 +444,19 @@
             </div>
         </div>
     @endif
+    <div class="fixed inset-0 z-[60] hidden items-center justify-center bg-slate-950/75 px-4 py-6 backdrop-blur-sm" data-payment-code-modal role="dialog" aria-modal="true" aria-labelledby="payment-code-modal-title">
+        <div class="relative flex max-h-full w-full max-w-xl flex-col items-center rounded-2xl border border-blue-100 bg-white p-4 shadow-2xl sm:p-6">
+            <div class="mb-3 flex w-full items-center justify-between gap-3">
+                <h2 id="payment-code-modal-title" class="text-base font-semibold text-slate-950" data-payment-code-title>付款二维码</h2>
+                <button class="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 hover:bg-slate-100" type="button" data-payment-code-close aria-label="关闭大图" title="关闭">
+                    <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                </button>
+            </div>
+            <div class="flex aspect-square w-full max-w-lg items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white">
+                <img class="h-full w-full object-contain" src="" alt="" data-payment-code-large>
+            </div>
+        </div>
+    </div>
     <script>
         document.querySelector('[data-wallet-recharge-success-close]')?.addEventListener('click', () => {
             document.querySelector('[data-wallet-recharge-success-modal]')?.remove();
@@ -465,6 +480,42 @@
                 const panel = button.parentElement?.querySelector('[data-payment-fallback-panel]');
                 panel?.classList.toggle('hidden');
             });
+        });
+
+        const paymentCodeModal = document.querySelector('[data-payment-code-modal]');
+        const paymentCodeImage = paymentCodeModal?.querySelector('[data-payment-code-large]');
+        const paymentCodeTitle = paymentCodeModal?.querySelector('[data-payment-code-title]');
+        const closePaymentCode = () => {
+            paymentCodeModal?.classList.add('hidden');
+            paymentCodeModal?.classList.remove('flex');
+            document.body.classList.remove('overflow-hidden');
+        };
+
+        document.querySelectorAll('[data-payment-code-open]').forEach((button) => {
+            button.addEventListener('click', () => {
+                if (! paymentCodeModal || ! paymentCodeImage) {
+                    return;
+                }
+
+                const alt = button.dataset.paymentCodeAlt || '付款二维码';
+                paymentCodeImage.src = button.dataset.paymentCodeSrc || '';
+                paymentCodeImage.alt = alt;
+                if (paymentCodeTitle) paymentCodeTitle.textContent = alt;
+                paymentCodeModal.classList.remove('hidden');
+                paymentCodeModal.classList.add('flex');
+                document.body.classList.add('overflow-hidden');
+                paymentCodeModal.querySelector('[data-payment-code-close]')?.focus();
+            });
+        });
+
+        paymentCodeModal?.querySelector('[data-payment-code-close]')?.addEventListener('click', closePaymentCode);
+        paymentCodeModal?.addEventListener('click', (event) => {
+            if (event.target === paymentCodeModal) closePaymentCode();
+        });
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && paymentCodeModal && ! paymentCodeModal.classList.contains('hidden')) {
+                closePaymentCode();
+            }
         });
 
         document.querySelectorAll('[data-payment-countdown]').forEach((root) => {

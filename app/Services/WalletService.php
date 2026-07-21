@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Coupon;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\User;
@@ -185,12 +186,15 @@ class WalletService
 
         $order->loadMissing('user', 'walletRechargeOption');
 
-        $alreadyCredited = WalletTransaction::query()
+        $netCreditedCents = (int) WalletTransaction::query()
             ->where('order_id', $order->id)
-            ->where('source', WalletTransaction::SOURCE_WALLET_RECHARGE)
-            ->exists();
+            ->whereIn('source', [
+                WalletTransaction::SOURCE_WALLET_RECHARGE,
+                WalletTransaction::SOURCE_WALLET_RECHARGE_REVERSAL,
+            ])
+            ->sum('amount_cents');
 
-        if ($alreadyCredited) {
+        if ($netCreditedCents > 0) {
             return null;
         }
 
@@ -223,6 +227,8 @@ class WalletService
         $alreadyIssued = $order->user->coupons()
             ->where('source', UserCoupon::SOURCE_WALLET_RECHARGE)
             ->where('note', $note)
+            ->whereNull('exhausted_at')
+            ->whereHas('coupon', fn ($query) => $query->where('is_active', true))
             ->exists();
 
         if ($alreadyIssued) {
@@ -238,6 +244,75 @@ class WalletService
             $actor,
             'WR',
         );
+    }
+
+    /** @return array{wallet_reversed_cents:int,coupon_count:int} */
+    public function reverseRechargeBenefits(Order $order, ?User $actor = null): array
+    {
+        if (! $order->isWalletRecharge()) {
+            return ['wallet_reversed_cents' => 0, 'coupon_count' => 0];
+        }
+
+        return DB::transaction(function () use ($order, $actor): array {
+            $order->loadMissing('user');
+
+            if (! $order->user) {
+                return ['wallet_reversed_cents' => 0, 'coupon_count' => 0];
+            }
+
+            $creditedCents = (int) WalletTransaction::query()
+                ->where('order_id', $order->id)
+                ->where('source', WalletTransaction::SOURCE_WALLET_RECHARGE)
+                ->sum('amount_cents');
+            $reversedCents = abs((int) WalletTransaction::query()
+                ->where('order_id', $order->id)
+                ->where('source', WalletTransaction::SOURCE_WALLET_RECHARGE_REVERSAL)
+                ->sum('amount_cents'));
+            $amountToReverse = max(0, $creditedCents - $reversedCents);
+
+            if ($amountToReverse > 0) {
+                /** @var User $lockedUser */
+                $lockedUser = User::query()->whereKey($order->user_id)->lockForUpdate()->firstOrFail();
+                $balance = (int) $lockedUser->wallet_balance_cents - $amountToReverse;
+
+                $lockedUser->forceFill(['wallet_balance_cents' => $balance])->save();
+
+                WalletTransaction::query()->create([
+                    'user_id' => $lockedUser->id,
+                    'order_id' => $order->id,
+                    'created_by_user_id' => $actor?->id,
+                    'type' => WalletTransaction::TYPE_DEBIT,
+                    'amount_cents' => -$amountToReverse,
+                    'balance_after_cents' => $balance,
+                    'source' => WalletTransaction::SOURCE_WALLET_RECHARGE_REVERSAL,
+                    'note' => '自动确认充值驳回追回：'.$order->order_number,
+                ]);
+            }
+
+            $note = '钱包充值赠券：'.$order->order_number;
+            $holdings = UserCoupon::query()
+                ->where('user_id', $order->user_id)
+                ->where('source', UserCoupon::SOURCE_WALLET_RECHARGE)
+                ->where('note', $note)
+                ->lockForUpdate()
+                ->get();
+            $couponIds = $holdings->pluck('coupon_id')->filter()->unique()->values();
+
+            if ($holdings->isNotEmpty()) {
+                UserCoupon::query()
+                    ->whereKey($holdings->modelKeys())
+                    ->update(['exhausted_at' => now()]);
+            }
+
+            if ($couponIds->isNotEmpty()) {
+                Coupon::query()->whereKey($couponIds->all())->update(['is_active' => false]);
+            }
+
+            return [
+                'wallet_reversed_cents' => $amountToReverse,
+                'coupon_count' => $holdings->count(),
+            ];
+        });
     }
 
     /**

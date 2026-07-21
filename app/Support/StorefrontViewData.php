@@ -3,11 +3,14 @@
 namespace App\Support;
 
 use App\Models\Announcement;
+use App\Models\AfterSalesRequest;
 use App\Models\NavigationMenuItem;
 use App\Models\PrivateMessage;
 use App\Models\SiteSetting;
 use App\Models\SupportChatMessage;
 use App\Models\SupportChatSession;
+use App\Models\SupportTicket;
+use App\Notifications\OrderPaymentTimeoutNotification;
 use App\Services\CartService;
 use App\Services\StorefrontCache;
 use Illuminate\Support\Facades\Auth;
@@ -54,7 +57,8 @@ class StorefrontViewData
             'cartSubtotalCents' => $cartItems->sum('line_total_cents'),
             'unreadAnnouncementCount' => $this->unreadAnnouncementCount(),
             'privateUnreadMessageCount' => $this->privateUnreadMessageCount(),
-            'supportUnreadMessageCount' => $this->supportUnreadMessageCount(),
+            ...$this->orderTimeoutNotifications(),
+            ...$this->supportUnreadCounts(),
             'pendingPaymentOrderCount' => $orderSummary['pending_payment'],
             'awaitingReceiptOrderCount' => $orderSummary['awaiting_receipt'],
             'userOrderNoticeCount' => $orderSummary['notice'],
@@ -113,22 +117,80 @@ class StorefrontViewData
         }
     }
 
-    private function supportUnreadMessageCount(): int
+    /** @return array{orderTimeoutNotificationCount:int,orderTimeoutNotification:mixed} */
+    private function orderTimeoutNotifications(): array
     {
         try {
-            if (! Auth::check() || ! Schema::hasTable('support_chat_messages') || ! Schema::hasTable('support_chat_sessions')) {
-                return 0;
+            if (! Auth::check() || ! Schema::hasTable('notifications')) {
+                return ['orderTimeoutNotificationCount' => 0, 'orderTimeoutNotification' => null];
             }
 
-            return SupportChatMessage::query()
-                ->whereIn('sender_type', [SupportChatMessage::SENDER_ADMIN, SupportChatMessage::SENDER_SYSTEM])
-                ->whereNull('read_at')
-                ->whereHas('session', fn ($query) => $query
-                    ->where('user_id', Auth::id())
-                    ->whereIn('status', [SupportChatSession::STATUS_OPEN, SupportChatSession::STATUS_ACTIVE]))
-                ->count();
+            $query = Auth::user()
+                ->unreadNotifications()
+                ->where('type', OrderPaymentTimeoutNotification::class);
+
+            return [
+                'orderTimeoutNotificationCount' => (clone $query)->count(),
+                'orderTimeoutNotification' => $query->latest()->first(),
+            ];
         } catch (Throwable) {
-            return 0;
+            return ['orderTimeoutNotificationCount' => 0, 'orderTimeoutNotification' => null];
         }
+    }
+
+    /** @return array{supportChatUnreadMessageCount:int, supportTicketUnreadCount:int, afterSalesUnreadCount:int, supportCaseUnreadCount:int, supportUnreadMessageCount:int} */
+    private function supportUnreadCounts(): array
+    {
+        try {
+            if (! Auth::check()) {
+                return $this->emptySupportUnreadCounts();
+            }
+
+            $chat = Schema::hasTable('support_chat_messages') && Schema::hasTable('support_chat_sessions')
+                ? SupportChatMessage::query()
+                    ->whereIn('sender_type', [SupportChatMessage::SENDER_ADMIN, SupportChatMessage::SENDER_SYSTEM])
+                    ->whereNull('support_quick_reply_id')
+                    ->whereNull('read_at')
+                    ->whereHas('session', fn ($query) => $query
+                        ->where('user_id', Auth::id())
+                        ->whereIn('status', [SupportChatSession::STATUS_OPEN, SupportChatSession::STATUS_ACTIVE]))
+                    ->count()
+                : 0;
+            $tickets = Schema::hasTable('support_tickets') && Schema::hasColumn('support_tickets', 'customer_read_at')
+                ? SupportTicket::query()
+                    ->where('user_id', Auth::id())
+                    ->whereNotNull('admin_reply')
+                    ->whereNull('customer_read_at')
+                    ->count()
+                : 0;
+            $afterSales = Schema::hasTable('after_sales_requests') && Schema::hasColumn('after_sales_requests', 'customer_read_at')
+                ? AfterSalesRequest::query()
+                    ->where('user_id', Auth::id())
+                    ->whereNotNull('admin_note')
+                    ->whereNull('customer_read_at')
+                    ->count()
+                : 0;
+
+            return [
+                'supportChatUnreadMessageCount' => $chat,
+                'supportTicketUnreadCount' => $tickets,
+                'afterSalesUnreadCount' => $afterSales,
+                'supportCaseUnreadCount' => $tickets + $afterSales,
+                'supportUnreadMessageCount' => $chat + $tickets + $afterSales,
+            ];
+        } catch (Throwable) {
+            return $this->emptySupportUnreadCounts();
+        }
+    }
+
+    private function emptySupportUnreadCounts(): array
+    {
+        return [
+            'supportChatUnreadMessageCount' => 0,
+            'supportTicketUnreadCount' => 0,
+            'afterSalesUnreadCount' => 0,
+            'supportCaseUnreadCount' => 0,
+            'supportUnreadMessageCount' => 0,
+        ];
     }
 }

@@ -36,8 +36,13 @@
     $pendingPaymentOrderCount = (int) ($pendingPaymentOrderCount ?? 0);
     $awaitingReceiptOrderCount = (int) ($awaitingReceiptOrderCount ?? 0);
     $supportUnreadMessageCount = (int) ($supportUnreadMessageCount ?? 0);
+    $supportChatUnreadMessageCount = (int) ($supportChatUnreadMessageCount ?? 0);
+    $supportTicketUnreadCount = (int) ($supportTicketUnreadCount ?? 0);
+    $afterSalesUnreadCount = (int) ($afterSalesUnreadCount ?? 0);
+    $supportCaseUnreadCount = (int) ($supportCaseUnreadCount ?? ($supportTicketUnreadCount + $afterSalesUnreadCount));
     $privateUnreadMessageCount = (int) ($privateUnreadMessageCount ?? 0);
-    $userCenterNoticeCount = $userOrderNoticeCount + $supportUnreadMessageCount + $privateUnreadMessageCount;
+    $orderTimeoutNotificationCount = (int) ($orderTimeoutNotificationCount ?? 0);
+    $userCenterNoticeCount = $userOrderNoticeCount + $supportUnreadMessageCount + $privateUnreadMessageCount + $orderTimeoutNotificationCount;
     $mobileStandaloneMenuUrls = collect([
         $path('home'),
         $path('products.index'),
@@ -49,7 +54,7 @@
     ])->map(fn (string $url): string => rtrim($url, '/'))->all();
     $mobileSkipMenuItem = fn ($item): bool => $menuHasDestination($item)
         && in_array(rtrim($menuUrl($item), '/'), $mobileStandaloneMenuUrls, true);
-    $menuBadgeCount = function ($item) use ($menuHasDestination, $menuUrl, $path, $userOrderNoticeCount, $supportUnreadMessageCount, $userCenterNoticeCount): int {
+    $menuBadgeCount = function ($item) use ($menuHasDestination, $menuUrl, $path, $userOrderNoticeCount, $supportChatUnreadMessageCount, $supportCaseUnreadCount, $userCenterNoticeCount): int {
         if (! auth()->check() || ! $menuHasDestination($item)) {
             return 0;
         }
@@ -58,7 +63,8 @@
 
         return match ($url) {
             rtrim($path('orders.index'), '/') => $userOrderNoticeCount,
-            rtrim($path('support.index'), '/') => $supportUnreadMessageCount,
+            rtrim($path('support.index'), '/') => $supportChatUnreadMessageCount,
+            rtrim($path('support.demands'), '/') => $supportCaseUnreadCount,
             rtrim($path('user.center'), '/') => $userCenterNoticeCount,
             default => 0,
         };
@@ -127,7 +133,12 @@
                             <span class="ml-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-semibold leading-none text-white">{{ $badgeLabel($supportUnreadMessageCount) }}</span>
                         @endif
                     </a>
-                    <a class="hover:text-blue-700" href="{{ $path('support.demands') }}">工单</a>
+                    <a class="relative inline-flex items-center hover:text-blue-700" href="{{ $path('support.demands') }}">
+                        工单 / 售后
+                        @if($supportCaseUnreadCount > 0)
+                            <span class="ml-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-semibold leading-none text-white">{{ $badgeLabel($supportCaseUnreadCount) }}</span>
+                        @endif
+                    </a>
                     @auth
                         <a class="relative inline-flex items-center hover:text-blue-700" href="{{ $path('announcements.index') }}" title="公告">
                             <i class="fa-solid fa-bell fa-fw" aria-hidden="true"></i>
@@ -356,21 +367,38 @@
                         <div class="border-t border-slate-100 py-1">
                             <a class="relative block px-5 py-2 pr-12 hover:bg-blue-50 hover:text-blue-800" href="{{ $path('support.index') }}">
                                 即时会话
-                                @if($supportUnreadMessageCount > 0)
-                                    <span class="absolute right-5 top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-semibold leading-none text-white">{{ $badgeLabel($supportUnreadMessageCount) }}</span>
+                                @if($supportChatUnreadMessageCount > 0)
+                                    <span class="absolute right-5 top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-semibold leading-none text-white">{{ $badgeLabel($supportChatUnreadMessageCount) }}</span>
                                 @endif
                             </a>
-                            <a class="block px-5 py-2 hover:bg-blue-50 hover:text-blue-800" href="{{ $path('support.demands') }}">提交工单</a>
+                            <a class="relative block px-5 py-2 pr-12 hover:bg-blue-50 hover:text-blue-800" href="{{ $path('support.demands') }}">
+                                工单 / 售后
+                                @if($supportCaseUnreadCount > 0)
+                                    <span class="absolute right-5 top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-semibold leading-none text-white">{{ $badgeLabel($supportCaseUnreadCount) }}</span>
+                                @endif
+                            </a>
                         </div>
                     </details>
                     <details class="rounded-sm border border-slate-200 bg-white">
-                        <summary class="cursor-pointer px-3 py-2 font-medium">客服工单</summary>
+                        <summary class="cursor-pointer px-3 py-2 font-medium">
+                            <span class="inline-flex items-center gap-2">
+                                客服工单
+                                @if($supportCaseUnreadCount > 0)
+                                    <span class="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-semibold leading-none text-white">{{ $badgeLabel($supportCaseUnreadCount) }}</span>
+                                @endif
+                            </span>
+                        </summary>
                         <div class="border-t border-slate-100 py-1">
-                            <a class="block px-5 py-2 hover:bg-blue-50 hover:text-blue-800" href="{{ $path('support.demands') }}">工单列表</a>
+                            <a class="relative block px-5 py-2 pr-12 hover:bg-blue-50 hover:text-blue-800" href="{{ $path('support.demands') }}">
+                                工单列表
+                                @if($supportCaseUnreadCount > 0)
+                                    <span class="absolute right-5 top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-semibold leading-none text-white">{{ $badgeLabel($supportCaseUnreadCount) }}</span>
+                                @endif
+                            </a>
                             <a class="relative block px-5 py-2 pr-12 hover:bg-blue-50 hover:text-blue-800" href="{{ $path('support.index') }}">
                                 转到会话
-                                @if($supportUnreadMessageCount > 0)
-                                    <span class="absolute right-5 top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-semibold leading-none text-white">{{ $badgeLabel($supportUnreadMessageCount) }}</span>
+                                @if($supportChatUnreadMessageCount > 0)
+                                    <span class="absolute right-5 top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-semibold leading-none text-white">{{ $badgeLabel($supportChatUnreadMessageCount) }}</span>
                                 @endif
                             </a>
                         </div>
@@ -433,6 +461,31 @@
                     @endforeach
                 </ul>
             </div>
+        @endif
+
+        @if($orderTimeoutNotification ?? null)
+            @php($timeoutData = $orderTimeoutNotification->data)
+            <section class="mb-4 overflow-hidden rounded-xl border border-pink-200 bg-white shadow-sm" role="alert" aria-labelledby="order-timeout-notification-title">
+                <div class="flex flex-col gap-4 border-l-4 border-pink-500 bg-gradient-to-r from-pink-50 via-white to-blue-50 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div class="min-w-0">
+                        <p class="text-xs font-semibold text-pink-700">订单提示</p>
+                        <h2 id="order-timeout-notification-title" class="mt-1 text-base font-semibold text-slate-950">{{ $timeoutData['title'] ?? '待付款订单已超时关闭' }}</h2>
+                        <p class="mt-1 text-sm leading-6 text-slate-700">{{ $timeoutData['message'] ?? '' }}</p>
+                        <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600">
+                            @if(($timeoutData['wallet_refunded_cents'] ?? 0) > 0)
+                                <span><i class="fa-solid fa-wallet fa-fw text-blue-600" aria-hidden="true"></i> 钱包已退回 {{ \App\Support\Money::format((int) $timeoutData['wallet_refunded_cents']) }}</span>
+                            @endif
+                            @if(($timeoutData['coupon_count'] ?? 0) > 0)
+                                <span><i class="fa-solid fa-ticket fa-fw text-pink-600" aria-hidden="true"></i> 已退回 {{ (int) $timeoutData['coupon_count'] }} 张优惠券</span>
+                            @endif
+                        </div>
+                    </div>
+                    <form method="post" action="{{ $path('user.notifications.read', $orderTimeoutNotification->id) }}" class="shrink-0">
+                        @csrf
+                        <button class="rounded-full border border-blue-700 bg-blue-700 px-5 py-2 text-sm font-medium text-white hover:bg-blue-800" type="submit">知道了</button>
+                    </form>
+                </div>
+            </section>
         @endif
 
         @if($popupAnnouncement ?? null)
@@ -511,11 +564,16 @@
                                 </a>
                                 <a class="relative block px-3 py-2 pr-12 hover:bg-blue-50 hover:text-blue-800" href="{{ $path('support.index') }}">
                                     客服会话
-                                    @if($supportUnreadMessageCount > 0)
-                                        <span class="absolute right-3 top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-semibold leading-none text-white">{{ $badgeLabel($supportUnreadMessageCount) }}</span>
+                                    @if($supportChatUnreadMessageCount > 0)
+                                        <span class="absolute right-3 top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-semibold leading-none text-white">{{ $badgeLabel($supportChatUnreadMessageCount) }}</span>
                                     @endif
                                 </a>
-                                <a class="block px-3 py-2 hover:bg-blue-50 hover:text-blue-800" href="{{ $path('support.demands') }}">客服工单</a>
+                                <a class="relative block px-3 py-2 pr-12 hover:bg-blue-50 hover:text-blue-800" href="{{ $path('support.demands') }}">
+                                    客服工单 / 售后
+                                    @if($supportCaseUnreadCount > 0)
+                                        <span class="absolute right-3 top-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-semibold leading-none text-white">{{ $badgeLabel($supportCaseUnreadCount) }}</span>
+                                    @endif
+                                </a>
                             @else
                                 <a class="block px-3 py-2 hover:bg-blue-50 hover:text-blue-800" href="{{ $path('login') }}">登录</a>
                                 <a class="block px-3 py-2 hover:bg-blue-50 hover:text-blue-800" href="{{ $path('register') }}">注册新账号</a>

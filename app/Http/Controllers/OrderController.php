@@ -135,15 +135,23 @@ class OrderController extends Controller
         if ($storedNewProof && $oldPath && $oldPath !== $path) {
             $proofStorage->delete($oldPath);
         }
-        app(AlertBotService::class)->notify('ShopWeb P3 订单待确认收款', '用户已提交付款信息，订单等待后台确认收款。', [
-            'order_id' => $order->id,
-            'order_number' => $order->order_number,
-            'user_id' => $order->user_id,
-            'total_cents' => $order->total_cents,
-            'payment_method' => $order->payment_method,
-        ], 'P3');
+        $order->refresh();
 
-        return back()->with('payment_success', true);
+        if ($order->payment_status !== Order::PAYMENT_CONFIRMED) {
+            app(AlertBotService::class)->notify('ShopWeb P3 订单待确认收款', '用户已提交付款信息，订单等待后台确认收款。', [
+                'order_id' => $order->id,
+                'order_number' => $order->order_number,
+                'user_id' => $order->user_id,
+                'total_cents' => $order->total_cents,
+                'payment_method' => $order->payment_method,
+            ], 'P3');
+        }
+
+        return back()
+            ->with('payment_success', true)
+            ->with('status', $order->isWalletRecharge() && $order->payment_status === Order::PAYMENT_CONFIRMED
+                ? '钱包充值付款已自动确认，余额已到账。'
+                : '付款信息已提交，等待后台确认。');
     }
 
     public function switchPaymentMethod(Request $request, Order $order, OrderService $orders): RedirectResponse

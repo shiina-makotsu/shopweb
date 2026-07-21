@@ -8,6 +8,20 @@
 - Web 根目录必须指向解压目录下的 `public`，不要把 Laravel 根目录暴露为站点根目录。
 - `.env`、`storage`、`bootstrap/cache`、`public/uploads` 必须可写。
 
+钱包充值凭证自动确认依赖 Tesseract OCR。Linux/Docker 的 PHP 运行环境需要安装英文与简体中文识别包：
+
+```bash
+apt-get update && apt-get install -y tesseract-ocr tesseract-ocr-eng tesseract-ocr-chi-sim
+```
+
+默认配置如下；可按容器内实际路径调整。未安装或识别失败时系统会安全回落为后台人工确认，不会自动发放余额。
+
+```ini
+PAYMENT_PROOF_OCR_BINARY=tesseract
+PAYMENT_PROOF_OCR_LANGUAGES=chi_sim+eng
+PAYMENT_PROOF_OCR_TIMEOUT=10
+```
+
 ## 解压安装
 
 1. 上传对应平台包到服务器并解压：

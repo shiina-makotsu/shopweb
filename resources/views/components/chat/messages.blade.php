@@ -24,10 +24,13 @@
     @endphp
 
     @if($isSystem)
-        <div class="flex items-center gap-3 text-xs {{ $mutedText }}">
-            <span class="h-px flex-1 {{ $lineClass }}"></span>
-            <span>{{ $message->body }}</span>
-            <span class="h-px flex-1 {{ $lineClass }}"></span>
+        <div class="space-y-2" data-chat-message="{{ $message->id }}" data-chat-search-text="{{ e(Str::lower((string) $message->body)) }}">
+            <div class="flex items-center gap-3 text-xs {{ $mutedText }}">
+                <span class="h-px flex-1 {{ $lineClass }}"></span>
+                <span>{{ $message->body }}</span>
+                <span class="h-px flex-1 {{ $lineClass }}"></span>
+            </div>
+            <x-support.contact-methods :methods="$message->contact_links ?? []" compact class="justify-center" />
         </div>
         @continue
     @endif
@@ -94,6 +97,8 @@
             @if(filled($message->body))
                 <p class="mt-1 whitespace-pre-line leading-6">{{ $message->body }}</p>
             @endif
+
+            <x-support.contact-methods :methods="$message->contact_links ?? []" compact class="mt-2" />
 
             @if($message->hasAttachment())
                 <div class="mt-2">

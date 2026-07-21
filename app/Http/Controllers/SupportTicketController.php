@@ -200,12 +200,18 @@ class SupportTicketController extends Controller
     {
         $guestId = $this->guestId($request);
         $selectedOrder = $this->selectedOrder($request);
+        $ticketQuery = SupportTicket::query()
+            ->with('order')
+            ->when($request->user(), fn ($query) => $query->whereBelongsTo($request->user()))
+            ->when(! $request->user(), fn ($query) => $query->where('guest_id', $guestId));
+
+        (clone $ticketQuery)
+            ->whereNotNull('admin_reply')
+            ->whereNull('customer_read_at')
+            ->update(['customer_read_at' => now()]);
 
         return view('support.demands', [
-            'tickets' => SupportTicket::query()
-                ->with('order')
-                ->when($request->user(), fn ($query) => $query->whereBelongsTo($request->user()))
-                ->when(! $request->user(), fn ($query) => $query->where('guest_id', $guestId))
+            'tickets' => $ticketQuery
                 ->latest()
                 ->paginate(10),
             'guestId' => $request->user() ? null : $guestId,
@@ -259,6 +265,7 @@ class SupportTicketController extends Controller
     private function chatView(Request $request, ?SupportChatSession $session = null, ?Order $selectedOrder = null): View
     {
         $session ??= $this->currentSession($request, $selectedOrder);
+        app(SupportChatService::class)->applyEntryReplies($session);
         $session->endIfIdle();
         app(SupportChatService::class)->comfortIfIdle($session);
         $this->markAdminMessagesRead($request, $session);

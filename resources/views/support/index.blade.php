@@ -26,9 +26,20 @@
                     </form>
                 </div>
                 <div class="mt-3 grid grid-cols-2 gap-2 text-xs">
-                    <a class="rounded-xl border border-slate-300 bg-white px-3 py-2 text-center font-medium hover:bg-blue-50 hover:text-blue-800" href="{{ route('support.index') }}">即时会话</a>
-                    <a class="rounded-xl border border-slate-300 bg-white px-3 py-2 text-center font-medium hover:bg-blue-50 hover:text-blue-800" href="{{ route('support.demands') }}">客服工单</a>
+                    <a class="relative rounded-xl border border-slate-300 bg-white px-3 py-2 text-center font-medium hover:bg-blue-50 hover:text-blue-800" href="{{ route('support.index') }}">
+                        即时会话
+                        @if(($supportChatUnreadMessageCount ?? 0) > 0)
+                            <span class="absolute right-1 top-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[9px] text-white">{{ $supportChatUnreadMessageCount > 99 ? '99+' : $supportChatUnreadMessageCount }}</span>
+                        @endif
+                    </a>
+                    <a class="relative rounded-xl border border-slate-300 bg-white px-3 py-2 text-center font-medium hover:bg-blue-50 hover:text-blue-800" href="{{ route('support.demands') }}">
+                        工单 / 售后
+                        @if(($supportCaseUnreadCount ?? 0) > 0)
+                            <span class="absolute right-1 top-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[9px] text-white">{{ $supportCaseUnreadCount > 99 ? '99+' : $supportCaseUnreadCount }}</span>
+                        @endif
+                    </a>
                 </div>
+                <x-support.contact-methods compact class="mt-3" />
             </div>
 
             <nav class="max-h-[640px] divide-y divide-slate-200 overflow-y-auto">

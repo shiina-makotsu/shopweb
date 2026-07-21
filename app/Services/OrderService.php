@@ -12,9 +12,11 @@ use App\Models\ProductVariant;
 use App\Models\ShippingCarrier;
 use App\Models\SiteSetting;
 use App\Models\User;
+use App\Notifications\OrderPaymentTimeoutNotification;
 use App\Support\ChinaRegions;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
@@ -25,6 +27,7 @@ class OrderService
         private readonly CouponService $coupons,
         private readonly ShippingQuoteService $shippingQuotes,
         private readonly AdminActivityLogger $activity,
+        private readonly PaymentProofVerifier $paymentProofVerifier,
     ) {}
 
     public function createFromCart(User $user, array $data): Order
@@ -196,8 +199,28 @@ class OrderService
                 return;
             }
 
+            $hasPriorManualRejection = false;
+            $paymentAuditAvailable = true;
+
             try {
-                $autoResult = $path ? $this->autoCheckPaymentProof($order, $path) : Order::AUTO_CHECK_PENDING;
+                $hasPriorManualRejection = $order->paymentVerificationLogs()
+                    ->where('manual_result', PaymentVerificationLog::MANUAL_REJECTED)
+                    ->exists();
+            } catch (Throwable $exception) {
+                $paymentAuditAvailable = false;
+                report($exception);
+            }
+            $verification = null;
+
+            try {
+                if ($order->isWalletRecharge()) {
+                    $verification = $this->paymentProofVerifier->verify($order, $path, $textProof);
+                    $autoResult = $verification->exactMatch && ! $hasPriorManualRejection && $paymentAuditAvailable
+                        ? Order::AUTO_CHECK_PASSED
+                        : Order::AUTO_CHECK_PENDING;
+                } else {
+                    $autoResult = $path ? $this->autoCheckPaymentProof($order, $path) : Order::AUTO_CHECK_PENDING;
+                }
             } catch (Throwable $exception) {
                 report($exception);
                 $autoResult = Order::AUTO_CHECK_PENDING;
@@ -218,13 +241,18 @@ class OrderService
                     'user_id' => $order->user_id,
                     'payment_proof_path' => $path,
                     'expected_order_number' => $order->order_number,
-                    'detected_order_number' => $autoResult === Order::AUTO_CHECK_PASSED ? $order->order_number : null,
+                    'detected_order_number' => $verification?->detectedOrderNumber
+                        ?? ($autoResult === Order::AUTO_CHECK_PASSED ? $order->order_number : null),
                     'expected_amount_cents' => (int) $order->total_cents,
+                    'detected_amount_cents' => $verification?->detectedAmountCents,
                     'auto_result' => $autoResult,
                     'metadata' => [
                         'payment_status' => Order::PAYMENT_SUBMITTED,
                         'auto_checked_at' => now()->toDateTimeString(),
                         'checker' => $path ? 'local_v1_placeholder' : 'manual_text_proof',
+                        'verification_source' => $verification?->source,
+                        'wallet_recharge_auto_confirmation' => $order->isWalletRecharge() && ! $hasPriorManualRejection && $paymentAuditAvailable,
+                        'prior_manual_rejection' => $hasPriorManualRejection,
                         'payment_text_proof' => $textProof !== '' ? $textProof : null,
                     ],
                 ]);
@@ -242,16 +270,27 @@ class OrderService
             } catch (Throwable $exception) {
                 report($exception);
             }
+
+            if ($order->isWalletRecharge() && $verification?->exactMatch && ! $hasPriorManualRejection && $paymentAuditAvailable) {
+                $this->confirmPayment($order, null, false);
+            }
         });
     }
 
-    public function confirmPayment(Order $order, ?User $actor = null): void
+    public function confirmPayment(Order $order, ?User $actor = null, bool $manualVerification = true): void
     {
-        DB::transaction(function () use ($order, $actor): void {
+        DB::transaction(function () use ($order, $actor, $manualVerification): void {
             $order = Order::query()->whereKey($order->id)->lockForUpdate()->firstOrFail();
             $order->loadMissing('items.product', 'user');
 
             if ($order->payment_status === Order::PAYMENT_CONFIRMED && $order->paid_at) {
+                if ($manualVerification && $order->isAwaitingAutoConfirmedPaymentReview()) {
+                    $this->markLatestPaymentVerification($order, PaymentVerificationLog::MANUAL_CONFIRMED, $actor);
+                    $this->activity->log('order_auto_payment_review_confirmed', $order, $order->order_number, [
+                        'payment_status' => Order::PAYMENT_CONFIRMED,
+                    ], $actor);
+                }
+
                 return;
             }
 
@@ -271,7 +310,9 @@ class OrderService
                     'wallet_recharge_cents' => (int) $order->wallet_recharge_cents,
                 ], $actor);
 
-                $this->markLatestPaymentVerification($order, PaymentVerificationLog::MANUAL_CONFIRMED, $actor);
+                if ($manualVerification) {
+                    $this->markLatestPaymentVerification($order, PaymentVerificationLog::MANUAL_CONFIRMED, $actor);
+                }
 
                 return;
             }
@@ -332,7 +373,9 @@ class OrderService
                 'payment_status' => Order::PAYMENT_CONFIRMED,
             ], $actor);
 
-            $this->markLatestPaymentVerification($order, PaymentVerificationLog::MANUAL_CONFIRMED, $actor);
+            if ($manualVerification) {
+                $this->markLatestPaymentVerification($order, PaymentVerificationLog::MANUAL_CONFIRMED, $actor);
+            }
         });
     }
 
@@ -588,17 +631,30 @@ class OrderService
     {
         DB::transaction(function () use ($order, $note, $actor): void {
             $order = Order::query()->whereKey($order->id)->lockForUpdate()->firstOrFail();
+            $isAutoConfirmedReview = $order->isAwaitingAutoConfirmedPaymentReview();
+
+            if ($order->payment_status !== Order::PAYMENT_SUBMITTED && ! $isAutoConfirmedReview) {
+                return;
+            }
+
+            $reversal = $isAutoConfirmedReview
+                ? app(WalletService::class)->reverseRechargeBenefits($order, $actor)
+                : ['wallet_reversed_cents' => 0, 'coupon_count' => 0];
 
             $order->forceFill([
                 'status' => Order::STATUS_PENDING_PAYMENT,
                 'payment_status' => Order::PAYMENT_PENDING,
                 'payment_auto_check_status' => Order::AUTO_CHECK_FAILED,
+                'paid_at' => null,
+                'fulfilled_at' => null,
                 'admin_note' => $note ?: $order->admin_note,
             ])->save();
 
             $this->activity->log('order_payment_rejected', $order, $order->order_number, [
                 'payment_status' => Order::PAYMENT_PENDING,
                 'payment_auto_check_status' => Order::AUTO_CHECK_FAILED,
+                'wallet_reversed_cents' => $reversal['wallet_reversed_cents'],
+                'coupon_count' => $reversal['coupon_count'],
                 'note' => $note,
             ], $actor);
 
@@ -623,13 +679,14 @@ class OrderService
         ], $actor);
     }
 
-    public function cancel(Order $order, ?User $actor = null, ?string $note = null): void
+    /** @return array{wallet_refunded_cents:int,coupon_count:int} */
+    public function cancel(Order $order, ?User $actor = null, ?string $note = null): array
     {
         if (! $order->isCancellable()) {
-            return;
+            return ['wallet_refunded_cents' => 0, 'coupon_count' => 0];
         }
 
-        DB::transaction(function () use ($order, $actor, $note): void {
+        return DB::transaction(function () use ($order, $actor, $note): array {
             $order->loadMissing('items.product', 'user');
 
             foreach ($order->items as $item) {
@@ -679,7 +736,14 @@ class OrderService
                 'admin_note' => $note ?: $order->admin_note,
             ]);
 
-            $couponIds = $order->couponRedemptions()->pluck('coupon_id')->map(fn ($id): int => (int) $id)->all();
+            $couponIds = $order->couponRedemptions()
+                ->whereIn('status', [CouponRedemption::STATUS_RESERVED, CouponRedemption::STATUS_CONFIRMED])
+                ->pluck('coupon_id')
+                ->map(fn ($id): int => (int) $id)
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
 
             $order->couponRedemptions()->update([
                 'status' => CouponRedemption::STATUS_RELEASED,
@@ -689,7 +753,7 @@ class OrderService
                 $this->coupons->restoreReleasedHoldings($order->user, $couponIds);
             }
 
-            app(WalletService::class)->refundOrderPayment(
+            $walletRefund = app(WalletService::class)->refundOrderPayment(
                 $order,
                 (int) $order->wallet_payment_cents,
                 $actor,
@@ -702,6 +766,11 @@ class OrderService
                     'note' => $note,
                 ], $actor);
             }
+
+            return [
+                'wallet_refunded_cents' => max(0, (int) ($walletRefund?->amount_cents ?? 0)),
+                'coupon_count' => count($couponIds),
+            ];
         });
     }
 
@@ -732,7 +801,7 @@ class OrderService
                             return;
                         }
 
-                        $this->cancel($locked, null, "Payment proof not submitted within {$timeoutMinutes} minutes; order auto closed.");
+                        $result = $this->cancel($locked, null, "Payment proof not submitted within {$timeoutMinutes} minutes; order auto closed.");
 
                         $locked->forceFill([
                             'user_deleted_at' => $locked->user_deleted_at ?? now(),
@@ -741,7 +810,10 @@ class OrderService
                         $this->activity->log('order_payment_timeout_closed', $locked, $locked->order_number, [
                             'timeout_minutes' => $timeoutMinutes,
                             'status' => Order::STATUS_CANCELLED,
+                            ...$result,
                         ]);
+
+                        $this->notifyPaymentTimeout($locked, $timeoutMinutes, $result);
 
                         $expired++;
                     });
@@ -749,6 +821,40 @@ class OrderService
             });
 
         return $expired;
+    }
+
+    /** @param array{wallet_refunded_cents:int,coupon_count:int} $result */
+    private function notifyPaymentTimeout(Order $order, int $timeoutMinutes, array $result): void
+    {
+        try {
+            if (! Schema::hasTable('notifications')) {
+                return;
+            }
+
+            $order->loadMissing('user');
+
+            if (! $order->user) {
+                return;
+            }
+
+            $alreadyNotified = $order->user->notifications()
+                ->where('type', OrderPaymentTimeoutNotification::class)
+                ->where('data->order_id', $order->id)
+                ->exists();
+
+            if ($alreadyNotified) {
+                return;
+            }
+
+            $order->user->notify(new OrderPaymentTimeoutNotification(
+                $order,
+                $timeoutMinutes,
+                $result['wallet_refunded_cents'],
+                $result['coupon_count'],
+            ));
+        } catch (Throwable $exception) {
+            report($exception);
+        }
     }
 
     private function shippingAddressText(array $data): ?string

@@ -12,12 +12,15 @@
                             / {{ $statusPresenter->label($order->status) }}
                         </p>
                     </div>
-                    <form method="post" action="{{ route('orders.contact-support', $order) }}">
-                        @csrf
-                        <button class="rounded-sm border border-blue-700 bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800" type="submit">
-                            直接联系客服
-                        </button>
-                    </form>
+                    <div class="space-y-2">
+                        <form method="post" action="{{ route('orders.contact-support', $order) }}">
+                            @csrf
+                            <button class="w-full rounded-lg border border-blue-700 bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800" type="submit">
+                                直接联系客服
+                            </button>
+                        </form>
+                        <x-support.contact-methods compact class="justify-end" />
+                    </div>
                 </div>
 
                 <div class="overflow-x-auto">

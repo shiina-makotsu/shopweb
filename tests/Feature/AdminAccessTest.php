@@ -11,12 +11,62 @@ use App\Models\Product;
 use App\Models\SiteSetting;
 use App\Models\Coupon;
 use App\Models\WalletRechargeOption;
+use App\Services\OrderService;
 use Livewire\Livewire;
 
 it('prevents customers from accessing the admin panel', function (): void {
     $customer = User::factory()->create(['role' => 'customer']);
 
     $this->actingAs($customer)->get('/admin')->assertForbidden();
+});
+
+it('refreshes admin notification counts without reloading the page', function (): void {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $customer = User::factory()->create(['role' => 'customer']);
+    $order = Order::query()->create([
+        'user_id' => $customer->id,
+        'order_number' => 'ADMIN-LIVE-NOTICE-1',
+        'status' => Order::STATUS_PENDING_PAYMENT,
+        'payment_status' => Order::PAYMENT_SUBMITTED,
+        'subtotal_cents' => 1000,
+        'total_cents' => 1000,
+        'contact_name' => 'Live Notice',
+        'contact_phone' => '1',
+    ]);
+
+    $this->actingAs($admin)
+        ->getJson(route('admin.notification-summary', ['fresh' => 1]))
+        ->assertOk()
+        ->assertJsonPath('groups.交易', 1)
+        ->assertJsonFragment([
+            'label' => '订单管理',
+            'count' => 1,
+            'badge' => '1',
+        ]);
+
+    app(OrderService::class)->confirmPayment($order, $admin);
+
+    $this->actingAs($admin)
+        ->getJson(route('admin.notification-summary', ['fresh' => 1]))
+        ->assertOk()
+        ->assertJsonPath('groups.交易', 0)
+        ->assertJsonFragment([
+            'label' => '订单管理',
+            'count' => 0,
+            'badge' => '0',
+        ]);
+
+    $this->actingAs($customer)
+        ->getJson(route('admin.notification-summary'))
+        ->assertForbidden();
+
+    $providerSource = file_get_contents(app_path('Providers/Filament/AdminPanelProvider.php'));
+    expect($providerSource)
+        ->toContain('window.setInterval(() => refreshAdminNotifications(false), 15000)')
+        ->toContain("window.Livewire.hook('commit'")
+        ->toContain('refreshAdminNotifications(true), 900')
+        ->toContain("document.addEventListener('livewire:update'")
+        ->toContain("document.addEventListener('visibilitychange'");
 });
 
 it('applies basic backoffice role permissions', function (): void {
@@ -564,7 +614,7 @@ it('shows wallet payment breakdown on the admin order form', function (): void {
         ->assertSee('¥70.00');
 });
 
-it('keeps payment breakdown details out of the admin order table columns', function (): void {
+it('keeps payment breakdown details out of the admin order table and shows the shared payment status', function (): void {
     $source = file_get_contents(app_path('Filament/Resources/OrderResource.php'));
 
     expect($source)
@@ -572,7 +622,8 @@ it('keeps payment breakdown details out of the admin order table columns', funct
         ->not->toContain("TextColumn::make('wallet_payment_cents')")
         ->not->toContain("TextColumn::make('total_cents')->label")
         ->not->toContain("TextColumn::make('shipping_fee_cents')")
-        ->not->toContain("TextColumn::make('payment_status')->label");
+        ->toContain("TextColumn::make('payment_status')")
+        ->toContain('PaymentStatusPresenter');
 });
 
 it('renders merged admin management tabs for wallet flash sale and comments', function (): void {

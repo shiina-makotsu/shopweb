@@ -18,6 +18,13 @@ class AfterSalesController extends Controller
     {
         $this->authorizeOrder($request, $order);
 
+        AfterSalesRequest::query()
+            ->whereBelongsTo($request->user())
+            ->where('order_id', $order->id)
+            ->whereNotNull('admin_note')
+            ->whereNull('customer_read_at')
+            ->update(['customer_read_at' => now()]);
+
         return view('orders.after-sales', [
             'order' => $order->load(['items', 'afterSalesRequests']),
             'settings' => SiteSetting::query()->first(),

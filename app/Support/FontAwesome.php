@@ -10,6 +10,36 @@ class FontAwesome
         'brands' => 'fa-brands',
     ];
 
+    public static function contactIconOptions(): array
+    {
+        return [
+            'fa-solid fa-comments' => '通用聊天',
+            'fa-solid fa-headset' => '客服',
+            'fa-solid fa-envelope' => '电子邮件',
+            'fa-solid fa-phone' => '电话',
+            'fa-solid fa-link' => '链接',
+            'fa-brands fa-weixin' => '微信',
+            'fa-brands fa-qq' => 'QQ',
+            'fa-brands fa-telegram' => 'Telegram',
+            'fa-brands fa-discord' => 'Discord',
+            'fa-brands fa-whatsapp' => 'WhatsApp',
+            'fa-brands fa-line' => 'LINE',
+            'fa-brands fa-weibo' => '微博',
+            'fa-brands fa-facebook' => 'Facebook',
+            'fa-brands fa-instagram' => 'Instagram',
+            'fa-brands fa-x-twitter' => 'X / Twitter',
+        ];
+    }
+
+    public static function normalizeClasses(mixed $classes): string
+    {
+        $classes = strtolower(trim((string) $classes));
+
+        return preg_match('/^fa-(?:solid|regular|brands) fa-[a-z0-9][a-z0-9-]*$/', $classes) === 1
+            ? $classes
+            : '';
+    }
+
     public static function icon(string $name, string $style = 'solid', ?string $label = null, string $extraClass = ''): string
     {
         $name = self::normalizeName($name);

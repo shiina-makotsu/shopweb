@@ -7,6 +7,7 @@ use App\Models\SupportChatSession;
 use App\Models\SupportQuickReply;
 use App\Models\SiteSetting;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class SupportChatService
@@ -28,7 +29,13 @@ class SupportChatService
     /**
      * @param  array<string, mixed>  $attachment
      */
-    public function reply(SupportChatSession $session, User $admin, ?string $message, array $attachment = []): SupportChatMessage
+    public function reply(
+        SupportChatSession $session,
+        User $admin,
+        ?string $message,
+        array $attachment = [],
+        ?SupportQuickReply $quickReply = null,
+    ): SupportChatMessage
     {
         if ($session->isClosed()) {
             throw ValidationException::withMessages([
@@ -55,9 +62,11 @@ class SupportChatService
             ->update(['read_at' => now()]);
 
         $reply = $session->messages()->create([
+            'support_quick_reply_id' => $quickReply?->id,
             'sender_user_id' => $admin->id,
             'sender_type' => SupportChatMessage::SENDER_ADMIN,
             'body' => $body === '' ? null : $body,
+            'contact_links' => $quickReply ? $this->contactLinks($quickReply) : null,
             ...$attachment,
         ]);
 
@@ -106,6 +115,7 @@ class SupportChatService
 
         $reply = SupportQuickReply::query()
             ->active()
+            ->forTrigger(SupportQuickReply::TRIGGER_MESSAGE)
             ->orderBy('sort_order')
             ->orderBy('id')
             ->get()
@@ -115,6 +125,43 @@ class SupportChatService
             return null;
         }
 
+        $this->sendQuickReply($session, $reply);
+
+        return $reply;
+    }
+
+    public function applyEntryReplies(SupportChatSession $session): void
+    {
+        if ($session->isClosed() || $session->isEnded()) {
+            return;
+        }
+
+        SupportQuickReply::query()
+            ->active()
+            ->forTrigger(SupportQuickReply::TRIGGER_SESSION_ENTRY)
+            ->orderBy('sort_order')
+            ->orderBy('id')
+            ->each(function (SupportQuickReply $reply) use ($session): void {
+                DB::transaction(function () use ($session, $reply): void {
+                    $lockedSession = SupportChatSession::query()->lockForUpdate()->find($session->id);
+
+                    if (! $lockedSession || $lockedSession->isClosed() || $lockedSession->isEnded()) {
+                        return;
+                    }
+
+                    $alreadySent = $lockedSession->messages()
+                        ->where('support_quick_reply_id', $reply->id)
+                        ->exists();
+
+                    if (! $alreadySent) {
+                        $this->sendQuickReply($lockedSession, $reply);
+                    }
+                });
+            });
+    }
+
+    private function sendQuickReply(SupportChatSession $session, SupportQuickReply $reply): SupportChatMessage
+    {
         $body = trim((string) $reply->body);
 
         if ($body === '') {
@@ -133,14 +180,26 @@ class SupportChatService
             }
         }
 
-        $session->messages()->create([
+        $message = $session->messages()->create([
+            'support_quick_reply_id' => $reply->id,
             'sender_type' => SupportChatMessage::SENDER_SYSTEM,
             'body' => $body,
+            'contact_links' => $this->contactLinks($reply),
         ]);
 
         $session->update(['last_message_at' => now()]);
 
-        return $reply;
+        return $message;
+    }
+
+    /** @return array<int, array{name:string, account:string, url:string, icon:string}> */
+    private function contactLinks(SupportQuickReply $reply): array
+    {
+        return $reply->contactMethods()
+            ->map(fn ($method): ?array => $method->linkData())
+            ->filter()
+            ->values()
+            ->all();
     }
 
     public function end(SupportChatSession $session, ?User $admin = null): void

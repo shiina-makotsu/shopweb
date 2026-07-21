@@ -23,6 +23,8 @@ class EditSupportChatSession extends EditRecord
 
     public string $replyMessage = '';
 
+    public ?int $selectedQuickReplyId = null;
+
     public $replyAttachment = null;
 
     public function mount(int|string $record): void
@@ -41,6 +43,7 @@ class EditSupportChatSession extends EditRecord
     {
         return SupportQuickReply::query()
             ->active()
+            ->forTrigger(SupportQuickReply::TRIGGER_MESSAGE)
             ->orderBy('sort_order')
             ->orderBy('title')
             ->get();
@@ -48,13 +51,17 @@ class EditSupportChatSession extends EditRecord
 
     public function useQuickReply(int $replyId): void
     {
-        $reply = SupportQuickReply::query()->active()->find($replyId);
+        $reply = SupportQuickReply::query()
+            ->active()
+            ->forTrigger(SupportQuickReply::TRIGGER_MESSAGE)
+            ->find($replyId);
 
         if (! $reply) {
             return;
         }
 
         $this->replyMessage = $reply->body;
+        $this->selectedQuickReplyId = $reply->id;
     }
 
     public function sendReply(): void
@@ -82,9 +89,14 @@ class EditSupportChatSession extends EditRecord
             ? app(ChatAttachmentService::class)->storeSupportAttachment($this->replyAttachment, $this->record)
             : [];
 
-        app(SupportChatService::class)->reply($this->record, auth()->user(), $message, $attachment);
+        $quickReply = $this->selectedQuickReplyId
+            ? SupportQuickReply::query()->active()->find($this->selectedQuickReplyId)
+            : null;
+
+        app(SupportChatService::class)->reply($this->record, auth()->user(), $message, $attachment, $quickReply);
 
         $this->replyMessage = '';
+        $this->selectedQuickReplyId = null;
         $this->replyAttachment = null;
         $this->record->refresh()->load(['messages.sender', 'assignedAdmin', 'order', 'user']);
 

@@ -13,7 +13,7 @@ class UserOrderStatusPresenter
         }
 
         return match ($order->payment_status) {
-            Order::PAYMENT_SUBMITTED => '付款凭证已提交',
+            Order::PAYMENT_SUBMITTED => '已付款',
             Order::PAYMENT_REJECTED => '待支付',
             default => '待支付',
         };
