@@ -87,4 +87,17 @@ class AfterSalesRequest extends Model
     {
         return $this->belongsTo(User::class, 'refund_reviewed_by_id');
     }
+
+    public function mergedAdminNote(?string $newNote): ?string
+    {
+        $newNote = trim((string) $newNote);
+
+        if ($newNote === '') {
+            return $this->admin_note;
+        }
+
+        $oldNote = trim((string) $this->admin_note);
+
+        return $oldNote === '' ? $newNote : $oldNote.PHP_EOL.PHP_EOL.$newNote;
+    }
 }

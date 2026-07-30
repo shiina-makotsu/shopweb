@@ -107,11 +107,7 @@ class OrderResource extends Resource
                         : '用户可见'),
                 Placeholder::make('payment_proof_preview')
                     ->label('付款凭证图片')
-                    ->content(fn (?Order $record): HtmlString => new HtmlString(
-                        $record?->payment_proof_path
-                            ? '<a href="'.e(Url::route('admin.payment-proofs.show', $record)).'" target="_blank" rel="noopener"><img src="'.e(Url::route('admin.payment-proofs.show', $record)).'" alt="付款凭证" style="max-width: 360px; max-height: 420px; border: 1px solid #cbd5e1; border-radius: 2px; object-fit: contain; background: #fff;" /></a>'
-                            : '<span style="color:#64748b;">暂未上传付款凭证</span>'
-                    ))
+                    ->content(fn (?Order $record): HtmlString => static::paymentProofPreviewHtml($record))
                     ->columnSpanFull(),
             ])->columns(2)->columnSpanFull(),
             Section::make('订单商品')->schema([
@@ -351,6 +347,7 @@ class OrderResource extends Resource
         $customerNote = nl2br(e($record->customer_note ?: '-'));
         $digitalContent = nl2br(e($record->digital_delivery_content ?: '-'));
         $digitalCode = e($record->digital_delivery_code ?: '-');
+        $paymentProof = static::paymentProofPreviewHtml($record, true)->toHtml();
         $action = e(route('admin.orders.quick-shipping', $record, absolute: false));
         $csrf = e(csrf_token());
         $carrierOptions = \App\Models\ShippingCarrier::query()
@@ -413,6 +410,7 @@ class OrderResource extends Resource
                             </div>
                         </form>
                     </div>
+                    {$paymentProof}
                     <div style="grid-column:1 / -1;display:grid;grid-template-columns:92px minmax(0,1fr);gap:6px 10px;border-top:1px solid #e2e8f0;padding-top:10px;">
                         <strong style="color:#475569;">客户备注</strong>
                         <div style="word-break:break-word;">{$customerNote}</div>
@@ -424,6 +422,39 @@ class OrderResource extends Resource
                 </div>
             </div>
         HTML);
+    }
+
+    private static function paymentProofPreviewHtml(?Order $record, bool $onlyAwaitingReview = false): HtmlString
+    {
+        if (! $record) {
+            return new HtmlString('<span style="color:#64748b;">暂未上传付款凭证</span>');
+        }
+
+        $awaitingReview = $record->status !== Order::STATUS_CANCELLED
+            && ($record->payment_status === Order::PAYMENT_SUBMITTED || $record->isAwaitingAutoConfirmedPaymentReview());
+
+        if ($onlyAwaitingReview && ! $awaitingReview) {
+            return new HtmlString('');
+        }
+
+        $parts = [];
+
+        if (filled($record->payment_proof_path)) {
+            $url = e(Url::route('admin.payment-proofs.show', $record));
+            $parts[] = '<a href="'.$url.'" target="_blank" rel="noopener" style="display:inline-flex;max-width:100%;"><img src="'.$url.'" alt="付款凭证" style="width:240px;max-width:100%;max-height:320px;border:1px solid #cbd5e1;border-radius:8px;object-fit:contain;background:#fff;" /></a>';
+        }
+
+        if (filled($record->payment_text_proof)) {
+            $parts[] = '<div style="white-space:pre-wrap;word-break:break-word;border:1px solid #cbd5e1;border-radius:8px;background:#fff;padding:10px 12px;color:#334155;">'.nl2br(e($record->payment_text_proof)).'</div>';
+        }
+
+        if ($parts === []) {
+            $parts[] = '<span style="color:#64748b;">暂未上传付款凭证</span>';
+        }
+
+        $marker = $onlyAwaitingReview ? ' data-shopweb-payment-proof="'.e((string) $record->id).'"' : '';
+
+        return new HtmlString('<div'.$marker.' style="grid-column:1 / -1;border-top:1px solid #e2e8f0;padding-top:10px;"><strong style="display:block;margin-bottom:8px;color:#475569;">付款凭证</strong><div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start;">'.implode('', $parts).'</div></div>');
     }
 
     private static function rowTriggerHtml(Order $record): HtmlString

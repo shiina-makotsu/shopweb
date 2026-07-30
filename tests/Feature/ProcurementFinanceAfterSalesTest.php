@@ -1,5 +1,6 @@
 <?php
 
+use App\Filament\Resources\AfterSalesRequestResource\Pages\ListAfterSalesRequests;
 use App\Models\AdminActivityLog;
 use App\Models\AfterSalesRequest;
 use App\Models\Category;
@@ -28,6 +29,8 @@ use App\Support\AdminAccess;
 use App\Support\CurrencyUnit;
 use App\Support\ProfitMetrics;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Schema;
+use Livewire\Livewire;
 
 it('syncs procurement into an incoming product, auto costs, and allocated presale users', function (): void {
     $admin = User::factory()->create(['role' => 'admin']);
@@ -615,6 +618,45 @@ it('lets users submit after sales requests and contact support with their order 
     $this->actingAs($user)
         ->get(route('orders.after-sales', $otherOrder))
         ->assertForbidden();
+});
+
+it('submits a quick after sales message without touching missing refund review columns', function (): void {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $user = User::factory()->create(['role' => 'customer']);
+    $request = AfterSalesRequest::query()->create([
+        'user_id' => $user->id,
+        'type' => 'support',
+        'status' => AfterSalesRequest::STATUS_OPEN,
+        'subject' => '快速处理留言测试',
+        'message' => '请处理。',
+        'admin_note' => '首次联系记录',
+    ]);
+    $repairMigration = database_path('migrations/2026_07_26_000001_repair_after_sales_refund_columns.php');
+
+    Schema::table('after_sales_requests', function (Illuminate\Database\Schema\Blueprint $table): void {
+        $table->dropColumn('refund_reviewed_at');
+    });
+
+    try {
+        Livewire::actingAs($admin)
+            ->test(ListAfterSalesRequests::class)
+            ->callTableAction('resolve', $request, [
+                'resolution_type' => AfterSalesRequest::RESOLUTION_MESSAGE,
+                'admin_note' => '快速处理回复内容',
+            ])
+            ->assertHasNoTableActionErrors();
+
+        $request->refresh();
+
+        expect($request->status)->toBe(AfterSalesRequest::STATUS_RESOLVED)
+            ->and($request->resolution_type)->toBe(AfterSalesRequest::RESOLUTION_MESSAGE)
+            ->and($request->admin_note)->toBe('首次联系记录'.PHP_EOL.PHP_EOL.'快速处理回复内容')
+            ->and($request->resolved_at)->not->toBeNull();
+    } finally {
+        (require $repairMigration)->up();
+    }
+
+    expect(Schema::hasColumn('after_sales_requests', 'refund_reviewed_at'))->toBeTrue();
 });
 
 it('renders procurement finance and after sales backoffice pages by role', function (): void {

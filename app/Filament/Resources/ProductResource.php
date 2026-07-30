@@ -119,7 +119,7 @@ class ProductResource extends Resource
                     ->searchable()
                     ->preload()
                     ->visible(fn (Get $get): bool => $get('status') === Product::STATUS_PRESALE)
-                    ->helperText('可留空；留空时使用站点设置中的预售默认仓库邮费模板。'),
+                    ->helperText('可留空；留空且额外邮费为 0 时按免邮处理，站点预售默认仓库只用于履约分配。'),
                 TextInput::make('sort_order')->label('排序')->numeric()->default(0),
                 Toggle::make('is_featured')->label('推荐')->default(false),
                 Toggle::make('comments_enabled')->label('开启评论')->default(true),

@@ -7,9 +7,8 @@ use App\Filament\Resources\AfterSalesRequestResource\Pages\EditAfterSalesRequest
 use App\Filament\Resources\AfterSalesRequestResource\Pages\ListAfterSalesRequests;
 use App\Models\AfterSalesRequest;
 use App\Models\Coupon;
-use App\Models\UserCoupon;
+use App\Services\AfterSalesResolutionService;
 use App\Services\BackofficeApprovalService;
-use App\Services\CouponService;
 use App\Support\AdminAccess;
 use App\Support\Money;
 use App\Support\MoneyInput;
@@ -164,7 +163,7 @@ class AfterSalesRequestResource extends Resource
                         'refund_requested_at' => now(),
                         'refund_reviewed_by_id' => null,
                         'refund_reviewed_at' => null,
-                        'admin_note' => static::appendNote($record->admin_note, $data['admin_note'] ?? null),
+                        'admin_note' => $record->mergedAdminNote($data['admin_note'] ?? null),
                     ])),
                 Action::make('approveRefund')
                     ->label('审批退款')
@@ -202,59 +201,7 @@ class AfterSalesRequestResource extends Resource
                         Textarea::make('admin_note')->label('处理留言')->rows(4)->required(),
                     ])
                     ->visible(fn (): bool => AdminAccess::canAction('after_sales.resolve'))
-                    ->action(function (AfterSalesRequest $record, array $data): void {
-                        $resolutionType = (string) $data['resolution_type'];
-                        $canRefund = AdminAccess::canAction('after_sales.refund');
-
-                        if ($resolutionType === AfterSalesRequest::RESOLUTION_REFUND && ! $canRefund) {
-                            $resolutionType = AfterSalesRequest::RESOLUTION_MESSAGE;
-                        }
-
-                        $record->update([
-                            'status' => AfterSalesRequest::STATUS_RESOLVED,
-                            'resolution_type' => $resolutionType,
-                            'refund_amount_cents' => $resolutionType === AfterSalesRequest::RESOLUTION_REFUND ? ($data['refund_amount_cents'] ?? null) : null,
-                            'refund_status' => $resolutionType === AfterSalesRequest::RESOLUTION_REFUND ? AfterSalesRequest::REFUND_APPROVED : $record->refund_status,
-                            'refund_reviewed_by_id' => $resolutionType === AfterSalesRequest::RESOLUTION_REFUND ? auth()->id() : $record->refund_reviewed_by_id,
-                            'refund_reviewed_at' => $resolutionType === AfterSalesRequest::RESOLUTION_REFUND ? now() : $record->refund_reviewed_at,
-                            'coupon_id' => $data['coupon_id'] ?? null,
-                            'admin_note' => $data['admin_note'],
-                            'resolved_at' => now(),
-                        ]);
-
-                        if (($data['coupon_id'] ?? null) && $record->user) {
-                            $coupon = Coupon::query()->find($data['coupon_id']);
-
-                            if ($coupon) {
-                                if (AdminAccess::canAction('coupons.issue')) {
-                                    app(CouponService::class)->issueToUser(
-                                        $coupon,
-                                        $record->user,
-                                        UserCoupon::SOURCE_AFTER_SALES,
-                                        auth()->user(),
-                                        $record->id,
-                                        '售后补偿',
-                                    );
-                                } else {
-                                    app(BackofficeApprovalService::class)->requestCouponForAfterSales(
-                                        $record,
-                                        $coupon,
-                                        auth()->user(),
-                                        $data['admin_note'] ?? null,
-                                    );
-                                }
-                            }
-                        }
-
-                        if ($resolutionType === AfterSalesRequest::RESOLUTION_REFUND && $record->order) {
-                            app(\App\Services\WalletService::class)->refundOrderPayment(
-                                $record->order,
-                                (int) ($data['refund_amount_cents'] ?? 0),
-                                auth()->user(),
-                                '售后退款退回钱包',
-                            );
-                        }
-                    }),
+                    ->action(fn (AfterSalesRequest $record, array $data) => app(AfterSalesResolutionService::class)->resolve($record, $data, auth()->user())),
             ]);
     }
 
@@ -293,16 +240,4 @@ class AfterSalesRequestResource extends Resource
         };
     }
 
-    private static function appendNote(?string $oldNote, ?string $newNote): ?string
-    {
-        $newNote = trim((string) $newNote);
-
-        if ($newNote === '') {
-            return $oldNote;
-        }
-
-        $oldNote = trim((string) $oldNote);
-
-        return $oldNote === '' ? $newNote : $oldNote.PHP_EOL.PHP_EOL.$newNote;
-    }
 }

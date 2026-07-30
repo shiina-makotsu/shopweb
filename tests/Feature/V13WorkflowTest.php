@@ -266,10 +266,49 @@ it('shows payment proof images to admins and a payment success state to customer
         ->get('/admin/orders')
         ->assertOk()
         ->assertSee('data-shopweb-order-template', false)
+        ->assertSee('data-shopweb-payment-proof="'.$order->id.'"', false)
+        ->assertSee(Url::route('admin.payment-proofs.show', $order), false)
         ->assertSee('更新物流')
         ->assertSee('电话')
         ->assertSee('邮箱')
         ->assertSee('Admin Visible Product');
+
+    app(OrderService::class)->confirmPayment($order->fresh(), $admin);
+
+    $this->actingAs($admin)
+        ->get('/admin/orders')
+        ->assertOk()
+        ->assertDontSee('data-shopweb-payment-proof="'.$order->id.'"', false);
+});
+
+it('hides a submitted text payment proof from the quick order preview after rejection', function (): void {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $user = User::factory()->create(['role' => 'customer']);
+    $order = Order::query()->create([
+        'user_id' => $user->id,
+        'order_number' => 'PAY-QUICK-REJECT-1',
+        'status' => Order::STATUS_PENDING_PAYMENT,
+        'payment_status' => Order::PAYMENT_SUBMITTED,
+        'payment_text_proof' => '口令红包凭证内容',
+        'payment_submitted_at' => now(),
+        'subtotal_cents' => 1000,
+        'total_cents' => 1000,
+        'contact_name' => 'Quick Proof',
+        'contact_phone' => '1',
+    ]);
+
+    $this->actingAs($admin)
+        ->get('/admin/orders')
+        ->assertOk()
+        ->assertSee('data-shopweb-payment-proof="'.$order->id.'"', false)
+        ->assertSee('口令红包凭证内容');
+
+    app(OrderService::class)->rejectPayment($order, '凭证无效', $admin);
+
+    $this->actingAs($admin)
+        ->get('/admin/orders')
+        ->assertOk()
+        ->assertDontSee('data-shopweb-payment-proof="'.$order->id.'"', false);
 });
 
 it('does not count submitted payment proof orders as pending payment notices for customers', function (): void {
@@ -729,7 +768,8 @@ it('keeps automatically confirmed wallet recharges available for manual confirma
         ->get(OrderResource::getUrl('index'))
         ->assertOk()
         ->assertSee('确认收款')
-        ->assertSee('驳回凭证');
+        ->assertSee('驳回凭证')
+        ->assertSee('data-shopweb-payment-proof="'.$order->id.'"', false);
 
     app(OrderService::class)->confirmPayment($order, $admin);
 
@@ -742,6 +782,11 @@ it('keeps automatically confirmed wallet recharges available for manual confirma
             ->where('source', WalletTransaction::SOURCE_WALLET_RECHARGE)
             ->count())->toBe(1)
         ->and($order->paymentVerificationLogs()->latest('id')->value('manual_result'))->toBe(PaymentVerificationLog::MANUAL_CONFIRMED);
+
+    $this->actingAs($admin)
+        ->get(OrderResource::getUrl('index'))
+        ->assertOk()
+        ->assertDontSee('data-shopweb-payment-proof="'.$order->id.'"', false);
 });
 
 it('reverses wallet balance and generated coupons when an automatically confirmed recharge is rejected', function (): void {

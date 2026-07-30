@@ -4024,7 +4024,7 @@ it('stores private shipping requests and resolves category or tag defaults', fun
     expect($order->private_shipping_requested)->toBeTrue();
 });
 
-it('charges shipping for presale logistics products without requiring stock', function (): void {
+it('charges configured presale shipping once without multiplying it by quantity', function (): void {
     $user = User::factory()->create(['role' => 'customer']);
     $category = Category::query()->create(['name' => '预售邮费', 'slug' => 'presale-shipping', 'is_active' => true]);
     $warehouse = Warehouse::query()->create(['name' => '预售默认仓', 'country' => '中国', 'street' => '预售仓占位', 'is_active' => true]);
@@ -4066,8 +4066,65 @@ it('charges shipping for presale logistics products without requiring stock', fu
 
     $order = Order::query()->where('user_id', $user->id)->firstOrFail();
 
-    expect($order->shipping_fee_cents)->toBe(2100)
-        ->and($order->total_cents)->toBe(14100)
+    expect($order->shipping_fee_cents)->toBe(1800)
+        ->and($order->total_cents)->toBe(13800)
+        ->and($order->items()->first()->warehouse_id)->toBe($warehouse->id);
+});
+
+it('keeps unconfigured presale shipping free even when a default warehouse has a rate', function (): void {
+    $user = User::factory()->create(['role' => 'customer']);
+    $category = Category::query()->create(['name' => '预售免邮', 'slug' => 'presale-free-shipping', 'is_active' => true]);
+    $warehouse = Warehouse::query()->create(['name' => '预售履约仓', 'country' => '中国', 'is_active' => true]);
+
+    SiteSetting::query()->create(['presale_default_warehouse_id' => $warehouse->id]);
+    WarehouseShippingRate::query()->create([
+        'warehouse_id' => $warehouse->id,
+        'name' => '默认邮费',
+        'fee_cents' => 1500,
+        'is_default' => true,
+        'is_active' => true,
+    ]);
+
+    $product = Product::query()->create([
+        'category_id' => $category->id,
+        'title' => '未配置邮费的预售商品',
+        'slug' => 'presale-without-shipping-fee',
+        'status' => Product::STATUS_PRESALE,
+        'fulfillment_type' => Product::FULFILLMENT_LOGISTICS,
+        'shipping_extra_fee_cents' => 0,
+        'presale_shipping_warehouse_id' => null,
+    ]);
+    $variant = ProductVariant::query()->create([
+        'product_id' => $product->id,
+        'sku' => 'PRESALE-FREE-SHIPPING',
+        'price_cents' => 6000,
+        'stock' => 0,
+        'is_active' => true,
+    ]);
+
+    $this->post(route('cart.items.store'), ['variant_id' => $variant->id, 'quantity' => 3]);
+
+    $this->actingAs($user)
+        ->get(route('checkout.create'))
+        ->assertOk()
+        ->assertSee('data-shipping-charge-enabled="0"', false)
+        ->assertSee('data-initial-quoted-fee="0"', false);
+
+    $this->actingAs($user)->post(route('checkout.store'), [
+        'contact_name' => '预售收件人',
+        'contact_phone' => '13800000000',
+        'contact_email' => 'presale-free@example.com',
+        'shipping_country' => '中国',
+        'shipping_province' => '北京',
+        'shipping_city' => '北京市',
+        'shipping_detail' => '预售路 1 号',
+    ])->assertRedirect();
+
+    $order = Order::query()->whereBelongsTo($user)->firstOrFail();
+
+    expect($order->shipping_fee_cents)->toBe(0)
+        ->and($order->total_cents)->toBe(18000)
+        ->and($order->shipment_plan[0]['fee_cents'] ?? null)->toBe(0)
         ->and($order->items()->first()->warehouse_id)->toBe($warehouse->id);
 });
 
@@ -4218,7 +4275,7 @@ it('uses the presale default warehouse unless the product overrides it', functio
         ->and($order->items()->first()->warehouse_id)->toBe($defaultWarehouse->id);
 });
 
-it('warns and charges per warehouse when an order must ship from multiple warehouses', function (): void {
+it('warns about split fulfilment but charges shipping only once per order', function (): void {
     $user = User::factory()->create(['role' => 'customer']);
     $category = Category::query()->create(['name' => '多仓', 'slug' => 'multi-warehouse', 'is_active' => true]);
 
@@ -4299,9 +4356,10 @@ it('warns and charges per warehouse when an order must ship from multiple wareho
 
     $order = Order::query()->where('user_id', $user->id)->firstOrFail();
 
-    expect($order->shipping_fee_cents)->toBe(3500)
-        ->and($order->total_cents)->toBe(33500)
-        ->and($order->shipment_notice)->toContain('分批发货')
+    expect($order->shipping_fee_cents)->toBe(2100)
+        ->and($order->total_cents)->toBe(32100)
+        ->and($order->shipment_notice)->toContain('整单仅收取一次邮费')
+        ->and(collect($order->shipment_plan)->sum('fee_cents'))->toBe(2100)
         ->and($order->items()->where('warehouse_id', $warehouseA->id)->count())->toBe(1)
         ->and($order->items()->where('warehouse_id', $warehouseB->id)->count())->toBe(1);
 });

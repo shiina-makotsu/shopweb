@@ -68,18 +68,22 @@ class ShippingQuoteService
                     'warehouse_name' => $warehouse?->name ?? '默认仓库',
                     'shipping_carrier_id' => $rate['shipping_carrier_id'] ?? null,
                     'shipping_carrier_name' => $rate['shipping_carrier_name'] ?? null,
-                    'base_fee_cents' => $baseFee,
+                    'base_fee_cents' => 0,
                     'extra_fee_cents' => 0,
-                    'fee_cents' => $baseFee,
+                    'fee_cents' => 0,
+                    'shipping_charge_enabled' => false,
                     'available_carriers' => $warehouse ? $this->warehouseRateOptions($warehouse, $province) : [],
                     'items' => [],
                 ];
             }
 
             $extraFee = $this->productExtraFee($item);
+            $shippingChargeEnabled = $this->itemHasConfiguredShippingCharge($item);
             $shipments[$key]['items'][] = $this->itemSummary($item);
             $shipments[$key]['extra_fee_cents'] += $extraFee;
-            $shipments[$key]['fee_cents'] += $extraFee;
+            $shipments[$key]['shipping_charge_enabled'] = $shipments[$key]['shipping_charge_enabled'] || $shippingChargeEnabled;
+            $shipments[$key]['base_fee_cents'] = $shipments[$key]['shipping_charge_enabled'] ? $baseFee : 0;
+            $shipments[$key]['fee_cents'] = $shipments[$key]['base_fee_cents'] + $shipments[$key]['extra_fee_cents'];
             $itemWarehouseMap[(int) $item['variant']->id] = $warehouse?->id;
         }
 
@@ -95,12 +99,22 @@ class ShippingQuoteService
      */
     private function buildQuote(?string $province, array $shipments): array
     {
-        $shippingFee = array_sum(array_map(fn (array $shipment): int => (int) $shipment['fee_cents'], $shipments));
+        $quotedFees = array_map(fn (array $shipment): int => (int) $shipment['fee_cents'], $shipments);
+        $shippingFee = $quotedFees === [] ? 0 : max($quotedFees);
+        $chargedShipmentIndex = $shippingFee > 0 ? array_search($shippingFee, $quotedFees, true) : null;
+
+        foreach ($shipments as $index => &$shipment) {
+            $shipment['quoted_fee_cents'] = (int) $shipment['fee_cents'];
+            $shipment['charges_order_shipping'] = $chargedShipmentIndex !== null && $index === $chargedShipmentIndex;
+            $shipment['fee_cents'] = $shipment['charges_order_shipping'] ? $shippingFee : 0;
+        }
+        unset($shipment);
+
         $isMultiWarehouse = count($shipments) > 1;
         $notice = null;
 
         if ($isMultiWarehouse) {
-            $notice = '订单中的商品需要分批发货，邮费已按系统匹配的发货位置分别计算。';
+            $notice = '订单中的商品需要分批发货，整单仅收取一次邮费。';
         }
 
         $itemWarehouseMap = [];
@@ -133,7 +147,8 @@ class ShippingQuoteService
     private function shipmentFor(Warehouse $warehouse, Collection $items, ?string $province, array $selectedCarriers): array
     {
         $rate = $this->selectedRateForWarehouse($warehouse, $province, $selectedCarriers[(int) $warehouse->id] ?? null);
-        $baseFee = (int) ($rate['fee_cents'] ?? 0);
+        $shippingChargeEnabled = $items->contains(fn (array $item): bool => $this->itemHasConfiguredShippingCharge($item));
+        $baseFee = $shippingChargeEnabled ? (int) ($rate['fee_cents'] ?? 0) : 0;
         $extraFee = (int) $items->sum(fn (array $item): int => $this->productExtraFee($item));
 
         return [
@@ -144,6 +159,7 @@ class ShippingQuoteService
             'base_fee_cents' => $baseFee,
             'extra_fee_cents' => $extraFee,
             'fee_cents' => $baseFee + $extraFee,
+            'shipping_charge_enabled' => $shippingChargeEnabled,
             'available_carriers' => $this->warehouseRateOptions($warehouse, $province),
             'items' => $items->map(fn (array $item): array => $this->itemSummary($item))->values()->all(),
         ];
@@ -239,7 +255,25 @@ class ShippingQuoteService
      */
     private function productExtraFee(array $item): int
     {
-        return (int) ($item['product']->shipping_extra_fee_cents ?? 0) * max(1, (int) $item['quantity']);
+        return (int) ($item['product']->shipping_extra_fee_cents ?? 0);
+    }
+
+    /**
+     * Presale products are free to ship until a product-level shipping option is explicitly configured.
+     * The default presale warehouse remains available for fulfilment assignment only.
+     *
+     * @param  array{product: Product}  $item
+     */
+    private function itemHasConfiguredShippingCharge(array $item): bool
+    {
+        $product = $item['product'];
+
+        if ($product->status !== Product::STATUS_PRESALE) {
+            return true;
+        }
+
+        return filled($product->presale_shipping_warehouse_id)
+            || (int) $product->shipping_extra_fee_cents > 0;
     }
 
     /**

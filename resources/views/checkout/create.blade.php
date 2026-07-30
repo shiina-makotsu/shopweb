@@ -99,9 +99,10 @@
                                     $warehouseId = (int) ($shipment['warehouse_id'] ?? 0);
                                     $selectedCarrier = old('shipping_carriers.'.$warehouseId, $shipment['shipping_carrier_id'] ?? null);
                                     $extraFee = (int) ($shipment['extra_fee_cents'] ?? 0);
+                                    $shippingChargeEnabled = (bool) ($shipment['shipping_charge_enabled'] ?? true);
                                     $options = $shipment['available_carriers'] ?? [];
                                 @endphp
-                                <div class="rounded-sm border border-slate-200 bg-white px-3 py-3" data-shipping-shipment data-extra-fee="{{ $extraFee }}" data-initial-fee="{{ (int) $shipment['fee_cents'] }}">
+                                <div class="rounded-sm border border-slate-200 bg-white px-3 py-3" data-shipping-shipment data-shipping-charge-enabled="{{ $shippingChargeEnabled ? '1' : '0' }}" data-extra-fee="{{ $extraFee }}" data-initial-quoted-fee="{{ (int) ($shipment['quoted_fee_cents'] ?? $shipment['fee_cents']) }}">
                                     <div class="flex flex-wrap items-center justify-between gap-2">
                                         <span class="text-sm font-medium">包裹 {{ $loop->iteration }}</span>
                                         <span class="text-sm font-semibold" data-shipment-fee>@money($shipment['fee_cents'])</span>
@@ -111,7 +112,7 @@
                                             <span class="text-xs font-medium text-slate-600">选择物流</span>
                                             <select class="mt-1 w-full rounded-sm border border-slate-300 bg-white px-3 py-2 text-sm" name="shipping_carriers[{{ $warehouseId }}]" data-shipping-carrier-select>
                                                 @foreach($options as $option)
-                                                    @php($optionFee = (int) $option['fee_cents'] + $extraFee)
+                                                    @php($optionFee = $shippingChargeEnabled ? (int) $option['fee_cents'] + $extraFee : 0)
                                                     <option value="{{ $option['shipping_carrier_id'] }}" data-base-fee="{{ (int) $option['fee_cents'] }}" @selected((string) $selectedCarrier === (string) $option['shipping_carrier_id'])>
                                                         {{ $option['shipping_carrier_name'] }} / @money($optionFee)
                                                     </option>
@@ -121,7 +122,7 @@
                                     @elseif(count($options) === 1)
                                         @php($option = $options[0])
                                         <input type="hidden" name="shipping_carriers[{{ $warehouseId }}]" value="{{ $option['shipping_carrier_id'] }}">
-                                        <p class="mt-2 text-sm text-slate-600">已选择：{{ $option['shipping_carrier_name'] }} / @money(((int) $option['fee_cents']) + $extraFee)</p>
+                                        <p class="mt-2 text-sm text-slate-600">已选择：{{ $option['shipping_carrier_name'] }} / @money($shippingChargeEnabled ? ((int) $option['fee_cents']) + $extraFee : 0)</p>
                                     @else
                                         <p class="mt-2 text-sm text-amber-700">当前地址暂无可用物流模板，系统将按 0 邮费提交。</p>
                                     @endif
@@ -332,21 +333,27 @@
                     return;
                 }
 
-                let shippingTotal = 0;
-
-                document.querySelectorAll('[data-shipping-shipment]').forEach((shipment) => {
+                const shipments = Array.from(document.querySelectorAll('[data-shipping-shipment]'));
+                const quotedFees = shipments.map((shipment) => {
+                    const chargeEnabled = shipment.dataset.shippingChargeEnabled === '1';
                     const extraFee = Number(shipment.dataset.extraFee || 0);
                     const select = shipment.querySelector('[data-shipping-carrier-select]');
                     const selectedOption = select?.selectedOptions?.[0];
                     const baseFee = Number(selectedOption?.dataset.baseFee || 0);
-                    const fee = select ? baseFee + extraFee : Number(shipment.dataset.initialFee || 0);
+                    return chargeEnabled
+                        ? (select ? baseFee + extraFee : Number(shipment.dataset.initialQuotedFee || 0))
+                        : 0;
+                });
+                const shippingTotal = quotedFees.length > 0 ? Math.max(...quotedFees) : 0;
+                const chargedShipmentIndex = shippingTotal > 0 ? quotedFees.indexOf(shippingTotal) : -1;
+
+                shipments.forEach((shipment, index) => {
+                    const fee = index === chargedShipmentIndex ? shippingTotal : 0;
                     const feeNode = shipment.querySelector('[data-shipment-fee]');
 
-                    if (feeNode && select) {
+                    if (feeNode) {
                         feeNode.textContent = money(fee);
                     }
-
-                    shippingTotal += fee;
                 });
 
                 if (shippingTotalNode) {
@@ -407,21 +414,27 @@
                         return;
                     }
 
-                    let shippingTotal = 0;
-
-                    document.querySelectorAll('[data-shipping-shipment]').forEach((shipment) => {
+                    const shipments = Array.from(document.querySelectorAll('[data-shipping-shipment]'));
+                    const quotedFees = shipments.map((shipment) => {
+                        const chargeEnabled = shipment.dataset.shippingChargeEnabled === '1';
                         const extraFee = Number(shipment.dataset.extraFee || 0);
                         const select = shipment.querySelector('[data-shipping-carrier-select]');
                         const selectedOption = select?.selectedOptions?.[0];
                         const baseFee = Number(selectedOption?.dataset.baseFee || 0);
-                        const fee = baseFee + extraFee;
+                        return chargeEnabled
+                            ? (select ? baseFee + extraFee : Number(shipment.dataset.initialQuotedFee || 0))
+                            : 0;
+                    });
+                    const shippingTotal = quotedFees.length > 0 ? Math.max(...quotedFees) : 0;
+                    const chargedShipmentIndex = shippingTotal > 0 ? quotedFees.indexOf(shippingTotal) : -1;
+
+                    shipments.forEach((shipment, index) => {
+                        const fee = index === chargedShipmentIndex ? shippingTotal : 0;
                         const feeNode = shipment.querySelector('[data-shipment-fee]');
 
-                        if (feeNode && select) {
+                        if (feeNode) {
                             feeNode.textContent = money(fee);
                         }
-
-                        shippingTotal += select ? fee : Number(shipment.dataset.initialFee || 0);
                     });
 
                     if (! summary || ! shippingTotalNode || ! orderTotalNode) {

@@ -116,7 +116,7 @@ class SiteSettingResource extends Resource
             ])->visible(fn (): bool => auth()->user()?->isSuperAdmin() ?? false)->columns(2)->columnSpanFull(),
 
             Section::make('预售与物流')
-                ->description('预售商品未单独指定邮费仓库时，使用这里的默认仓库邮费模板。')
+                ->description('预售商品未单独指定仓库时，使用这里的默认仓库进行履约分配；该设置不会为未配置邮费的预售商品自动收费。')
                 ->schema([
                     Select::make('presale_default_warehouse_id')
                         ->label('预售默认仓库')
