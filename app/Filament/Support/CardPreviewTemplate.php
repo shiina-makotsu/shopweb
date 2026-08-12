@@ -221,7 +221,7 @@ JS);
                     let refreshTimer = null;
 
                     window.shopwebCardPreviewTemplateState ||= {};
-                    window.shopwebCardPreviewTemplateState[key] ||= { open: [] };
+                    window.shopwebCardPreviewTemplateState[key] ||= { open: [], pendingAddCount: null };
                     const state = window.shopwebCardPreviewTemplateState[key];
 
                     const eventElement = (event) => event.target instanceof Element ? event.target : event.target?.parentElement;
@@ -373,6 +373,34 @@ JS);
 
                             return ! parentItem || ! settings.contains(parentItem);
                         });
+                    const openAddedSettingItem = (root, previousCount) => {
+                        let attempts = 0;
+
+                        state.pendingAddCount = previousCount;
+
+                        const check = () => {
+                            const items = settingItems(root, { restoreVisibility: true });
+
+                            if (items.length > previousCount) {
+                                state.pendingAddCount = null;
+                                showItem(root, items[items.length - 1]);
+
+                                return;
+                            }
+
+                            attempts += 1;
+
+                            if (attempts < 600) {
+                                window.requestAnimationFrame(check);
+
+                                return;
+                            }
+
+                            state.pendingAddCount = null;
+                        };
+
+                        check();
+                    };
                     const settingItems = (root, options = {}) => {
                         const restoreVisibility = Boolean(options.restoreVisibility);
                         const settings = settingsFor(root);
@@ -430,6 +458,14 @@ JS);
                         setOpen(index, true);
                         markItemVisibility(item, true);
                         refreshSettingsVisibility(root, items);
+                    };
+                    const showPendingAddedItem = (root, items) => {
+                        const previousCount = state.pendingAddCount;
+
+                        if (! Number.isFinite(previousCount) || items.length <= previousCount) return;
+
+                        state.pendingAddCount = null;
+                        showItem(root, items[items.length - 1]);
                     };
                     const orderChanged = (root) => {
                         const original = originalOrder(root);
@@ -660,12 +696,12 @@ JS);
 
                         if (card.dataset.cardPreviewNew === '1' && card.dataset.cardPreviewVirtual === '1') {
                             const addButton = topLevelAddButton(settings);
-                            addButton?.click();
 
-                            window.setTimeout(() => {
-                                items = settingItems(root, { restoreVisibility: true });
-                                showItem(root, items[items.length - 1]);
-                            }, 250);
+                            if (! addButton || Number.isFinite(state.pendingAddCount)) return;
+
+                            const previousCount = settingItems(root).length;
+                            addButton?.click();
+                            openAddedSettingItem(root, previousCount);
 
                             return;
                         }
@@ -681,6 +717,7 @@ JS);
                     const initializeRoots = (options = {}) => roots().forEach((root) => {
                         movePlaceholdersLast(root);
                         const items = settingItems(root, options);
+                        showPendingAddedItem(root, items);
                         if (options.restoreVisibility) {
                             restoreSettingsVisibility(root, items);
                         } else if (options.updateContainer !== false) {
@@ -713,7 +750,11 @@ JS);
 
                     observer.observe(document.body, { childList: true, subtree: true });
                     document.addEventListener('livewire:init', () => scheduleRefresh());
-                    document.addEventListener('livewire:navigated', () => scheduleRefresh());
+                    document.addEventListener('livewire:navigated', () => {
+                        state.open = [];
+                        state.pendingAddCount = null;
+                        scheduleRefresh();
+                    });
                     document.addEventListener('livewire:update', () => {
                         scheduleRestore();
                         restoreScroll();

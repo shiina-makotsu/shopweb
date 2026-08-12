@@ -1,5 +1,6 @@
 <?php
 
+use App\Filament\Resources\ProductResource\Pages\CreateProduct;
 use App\Filament\Resources\ProductResource\Pages\EditProduct;
 use App\Filament\Resources\ReferralRewardRuleResource;
 use App\Filament\Resources\FlashSaleCampaignResource\Pages\CreateFlashSaleCampaign;
@@ -2414,6 +2415,64 @@ it('saves multiple sku rows with independent image links from the admin product 
         ->and(ProductVariant::query()->where('sku', 'ADMIN-SKU-WHITE-M')->first()?->price_cents)->toBe(1990)
         ->and(ProductVariant::query()->where('sku', 'ADMIN-SKU-BLACK-L')->first()?->specs)->toBe(['颜色' => '黑色', '尺码' => 'L'])
         ->and($product->media()->first()?->path)->toBe('https://cdn.example.com/product-main.jpg');
+});
+
+it('creates a product with a newly added sku and exposes its specification on the storefront', function (): void {
+    $this->seed();
+
+    $admin = User::factory()->create(['role' => 'admin']);
+    $category = Category::query()->firstOrFail();
+
+    $component = Livewire::actingAs($admin)
+        ->test(CreateProduct::class)
+        ->assertSee('SKU 卡片预览')
+        ->assertDontSee('data-card-preview-setting-item-product-sku="0"', false);
+
+    expect($component->get('data.variants'))->toBe([]);
+
+    $component->call('mountAction', 'add', [], ['schemaComponent' => 'form.variants']);
+
+    $variantKey = array_key_first($component->get('data.variants'));
+
+    expect($variantKey)->not->toBeNull()
+        ->and($component->get('data.variants'))->toHaveCount(1);
+
+    $component
+        ->fillForm([
+            'category_id' => $category->id,
+            'title' => '创建页新增 SKU 商品',
+            'slug' => 'create-page-new-sku-product',
+            'status' => Product::STATUS_PUBLISHED,
+            'fulfillment_type' => Product::FULFILLMENT_ONLINE,
+            'variants' => [
+                $variantKey => [
+                    'sku' => 'CREATE-SKU-NEW',
+                    'spec_name' => '新规格 20mg',
+                    'specs' => ['含量' => '20mg'],
+                    'price_cents' => '12.50',
+                    'stock' => 8,
+                    'low_stock_threshold' => 2,
+                    'is_active' => true,
+                ],
+            ],
+        ])
+        ->call('create')
+        ->assertHasNoFormErrors()
+        ->assertNotified();
+
+    $product = Product::query()->where('slug', 'create-page-new-sku-product')->firstOrFail();
+    $variant = $product->variants()->where('sku', 'CREATE-SKU-NEW')->firstOrFail();
+
+    expect($product->variants()->count())->toBe(1)
+        ->and($variant->spec_name)->toBe('新规格 20mg')
+        ->and($variant->specs)->toBe(['含量' => '20mg'])
+        ->and($variant->price_cents)->toBe(1250);
+
+    $this->get(route('products.show', $product))
+        ->assertOk()
+        ->assertSee('新规格 20mg')
+        ->assertSee('含量')
+        ->assertSee('20mg');
 });
 
 it('shows media library upload pickers beside product image inputs', function (): void {

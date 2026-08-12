@@ -225,7 +225,7 @@ class ProductResource extends Resource
                             ->columnSpan(1),
                     ])
                     ->columns(2)
-                    ->defaultItems(1)
+                    ->defaultItems(0)
                     ->itemLabel(fn (array $state): ?string => filled($state['spec_name'] ?? null)
                         ? (string) $state['spec_name']
                         : (filled($state['sku'] ?? null) ? (string) $state['sku'] : null))
@@ -334,13 +334,10 @@ class ProductResource extends Resource
     private static function productSkuPreviewHtml(array $variants): HtmlString
     {
         $states = collect($variants)->values();
-        $blankIndex = $states->search(fn (array $state): bool => static::isBlankProductSkuState($state));
         $cards = $states
-            ->reject(fn (array $state): bool => static::isBlankProductSkuState($state))
             ->map(fn (array $state, int $index): string => static::productSkuPreviewCardHtml($state, $index))
             ->implode('');
-        $newIndex = $blankIndex === false ? $states->count() : (int) $blankIndex;
-        $cards .= static::productSkuPreviewCardHtml(static::emptyProductSkuState(), $newIndex, true, $blankIndex === false);
+        $cards .= static::productSkuPreviewCardHtml(static::emptyProductSkuState(), $states->count(), true, true);
 
         $preview = CardPreviewTemplate::render([
             'key' => 'product-sku',
