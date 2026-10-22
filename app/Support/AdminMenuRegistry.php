@@ -17,6 +17,7 @@ use App\Filament\Pages\ProfitOverviewPage;
 use App\Filament\Pages\ReportsPage;
 use App\Filament\Pages\StoreInfoPage;
 use App\Filament\Pages\SupportAiSettingsPage;
+use App\Filament\Pages\TelegramBotSettingsPage;
 use App\Filament\Pages\SystemInfoPage;
 use App\Filament\Pages\UserAiPage;
 use App\Filament\Pages\WalletSettingsPage;
@@ -81,6 +82,7 @@ class AdminMenuRegistry
             ReportsPage::class,
             StoreInfoPage::class,
             SupportAiSettingsPage::class,
+            TelegramBotSettingsPage::class,
             SystemInfoPage::class,
             UserAiPage::class,
             WalletSettingsPage::class,

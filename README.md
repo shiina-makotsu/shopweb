@@ -234,5 +234,6 @@ chmod +x start-linux.sh
 - [DEPLOY.md](DEPLOY.md)：部署、服务器配置和 Release 包说明。
 - [docs/requirements.md](docs/requirements.md)：功能需求、已实现状态和后续规划。
 - [docs/runbooks.md](docs/runbooks.md)：数据库、CDN、支付通道、第三方接口、缓存预热和告警分级预案。
+- [docs/telegram-bot.md](docs/telegram-bot.md)：Telegram 绑定、订单通知、客服接待和排队配置。
 - [docs/about-us.md](docs/about-us.md)：关于我们页面示例 Markdown。
 - [docs/nginx.conf.example](docs/nginx.conf.example)：Nginx 配置示例。

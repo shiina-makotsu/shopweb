@@ -4,13 +4,24 @@ namespace App\Providers;
 
 use App\Models\Category;
 use App\Models\NavigationMenuItem;
+use App\Models\Order;
 use App\Models\Page;
 use App\Models\SiteSetting;
+use App\Models\SupportChatMessage;
+use App\Models\SupportChatSession;
+use App\Models\User;
+use App\Models\WalletTransaction;
+use App\Observers\TelegramOrderObserver;
+use App\Observers\TelegramSupportObserver;
+use App\Observers\TelegramUserObserver;
+use App\Observers\TelegramWalletObserver;
 use App\Services\AdminLoginLogger;
 use App\Services\DatabaseMigrationHealth;
 use App\Services\StorefrontCache;
+use App\Services\TelegramTransport;
 use App\Support\RelativeUrlRewriter;
 use App\Support\StorefrontViewData;
+use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Illuminate\Auth\Events\Failed;
 use Illuminate\Auth\Events\Login;
@@ -34,6 +45,20 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        Order::observe(TelegramOrderObserver::class);
+        WalletTransaction::observe(TelegramWalletObserver::class);
+        SupportChatMessage::observe(TelegramSupportObserver::class);
+        SupportChatSession::observe(TelegramSupportObserver::class);
+        User::observe(TelegramUserObserver::class);
+        $this->app->terminating(function (): void {
+            try {
+                if (\Illuminate\Support\Facades\Schema::hasTable('telegram_outbox')) {
+                    app(TelegramTransport::class)->flush(20, 5);
+                }
+            } catch (Throwable) {
+                Log::warning('Telegram 通知暂未发送，稍后由定时任务重试。');
+            }
+        });
         $this->ensureRuntimeStoragePaths();
         $this->autoRepairDatabaseSchema();
         $this->configureFilamentActions();
@@ -82,7 +107,7 @@ class AppServiceProvider extends ServiceProvider
         CreateAction::configureUsing(function (CreateAction $action): void {
             $action
                 ->modalSubmitActionLabel('保存')
-                ->createAnotherAction(function (\Filament\Actions\Action $createAnotherAction) use ($action): \Filament\Actions\Action {
+                ->createAnotherAction(function (Action $createAnotherAction) use ($action): Action {
                     return $createAnotherAction->label('保存并创建新'.($action->getModelLabel() ?: '记录'));
                 });
         });

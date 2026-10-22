@@ -1,7 +1,7 @@
 <?php
 
-use App\Http\Controllers\Admin\BackupController;
 use App\Http\Controllers\Admin\AdminNotificationController;
+use App\Http\Controllers\Admin\BackupController;
 use App\Http\Controllers\Admin\CsvExportController;
 use App\Http\Controllers\Admin\CustomerQuickUpdateController;
 use App\Http\Controllers\Admin\OrderQuickShippingController;
@@ -10,8 +10,8 @@ use App\Http\Controllers\Admin\ProductQuickUpdateController;
 use App\Http\Controllers\Admin\ReportExportController;
 use App\Http\Controllers\AfterSalesController;
 use App\Http\Controllers\AiImageController;
-use App\Http\Controllers\AnnouncementController;
 use App\Http\Controllers\AnnouncementCommentController;
+use App\Http\Controllers\AnnouncementController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\CartController;
@@ -33,11 +33,14 @@ use App\Http\Controllers\ProductPreferenceController;
 use App\Http\Controllers\SearchController;
 use App\Http\Controllers\ShipmentController;
 use App\Http\Controllers\SupportTicketController;
+use App\Http\Controllers\TelegramWebhookController;
 use App\Http\Controllers\UserCenterController;
 use App\Http\Controllers\UserNotificationController;
 use App\Http\Controllers\UserProfileController;
 use App\Http\Controllers\VoteController;
 use Illuminate\Support\Facades\Route;
+
+Route::post('/telegram/webhook', TelegramWebhookController::class)->name('telegram.webhook');
 
 Route::get('/install', [InstallController::class, 'show'])->name('install.show');
 Route::post('/install/check-database', [InstallController::class, 'checkDatabase'])->name('install.check-database');

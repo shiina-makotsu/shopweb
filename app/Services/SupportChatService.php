@@ -2,10 +2,10 @@
 
 namespace App\Services;
 
+use App\Models\SiteSetting;
 use App\Models\SupportChatMessage;
 use App\Models\SupportChatSession;
 use App\Models\SupportQuickReply;
-use App\Models\SiteSetting;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -18,12 +18,24 @@ class SupportChatService
             return;
         }
 
-        $session->forceFill([
-            'assigned_admin_id' => $admin->id,
-            'status' => SupportChatSession::STATUS_ACTIVE,
-            'ended_at' => null,
-            'deleted_by_customer_at' => null,
-        ])->save();
+        DB::transaction(function () use ($session, $admin): void {
+            SiteSetting::query()->lockForUpdate()->first();
+            $locked = SupportChatSession::query()->lockForUpdate()->findOrFail($session->id);
+            if ($locked->isClosed()) {
+                throw ValidationException::withMessages(['message' => '该会话已关闭。']);
+            }
+            if ($locked->status === SupportChatSession::STATUS_ACTIVE && $locked->assigned_admin_id && $locked->assigned_admin_id !== $admin->id) {
+                throw ValidationException::withMessages(['message' => '该会话已由其他客服接待。']);
+            }
+            $locked->forceFill([
+                'assigned_admin_id' => $admin->id,
+                'status' => SupportChatSession::STATUS_ACTIVE,
+                'ended_at' => null,
+                'deleted_by_customer_at' => null,
+                'telegram_queued_at' => null,
+            ])->save();
+        }, 3);
+        $session->refresh();
     }
 
     /**
@@ -35,8 +47,22 @@ class SupportChatService
         ?string $message,
         array $attachment = [],
         ?SupportQuickReply $quickReply = null,
-    ): SupportChatMessage
-    {
+    ): SupportChatMessage {
+        return DB::transaction(function () use ($session, $admin, $message, $attachment, $quickReply): SupportChatMessage {
+            SiteSetting::query()->lockForUpdate()->first();
+            $locked = SupportChatSession::query()->lockForUpdate()->findOrFail($session->id);
+
+            return $this->replyLocked($locked, $admin, $message, $attachment, $quickReply);
+        }, 3);
+    }
+
+    private function replyLocked(
+        SupportChatSession $session,
+        User $admin,
+        ?string $message,
+        array $attachment,
+        ?SupportQuickReply $quickReply,
+    ): SupportChatMessage {
         if ($session->isClosed()) {
             throw ValidationException::withMessages([
                 'message' => '该会话窗口已被用户关闭，不能继续回复。',
@@ -143,6 +169,7 @@ class SupportChatService
             ->orderBy('id')
             ->each(function (SupportQuickReply $reply) use ($session): void {
                 DB::transaction(function () use ($session, $reply): void {
+                    SiteSetting::query()->lockForUpdate()->first();
                     $lockedSession = SupportChatSession::query()->lockForUpdate()->find($session->id);
 
                     if (! $lockedSession || $lockedSession->isClosed() || $lockedSession->isEnded()) {
@@ -204,33 +231,31 @@ class SupportChatService
 
     public function end(SupportChatSession $session, ?User $admin = null): void
     {
-        if ($session->isClosed()) {
-            return;
-        }
-
-        if ($admin && ! $session->assigned_admin_id) {
-            $session->assigned_admin_id = $admin->id;
-        }
-
-        $session->forceFill([
-            'status' => SupportChatSession::STATUS_ENDED,
-            'ended_at' => now(),
-            'served_count' => $session->served_count + 1,
-        ])->save();
+        $this->finish($session, false, $admin);
     }
 
     public function closeByCustomer(SupportChatSession $session): void
     {
-        if ($session->isClosed()) {
-            return;
-        }
+        $this->finish($session, true);
+    }
 
-        $session->forceFill([
-            'status' => SupportChatSession::STATUS_CLOSED,
-            'ended_at' => now(),
-            'deleted_by_customer_at' => now(),
-            'served_count' => $session->served_count + 1,
-        ])->save();
+    private function finish(SupportChatSession $session, bool $close, ?User $admin = null): void
+    {
+        DB::transaction(function () use ($session, $close, $admin): void {
+            SiteSetting::query()->lockForUpdate()->first();
+            $locked = SupportChatSession::query()->lockForUpdate()->findOrFail($session->id);
+            if ($locked->isClosed() || (! $close && $locked->isEnded())) {
+                return;
+            }
+            $locked->forceFill([
+                'assigned_admin_id' => $locked->assigned_admin_id ?: $admin?->id,
+                'status' => $close ? SupportChatSession::STATUS_CLOSED : SupportChatSession::STATUS_ENDED,
+                'ended_at' => now(),
+                'deleted_by_customer_at' => $close ? now() : null,
+                'served_count' => $locked->served_count + ($locked->isEnded() ? 0 : 1),
+            ])->save();
+        }, 3);
+        $session->refresh();
     }
 
     public function comfortIfIdle(SupportChatSession $session): void

@@ -11,14 +11,16 @@ use App\Models\SupportTicket;
 use App\Services\ChatAttachmentService;
 use App\Services\SupportChatService;
 use App\Services\SupportNotificationService;
+use App\Support\AdminAccess;
 use App\Support\Money;
 use App\Support\OrderStatusPresenter;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -42,10 +44,17 @@ class SupportTicketController extends Controller
     {
         $order = $this->selectedOrder($request, $request->input('order_id'));
         $product = $this->selectedProduct($request);
-        $session = $this->createSession($request, $order);
+        $message = null;
+        $session = DB::transaction(function () use ($request, $order, $product, &$message): SupportChatSession {
+            SiteSetting::query()->lockForUpdate()->first();
+            $session = $this->createSession($request, $order);
+            if ($product) {
+                $message = $this->sendProductContextMessage($request, $session, $product);
+            }
 
-        if ($product) {
-            $message = $this->sendProductContextMessage($request, $session, $product);
+            return $session;
+        }, 3);
+        if ($message) {
             app(SupportNotificationService::class)->notifyPendingMessage($session->fresh(), $message);
         }
 
@@ -96,46 +105,54 @@ class SupportTicketController extends Controller
 
         abort_if($body === null && ! $request->hasFile('attachment'), 422);
 
-        $session = $this->sessionForMessage($request, $data['support_chat_session_id'] ?? null, $order);
-        $wasEnded = $session->endIfIdle() || $session->isEnded();
+        $message = null;
+        $session = DB::transaction(function () use ($request, $data, $order, $body, $chat, &$message): SupportChatSession {
+            SiteSetting::query()->lockForUpdate()->first();
+            $session = $this->sessionForMessage($request, $data['support_chat_session_id'] ?? null, $order);
+            $session = SupportChatSession::query()->lockForUpdate()->findOrFail($session->id);
+            $wasEnded = $session->endIfIdle() || $session->isEnded();
 
-        abort_if($session->isClosed(), 403);
+            abort_if($session->isClosed(), 403);
 
-        if ($wasEnded) {
-            $session->forceFill([
-                'status' => SupportChatSession::STATUS_OPEN,
-                'ended_at' => null,
+            if ($wasEnded) {
+                $session->forceFill([
+                    'status' => SupportChatSession::STATUS_OPEN,
+                    'assigned_admin_id' => null,
+                    'telegram_admin_id' => null,
+                    'ended_at' => null,
+                    'deleted_by_customer_at' => null,
+                ])->save();
+            }
+
+            if (($data['guest_email'] ?? null) && ! $request->user()) {
+                $session->update(['guest_email' => $data['guest_email']]);
+            }
+
+            if ($order && ! $session->order_id) {
+                $session->update(['order_id' => $order->id]);
+            }
+
+            $attachment = $this->storeAttachment($request, $session);
+
+            $message = $session->messages()->create([
+                'sender_user_id' => $request->user()?->id,
+                'sender_type' => $request->user() ? SupportChatMessage::SENDER_CUSTOMER : SupportChatMessage::SENDER_GUEST,
+                'body' => $body,
+                ...$attachment,
+            ]);
+
+            if (filled($body)) {
+                $chat->applyQuickReplyRules($session, (string) $body);
+            }
+
+            $session->update([
+                'status' => $session->assigned_admin_id ? SupportChatSession::STATUS_ACTIVE : SupportChatSession::STATUS_OPEN,
+                'last_message_at' => now(),
                 'deleted_by_customer_at' => null,
-            ])->save();
-        }
+            ]);
 
-        if (($data['guest_email'] ?? null) && ! $request->user()) {
-            $session->update(['guest_email' => $data['guest_email']]);
-        }
-
-        if ($order && ! $session->order_id) {
-            $session->update(['order_id' => $order->id]);
-        }
-
-        $attachment = $this->storeAttachment($request, $session);
-
-        $message = $session->messages()->create([
-            'sender_user_id' => $request->user()?->id,
-            'sender_type' => $request->user() ? SupportChatMessage::SENDER_CUSTOMER : SupportChatMessage::SENDER_GUEST,
-            'body' => $body,
-            ...$attachment,
-        ]);
-
-        if (filled($body)) {
-            $chat->applyQuickReplyRules($session, (string) $body);
-        }
-
-        $session->update([
-            'status' => $session->assigned_admin_id ? SupportChatSession::STATUS_ACTIVE : SupportChatSession::STATUS_OPEN,
-            'last_message_at' => now(),
-            'deleted_by_customer_at' => null,
-        ]);
-
+            return $session;
+        }, 3);
         $notifications->notifyPendingMessage($session->fresh(), $message);
 
         return redirect()
@@ -180,20 +197,20 @@ class SupportTicketController extends Controller
     {
         $message->loadMissing('session');
 
-        if ($request->user()?->isBackofficeUser()) {
-            $disk = Storage::disk('support_attachments');
-            abort_unless($message->attachment_path && $disk->exists($message->attachment_path), 404);
-
-            return $disk->response($message->attachment_path, $message->attachment_original_name);
+        if (! AdminAccess::can('support', $request->user())) {
+            $this->authorizeSession($request, $message->session);
         }
-
-        $this->authorizeSession($request, $message->session);
 
         abort_unless($message->attachment_path, 404);
         $disk = Storage::disk('support_attachments');
         abort_unless($disk->exists($message->attachment_path), 404);
 
-        return $disk->response($message->attachment_path, $message->attachment_original_name);
+        $mime = $disk->mimeType($message->attachment_path) ?: 'application/octet-stream';
+        $headers = ['Content-Type' => $mime, 'X-Content-Type-Options' => 'nosniff'];
+
+        return in_array($mime, ['image/jpeg', 'image/png', 'image/gif', 'image/webp'], true)
+            ? $disk->response($message->attachment_path, $message->attachment_original_name, $headers)
+            : $disk->download($message->attachment_path, $message->attachment_original_name, $headers);
     }
 
     public function demand(Request $request): View
@@ -483,7 +500,7 @@ TEXT);
     private function authorizeSession(Request $request, SupportChatSession $session): void
     {
         if ($request->user()) {
-            abort_unless($session->user_id === $request->user()->id || $request->user()->isBackofficeUser(), 403);
+            abort_unless($session->user_id === $request->user()->id || AdminAccess::can('support', $request->user()), 403);
 
             return;
         }

@@ -5,7 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\AfterSalesRequest;
 use App\Models\Order;
 use App\Models\SiteSetting;
+use App\Services\BackofficeApprovalService;
+use App\Services\WalletService;
 use App\Support\Money;
+use App\Support\MoneyInput;
 use App\Support\OrderPrivacy;
 use App\Support\OrderStatusPresenter;
 use Illuminate\Http\RedirectResponse;
@@ -29,6 +32,7 @@ class AfterSalesController extends Controller
             'order' => $order->load(['items', 'afterSalesRequests']),
             'settings' => SiteSetting::query()->first(),
             'privacy' => $privacy,
+            'walletRefundableCents' => app(WalletService::class)->refundableOrderCents($order),
         ]);
     }
 
@@ -37,19 +41,30 @@ class AfterSalesController extends Controller
         $this->authorizeOrder($request, $order);
 
         $data = $request->validate([
-            'type' => ['required', 'in:refund,repair,shipping,other'],
+            'type' => ['required', 'in:refund,wallet_refund,repair,shipping,other'],
             'subject' => ['required', 'string', 'max:120'],
             'message' => ['required', 'string', 'max:3000'],
+            'refund_amount' => ['nullable', 'required_if:type,wallet_refund', 'numeric', 'decimal:0,2', 'min:0.01', 'max:21474836.47'],
         ]);
 
-        AfterSalesRequest::query()->create([
-            'user_id' => $request->user()->id,
-            'order_id' => $order->id,
-            'type' => $data['type'],
-            'status' => AfterSalesRequest::STATUS_OPEN,
-            'subject' => $data['subject'],
-            'message' => $data['message'],
-        ]);
+        if ($data['type'] === 'wallet_refund') {
+            app(BackofficeApprovalService::class)->requestWalletRefund(
+                $order,
+                $request->user(),
+                MoneyInput::toCents($data['refund_amount']),
+                $data['subject'],
+                $data['message'],
+            );
+        } else {
+            AfterSalesRequest::query()->create([
+                'user_id' => $request->user()->id,
+                'order_id' => $order->id,
+                'type' => $data['type'],
+                'status' => AfterSalesRequest::STATUS_OPEN,
+                'subject' => $data['subject'],
+                'message' => $data['message'],
+            ]);
+        }
 
         return redirect()
             ->route('orders.after-sales', $order)

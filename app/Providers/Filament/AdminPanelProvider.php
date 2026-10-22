@@ -27,6 +27,7 @@ use App\Filament\Pages\ProductDiscountPage;
 use App\Filament\Pages\ReportsPage;
 use App\Filament\Pages\StoreInfoPage;
 use App\Filament\Pages\SupportAiSettingsPage;
+use App\Filament\Pages\TelegramBotSettingsPage;
 use App\Filament\Pages\SystemInfoPage;
 use App\Filament\Pages\UserAiPage;
 use App\Filament\Pages\WalletSettingsPage;
@@ -99,6 +100,7 @@ class AdminPanelProvider extends PanelProvider
                 ReportsPage::class,
                 StoreInfoPage::class,
                 SupportAiSettingsPage::class,
+                TelegramBotSettingsPage::class,
                 SystemInfoPage::class,
                 UserAiPage::class,
                 WalletSettingsPage::class,

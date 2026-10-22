@@ -1,5 +1,6 @@
 <x-layouts.app title="我的订单">
     @php($statusPresenter = app(\App\Support\OrderStatusPresenter::class))
+    @php($walletRefundMode = request()->query('type') === 'wallet_refund')
 
     <section class="rounded-sm border border-slate-300 bg-white">
         <div class="border-b border-slate-200 bg-slate-100 px-4 py-3">
@@ -49,7 +50,7 @@
                                                 <button class="rounded-sm border border-emerald-700 px-3 py-2 text-xs font-medium text-emerald-800 hover:bg-emerald-50" type="submit">确认收货</button>
                                             </form>
                                         @endif
-                                        <a href="{{ route('orders.after-sales', $order) }}" class="rounded-sm border border-slate-300 px-3 py-2 text-xs font-medium hover:bg-slate-50">售后</a>
+                                        <a href="{{ route('orders.after-sales', ['order' => $order] + ($walletRefundMode ? ['type' => 'wallet_refund'] : [])) }}" class="rounded-sm border border-slate-300 px-3 py-2 text-xs font-medium hover:bg-slate-50">{{ $walletRefundMode && $order->payment_status === \App\Models\Order::PAYMENT_CONFIRMED && ! $order->isWalletRecharge() ? '退款到钱包' : '售后' }}</a>
                                         <form method="post" action="{{ route('orders.contact-support', $order) }}">
                                             @csrf
                                             <button class="rounded-sm border border-slate-300 px-3 py-2 text-xs font-medium hover:bg-slate-50" type="submit">联系客服</button>
@@ -66,7 +67,7 @@
                     </tbody>
                 </table>
             </div>
-            <div class="border-t border-slate-200 px-4 py-3">{{ $orders->links() }}</div>
+            <div class="border-t border-slate-200 px-4 py-3">{{ $orders->appends($walletRefundMode ? ['type' => 'wallet_refund'] : [])->links() }}</div>
         @endif
     </section>
 </x-layouts.app>

@@ -8,12 +8,19 @@ use Illuminate\Support\Facades\Auth;
 class AdminAccess
 {
     public const ROLE_ADMIN = 'admin';
+
     public const ROLE_OPERATOR = 'operator';
+
     public const ROLE_FINANCE = 'finance';
+
     public const ROLE_WAREHOUSE = 'warehouse';
+
     public const ROLE_SALES = 'sales';
+
     public const ROLE_PURCHASING = 'purchasing';
+
     public const ROLE_SUPPORT = 'support';
+
     public const ROLE_CUSTOMER = 'customer';
 
     /**
@@ -90,6 +97,9 @@ class AdminAccess
     public static function actionRoles(string $action): array
     {
         return match ($action) {
+            'wallet.adjust' => [
+                self::ROLE_FINANCE,
+            ],
             'orders.confirm_payment', 'orders.reject_payment' => [
                 self::ROLE_FINANCE,
             ],

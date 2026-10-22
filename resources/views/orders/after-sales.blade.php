@@ -1,5 +1,9 @@
 <x-layouts.app title="售后需求">
-    @php($statusPresenter = app(\App\Support\OrderStatusPresenter::class))
+    @php
+        $statusPresenter = app(\App\Support\OrderStatusPresenter::class);
+        $canRequestWalletRefund = $order->payment_status === \App\Models\Order::PAYMENT_CONFIRMED && ! $order->isWalletRecharge() && $walletRefundableCents > 0;
+        $selectedRequestType = old('type', request()->query('type') === 'wallet_refund' && $canRequestWalletRefund ? 'wallet_refund' : 'refund');
+    @endphp
 
     <section class="grid gap-4 lg:grid-cols-[1fr_360px]">
         <div class="space-y-4">
@@ -72,6 +76,16 @@
                                     </span>
                                 </div>
                                 <p class="mt-3 whitespace-pre-line text-slate-700">{{ $requestItem->message }}</p>
+                                @if($requestItem->refund_status)
+                                    <p class="mt-2 text-sm font-medium">
+                                        退款到钱包：@money((int) $requestItem->refund_amount_cents)
+                                        / {{ match($requestItem->refund_status) {
+                                            'approved' => '已同意',
+                                            'rejected' => '已驳回',
+                                            default => '待审批',
+                                        } }}
+                                    </p>
+                                @endif
                                 @if($requestItem->admin_note)
                                     <div class="mt-3 rounded-sm border border-emerald-200 bg-emerald-50 px-3 py-3 text-emerald-900">
                                         <p class="font-medium">处理留言</p>
@@ -89,16 +103,26 @@
             <div class="border-b border-slate-200 bg-slate-100 px-4 py-3">
                 <h2 class="text-base font-semibold">提交售后需求</h2>
             </div>
-            <form method="post" action="{{ route('orders.after-sales.store', $order) }}" class="space-y-3 px-4 py-4 text-sm">
+            <form method="post" action="{{ route('orders.after-sales.store', $order) }}" class="space-y-3 px-4 py-4 text-sm" x-data="{ type: @js($selectedRequestType) }">
                 @csrf
                 <label class="block">
                     <span class="font-medium">类型</span>
-                    <select class="mt-1 w-full rounded-sm border border-slate-300 bg-white px-3 py-2" name="type" required>
-                        <option value="refund">退款</option>
-                        <option value="repair">补发/维修</option>
-                        <option value="shipping">物流问题</option>
-                        <option value="other">其他</option>
+                    <select class="mt-1 w-full rounded-sm border border-slate-300 bg-white px-3 py-2" name="type" x-model="type" required>
+                        <option value="refund" @selected($selectedRequestType === 'refund')>退款</option>
+                        @if($canRequestWalletRefund)
+                            <option value="wallet_refund" @selected($selectedRequestType === 'wallet_refund')>退款到钱包</option>
+                        @endif
+                        <option value="repair" @selected($selectedRequestType === 'repair')>补发/维修</option>
+                        <option value="shipping" @selected($selectedRequestType === 'shipping')>物流问题</option>
+                        <option value="other" @selected($selectedRequestType === 'other')>其他</option>
                     </select>
+                </label>
+                <label class="block" x-show="type === 'wallet_refund'" x-cloak>
+                    <span class="font-medium">退款金额</span>
+                    <input class="mt-1 w-full rounded-sm border border-slate-300 px-3 py-2" type="number" name="refund_amount" value="{{ old('refund_amount') }}" min="0.01" max="{{ number_format($walletRefundableCents / 100, 2, '.', '') }}" step="0.01" inputmode="decimal" :required="type === 'wallet_refund'" :disabled="type !== 'wallet_refund'">
+                    @error('refund_amount')<span class="mt-1 block text-xs text-red-600">{{ $message }}</span>@enderror
+                    @error('refund_amount_cents')<span class="mt-1 block text-xs text-red-600">{{ $message }}</span>@enderror
+                    @error('order_id')<span class="mt-1 block text-xs text-red-600">{{ $message }}</span>@enderror
                 </label>
                 <label class="block">
                     <span class="font-medium">主题</span>

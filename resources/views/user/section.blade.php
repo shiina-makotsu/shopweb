@@ -809,6 +809,11 @@
                     </div>
                 </section>
 
+                <section class="flex flex-wrap items-center justify-between gap-2 text-sm">
+                    <p class="text-slate-600">选择订单后提交退款到钱包申请</p>
+                    <a class="font-medium text-blue-700 hover:text-blue-900" href="{{ route('orders.index', ['type' => 'wallet_refund']) }}">申请订单退款</a>
+                </section>
+
                 @if($walletRechargeOptions->isNotEmpty())
                     <section class="rounded-sm border border-slate-300">
                         <h2 class="border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold">充值选项</h2>
@@ -848,7 +853,7 @@
                                 @forelse($walletTransactions as $transaction)
                                     <tr>
                                         <td class="px-4 py-3 text-slate-700">{{ $transaction->created_at?->format('Y-m-d H:i') }}</td>
-                                        <td class="px-4 py-3 text-slate-700">{{ $transaction->source }}</td>
+                                        <td class="px-4 py-3 text-slate-700">{{ \App\Models\WalletTransaction::sourceLabels()[$transaction->source] ?? $transaction->source }}</td>
                                         <td class="px-4 py-3 text-right font-medium {{ (int) $transaction->amount_cents >= 0 ? 'text-emerald-700' : 'text-red-700' }}">
                                             {{ (int) $transaction->amount_cents >= 0 ? '+' : '-' }}@money(abs((int) $transaction->amount_cents))
                                         </td>

@@ -45,6 +45,12 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
         'can_view_order_numbers',
         'can_view_tracking_numbers',
         'support_email_notifications_enabled',
+        'telegram_user_id',
+        'telegram_chat_id',
+        'telegram_username',
+        'telegram_notifications_enabled',
+        'telegram_max_chat_windows',
+        'telegram_active_support_session_id',
         'ai_quota_k',
         'ai_usage_reset_at',
         'wallet_balance_cents',
@@ -59,6 +65,10 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
     protected $hidden = [
         'password',
         'remember_token',
+        'telegram_user_id',
+        'telegram_chat_id',
+        'telegram_username',
+        'telegram_active_support_session_id',
     ];
 
     protected function casts(): array
@@ -72,6 +82,11 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
             'can_view_order_numbers' => 'boolean',
             'can_view_tracking_numbers' => 'boolean',
             'support_email_notifications_enabled' => 'boolean',
+            'telegram_user_id' => 'string',
+            'telegram_chat_id' => 'string',
+            'telegram_notifications_enabled' => 'boolean',
+            'telegram_max_chat_windows' => 'integer',
+            'telegram_active_support_session_id' => 'integer',
             'birthday' => 'date',
             'has_diagnosis_certificate' => 'boolean',
             'ai_usage_reset_at' => 'datetime',
@@ -82,6 +97,14 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
     protected static function booted(): void
     {
         static::saving(function (User $user): void {
+            if ($user->isDirty('telegram_user_id')) {
+                $user->forceFill([
+                    'telegram_chat_id' => null,
+                    'telegram_username' => null,
+                    'telegram_active_support_session_id' => null,
+                ]);
+            }
+
             if (! $user->exists && blank($user->public_id)) {
                 return;
             }

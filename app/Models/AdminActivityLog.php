@@ -30,6 +30,10 @@ class AdminActivityLog extends Model
         'order_quick_shipping_updated' => '后台补充物流',
         'customers_csv_imported' => '导入前台用户 CSV',
         'products_csv_imported' => '导入商品/SKU CSV',
+        'wallet_balance_credited' => '后台增加钱包余额',
+        'wallet_balance_debited' => '后台扣减钱包余额',
+        'order_refunded_to_wallet' => '后台订单退款到钱包',
+        'support.telegram_accept' => '通过 Telegram 接受客服会话',
     ];
 
     private const PROPERTY_LABELS = [
@@ -76,6 +80,12 @@ class AdminActivityLog extends Model
         'digital_delivery_content' => '线上交付内容',
         'digital_delivery_code' => '线上交付码',
         'digital_delivery_attachment_paths' => '线上交付附件',
+        'customer_user_id' => '钱包用户 ID',
+        'wallet_transaction_id' => '钱包流水 ID',
+        'after_sales_request_id' => '售后记录 ID',
+        'amount_cents' => '变动金额（分）',
+        'balance_before_cents' => '变动前余额（分）',
+        'balance_after_cents' => '变动后余额（分）',
     ];
 
     protected $fillable = [

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\AfterSalesRequest;
 use App\Models\Coupon;
 use App\Models\Order;
 use App\Models\OrderItem;
@@ -10,8 +11,11 @@ use App\Models\UserCoupon;
 use App\Models\WalletRechargeOption;
 use App\Models\WalletRedeemCode;
 use App\Models\WalletTransaction;
+use App\Support\AdminAccess;
+use App\Support\Money;
 use App\Support\MoneyInput;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class WalletService
@@ -148,34 +152,167 @@ class WalletService
 
     public function refundOrderPayment(Order $order, int $refundAmountCents, ?User $actor = null, ?string $note = null): ?WalletTransaction
     {
-        $walletPaidCents = (int) $order->wallet_payment_cents;
+        return DB::transaction(function () use ($order, $refundAmountCents, $actor, $note): ?WalletTransaction {
+            $order = Order::query()->lockForUpdate()->findOrFail($order->id);
+            $amountCents = min(
+                max(0, (int) $order->wallet_payment_cents - $this->refundedOrderCents($order, true)),
+                $refundAmountCents,
+            );
 
-        if ($walletPaidCents <= 0 || $refundAmountCents <= 0) {
-            return null;
+            if ($amountCents <= 0) {
+                return null;
+            }
+
+            return $this->credit(
+                $order->user,
+                $amountCents,
+                WalletTransaction::SOURCE_ORDER_REFUND,
+                $note ?: '订单退款退回钱包：'.$order->order_number,
+                $actor,
+                null,
+                $order,
+            );
+        });
+    }
+
+    public function refundableOrderCents(Order $order, bool $lock = false): int
+    {
+        $paidCents = (int) $order->wallet_payment_cents;
+
+        if ($order->payment_status === Order::PAYMENT_CONFIRMED) {
+            $paidCents += (int) $order->total_cents;
         }
 
-        $alreadyRefunded = (int) WalletTransaction::query()
+        return max(0, $paidCents - $this->refundedOrderCents($order, $lock));
+    }
+
+    public function refundAfterSalesRequest(AfterSalesRequest $request, User $actor): WalletTransaction
+    {
+        abort_unless(AdminAccess::canAction('after_sales.refund', $actor), 403);
+
+        return DB::transaction(function () use ($request, $actor): WalletTransaction {
+            $request = AfterSalesRequest::query()->lockForUpdate()->findOrFail($request->id);
+            $order = Order::query()->lockForUpdate()->findOrFail($request->order_id);
+            $amountCents = (int) $request->refund_amount_cents;
+
+            if ((int) $request->user_id !== (int) $order->user_id
+                || $request->refund_status !== AfterSalesRequest::REFUND_APPROVED
+                || $request->resolution_type !== AfterSalesRequest::RESOLUTION_REFUND) {
+                throw ValidationException::withMessages(['order_id' => '退款审批与订单用户不匹配。']);
+            }
+
+            $existing = WalletTransaction::query()->where('after_sales_request_id', $request->id)->lockForUpdate()->first();
+
+            if ($existing) {
+                if ((int) $existing->order_id !== (int) $order->id
+                    || (int) $existing->user_id !== (int) $request->user_id
+                    || (int) $existing->amount_cents !== $amountCents) {
+                    throw ValidationException::withMessages(['refund_amount_cents' => '已入账退款不可修改。']);
+                }
+
+                return $existing;
+            }
+
+            $this->validateOrderRefund($order, $amountCents);
+
+            $transaction = $this->credit(
+                $order->user,
+                $amountCents,
+                WalletTransaction::SOURCE_ORDER_REFUND,
+                '售后退款到钱包：'.$order->order_number.PHP_EOL.$request->admin_note,
+                $actor,
+                null,
+                $order,
+                $request,
+                'after-sales:'.$request->id,
+            );
+
+            return $transaction;
+        });
+    }
+
+    public function validateOrderRefund(Order $order, int $amountCents): void
+    {
+        if ($order->payment_status !== Order::PAYMENT_CONFIRMED || $order->isWalletRecharge()) {
+            throw ValidationException::withMessages(['order_id' => '仅已确认付款的商品订单可以退款到钱包。']);
+        }
+
+        if ($amountCents <= 0 || $amountCents > $this->refundableOrderCents($order, true)) {
+            throw ValidationException::withMessages(['refund_amount_cents' => '退款金额必须大于 0 且不超过订单剩余可退款金额。']);
+        }
+    }
+
+    public function adjustBalance(User $user, int $amountCents, string $type, User $actor, string $reason, string $idempotencyKey): WalletTransaction
+    {
+        abort_unless(AdminAccess::canAction('wallet.adjust', $actor), 403);
+        $reason = trim($reason);
+
+        if ($reason === '' || mb_strlen($reason) > 3000) {
+            throw ValidationException::withMessages(['reason' => '请输入调整原因（不超过 3000 字）。']);
+        }
+
+        if ($amountCents <= 0 || $amountCents > 2147483647
+            || ! in_array($type, [WalletTransaction::TYPE_CREDIT, WalletTransaction::TYPE_DEBIT], true)) {
+            throw ValidationException::withMessages(['amount_cents' => '请选择有效操作并输入大于 0 的金额。']);
+        }
+
+        if (! Str::isUuid($idempotencyKey)) {
+            throw ValidationException::withMessages(['idempotency_key' => '无效的钱包操作编号。']);
+        }
+
+        return DB::transaction(function () use ($user, $amountCents, $type, $actor, $reason, $idempotencyKey): WalletTransaction {
+            $user = User::query()->lockForUpdate()->findOrFail($user->id);
+            $existing = WalletTransaction::query()->where('idempotency_key', 'admin:'.$idempotencyKey)->lockForUpdate()->first();
+
+            if ($existing) {
+                if ((int) $existing->user_id !== (int) $user->id || $existing->type !== $type
+                    || abs((int) $existing->amount_cents) !== $amountCents
+                    || (int) $existing->created_by_user_id !== (int) $actor->id || $existing->note !== $reason) {
+                    throw ValidationException::withMessages(['idempotency_key' => '操作编号已用于其他钱包调整。']);
+                }
+
+                return $existing;
+            }
+
+            if ($type === WalletTransaction::TYPE_DEBIT && (int) $user->wallet_balance_cents < $amountCents) {
+                throw ValidationException::withMessages(['amount_cents' => '钱包余额不足，不能透支。']);
+            }
+
+            $transaction = $type === WalletTransaction::TYPE_CREDIT
+                ? $this->credit($user, $amountCents, WalletTransaction::SOURCE_ADMIN, $reason, $actor, idempotencyKey: 'admin:'.$idempotencyKey)
+                : $this->debit($user, $amountCents, WalletTransaction::SOURCE_ADMIN, $reason, null, $actor, 'admin:'.$idempotencyKey);
+
+            app(AdminActivityLogger::class)->log(
+                $type === WalletTransaction::TYPE_CREDIT ? 'wallet_balance_credited' : 'wallet_balance_debited',
+                $transaction,
+                sprintf('后台%s钱包余额：用户 %s，金额 %s，调整后余额 %s。原因：%s',
+                    $type === WalletTransaction::TYPE_CREDIT ? '增加' : '扣减',
+                    $user->displayName(), Money::format($amountCents), Money::format((int) $transaction->balance_after_cents), $reason),
+                [
+                    'customer_user_id' => $user->id,
+                    'wallet_transaction_id' => $transaction->id,
+                    'amount_cents' => (int) $transaction->amount_cents,
+                    'balance_before_cents' => (int) $transaction->balance_after_cents - (int) $transaction->amount_cents,
+                    'balance_after_cents' => (int) $transaction->balance_after_cents,
+                    'reason' => $reason,
+                ],
+                $actor,
+            );
+
+            return $transaction;
+        });
+    }
+
+    private function refundedOrderCents(Order $order, bool $lock = false): int
+    {
+        $query = WalletTransaction::query()
             ->where('order_id', $order->id)
-            ->where('source', WalletTransaction::SOURCE_ORDER_REFUND)
-            ->sum('amount_cents');
-        $refundableCents = max(0, $walletPaidCents - $alreadyRefunded);
-        $amountCents = min($refundableCents, $refundAmountCents);
+            ->where('source', WalletTransaction::SOURCE_ORDER_REFUND);
 
-        if ($amountCents <= 0) {
-            return null;
-        }
-
-        $order->loadMissing('user');
-
-        return $this->credit(
-            $order->user,
-            $amountCents,
-            WalletTransaction::SOURCE_ORDER_REFUND,
-            $note ?: '订单退款退回钱包：'.$order->order_number,
-            $actor,
-            null,
-            $order,
-        );
+        // Current reads avoid stale refund totals under MySQL repeatable-read transactions.
+        return (int) ($lock
+            ? $query->lockForUpdate()->get(['amount_cents'])->sum('amount_cents')
+            : $query->sum('amount_cents'));
     }
 
     public function creditForRechargeOrder(Order $order, ?User $actor = null): ?WalletTransaction
@@ -336,15 +473,21 @@ class WalletService
         ?User $actor = null,
         ?WalletRedeemCode $redeemCode = null,
         ?Order $order = null,
+        ?AfterSalesRequest $afterSalesRequest = null,
+        ?string $idempotencyKey = null,
     ): WalletTransaction {
         if ($amountCents <= 0) {
             throw ValidationException::withMessages(['amount' => '钱包金额必须大于 0。']);
         }
 
-        return DB::transaction(function () use ($user, $amountCents, $source, $note, $actor, $redeemCode, $order): WalletTransaction {
+        return DB::transaction(function () use ($user, $amountCents, $source, $note, $actor, $redeemCode, $order, $afterSalesRequest, $idempotencyKey): WalletTransaction {
             /** @var User $lockedUser */
             $lockedUser = User::query()->whereKey($user->id)->lockForUpdate()->firstOrFail();
             $balance = (int) $lockedUser->wallet_balance_cents + $amountCents;
+
+            if ($balance > 2147483647) {
+                throw ValidationException::withMessages(['amount_cents' => '钱包余额超过允许上限。']);
+            }
 
             $lockedUser->forceFill(['wallet_balance_cents' => $balance])->save();
 
@@ -353,6 +496,8 @@ class WalletService
                 'order_id' => $order?->id,
                 'wallet_redeem_code_id' => $redeemCode?->id,
                 'created_by_user_id' => $actor?->id,
+                'after_sales_request_id' => $afterSalesRequest?->id,
+                'idempotency_key' => $idempotencyKey,
                 'type' => WalletTransaction::TYPE_CREDIT,
                 'amount_cents' => $amountCents,
                 'balance_after_cents' => $balance,
@@ -362,13 +507,13 @@ class WalletService
         });
     }
 
-    public function debit(User $user, int $amountCents, string $source, ?string $note = null, ?Order $order = null, ?User $actor = null): WalletTransaction
+    public function debit(User $user, int $amountCents, string $source, ?string $note = null, ?Order $order = null, ?User $actor = null, ?string $idempotencyKey = null): WalletTransaction
     {
         if ($amountCents <= 0) {
             throw ValidationException::withMessages(['amount' => '钱包金额必须大于 0。']);
         }
 
-        return DB::transaction(function () use ($user, $amountCents, $source, $note, $order, $actor): WalletTransaction {
+        return DB::transaction(function () use ($user, $amountCents, $source, $note, $order, $actor, $idempotencyKey): WalletTransaction {
             /** @var User $lockedUser */
             $lockedUser = User::query()->whereKey($user->id)->lockForUpdate()->firstOrFail();
             $current = (int) $lockedUser->wallet_balance_cents;
@@ -384,6 +529,7 @@ class WalletService
                 'user_id' => $lockedUser->id,
                 'order_id' => $order?->id,
                 'created_by_user_id' => $actor?->id,
+                'idempotency_key' => $idempotencyKey,
                 'type' => WalletTransaction::TYPE_DEBIT,
                 'amount_cents' => -$amountCents,
                 'balance_after_cents' => $balance,
@@ -462,5 +608,4 @@ class WalletService
             ->get()
             ->first(fn (WalletRechargeOption $option): bool => $option->payableCents() === $amountCents);
     }
-
 }

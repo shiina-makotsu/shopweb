@@ -33,12 +33,19 @@ class AfterSalesRequestResource extends Resource
     use ChecksAdminAccess;
 
     protected static ?string $model = AfterSalesRequest::class;
+
     protected static string $permissionArea = 'support';
+
     protected static ?string $navigationLabel = '售后需求';
+
     protected static ?string $modelLabel = '售后需求';
+
     protected static ?string $pluralModelLabel = '售后需求';
+
     protected static string|\UnitEnum|null $navigationGroup = '客服';
+
     protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedLifebuoy;
+
     protected static ?int $navigationSort = 10;
 
     public static function getNavigationBadge(): ?string
@@ -154,17 +161,9 @@ class AfterSalesRequestResource extends Resource
                     ->visible(fn (AfterSalesRequest $record): bool => AdminAccess::canAction('after_sales.request_refund')
                         && ! in_array($record->status, [AfterSalesRequest::STATUS_RESOLVED, AfterSalesRequest::STATUS_CLOSED], true)
                         && ! in_array($record->refund_status, [AfterSalesRequest::REFUND_REQUESTED, AfterSalesRequest::REFUND_APPROVED], true))
-                    ->action(fn (AfterSalesRequest $record, array $data) => $record->update([
-                        'status' => AfterSalesRequest::STATUS_CONTACTING,
-                        'resolution_type' => AfterSalesRequest::RESOLUTION_REFUND,
-                        'refund_amount_cents' => (int) $data['refund_amount_cents'],
-                        'refund_status' => AfterSalesRequest::REFUND_REQUESTED,
-                        'refund_requested_by_id' => auth()->id(),
-                        'refund_requested_at' => now(),
-                        'refund_reviewed_by_id' => null,
-                        'refund_reviewed_at' => null,
-                        'admin_note' => $record->mergedAdminNote($data['admin_note'] ?? null),
-                    ])),
+                    ->action(fn (AfterSalesRequest $record, array $data) => app(BackofficeApprovalService::class)->requestRefundForAfterSales(
+                        $record, auth()->user(), (int) $data['refund_amount_cents'], (string) $data['admin_note'],
+                    )),
                 Action::make('approveRefund')
                     ->label('审批退款')
                     ->icon(Heroicon::OutlinedCheckCircle)
@@ -224,7 +223,7 @@ class AfterSalesRequestResource extends Resource
         ];
 
         if (AdminAccess::canAction('after_sales.refund')) {
-            $options = [AfterSalesRequest::RESOLUTION_REFUND => '退款'] + $options;
+            $options = [AfterSalesRequest::RESOLUTION_REFUND => '退款到钱包'] + $options;
         }
 
         return $options;
@@ -239,5 +238,4 @@ class AfterSalesRequestResource extends Resource
             default => '-',
         };
     }
-
 }

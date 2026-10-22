@@ -2,15 +2,20 @@
 
 namespace App\Models;
 
+use App\Services\SupportChatService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\DB;
 
 class SupportChatSession extends Model
 {
     public const STATUS_OPEN = 'open';
+
     public const STATUS_ACTIVE = 'active';
+
     public const STATUS_ENDED = 'ended';
+
     public const STATUS_CLOSED = 'closed';
 
     public const CUSTOMER_IDLE_MINUTES = 60;
@@ -19,6 +24,8 @@ class SupportChatSession extends Model
         'user_id',
         'order_id',
         'assigned_admin_id',
+        'telegram_admin_id',
+        'telegram_queued_at',
         'guest_id',
         'guest_email',
         'status',
@@ -34,6 +41,8 @@ class SupportChatSession extends Model
             'last_message_at' => 'datetime',
             'ended_at' => 'datetime',
             'deleted_by_customer_at' => 'datetime',
+            'telegram_admin_id' => 'integer',
+            'telegram_queued_at' => 'datetime',
         ];
     }
 
@@ -77,12 +86,17 @@ class SupportChatSession extends Model
             return false;
         }
 
-        $this->forceFill([
-            'status' => self::STATUS_ENDED,
-            'ended_at' => now(),
-            'served_count' => $this->served_count + 1,
-        ])->save();
+        DB::transaction(function (): void {
+            SiteSetting::query()->lockForUpdate()->first();
+            $locked = static::query()->lockForUpdate()->findOrFail($this->id);
+            if ($locked->isEnded() || $locked->isClosed()
+                || ! $locked->last_message_at || $locked->last_message_at->greaterThan(now()->subMinutes(self::CUSTOMER_IDLE_MINUTES))) {
+                return;
+            }
+            app(SupportChatService::class)->end($locked);
+        }, 3);
+        $this->refresh();
 
-        return true;
+        return $this->isEnded();
     }
 }

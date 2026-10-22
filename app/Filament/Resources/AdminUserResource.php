@@ -108,6 +108,23 @@ class AdminUserResource extends Resource
                 ->label('接收客服待处理邮件提醒')
                 ->default(false)
                 ->helperText('默认关闭。开启后，有新的待处理客服消息时会发送提醒到该后台用户邮箱。'),
+            TextInput::make('telegram_user_id')
+                ->label('Telegram 用户 ID')
+                ->inputMode('numeric')
+                ->regex('/\A[1-9][0-9]{0,31}\z/')
+                ->maxLength(32)
+                ->unique(ignoreRecord: true)
+                ->dehydrateStateUsing(fn (?string $state): ?string => filled($state) ? $state : null),
+            Toggle::make('telegram_notifications_enabled')
+                ->label('接收 Telegram 通知')
+                ->default(true),
+            TextInput::make('telegram_max_chat_windows')
+                ->label('Telegram 客服窗口上限')
+                ->integer()
+                ->required()
+                ->minValue(1)
+                ->maxValue(65535)
+                ->default(1),
             TextInput::make('password')
                 ->label('密码')
                 ->password()

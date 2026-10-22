@@ -89,6 +89,11 @@ class SiteSetting extends Model
         'support_ai_system_prompt',
         'support_ai_idle_minutes',
         'support_ai_workflow_slug',
+        'telegram_bot_enabled',
+        'telegram_bot_token',
+        'telegram_bot_username',
+        'telegram_webhook_secret',
+        'telegram_webhook_registered_at',
         'ai_default_endpoint',
         'ai_default_api_key',
         'ai_default_image_endpoint',
@@ -98,6 +103,11 @@ class SiteSetting extends Model
         'ai_default_user_quota_k',
         'profit_formula',
         'ai_trash_retention_days',
+    ];
+
+    protected $hidden = [
+        'telegram_bot_token',
+        'telegram_webhook_secret',
     ];
 
     protected function casts(): array
@@ -121,6 +131,9 @@ class SiteSetting extends Model
             'page_music_enabled' => 'boolean',
             'guide_pet_enabled' => 'boolean',
             'support_ai_enabled' => 'boolean',
+            'telegram_bot_enabled' => 'boolean',
+            'telegram_bot_token' => 'encrypted',
+            'telegram_webhook_registered_at' => 'datetime',
         ];
     }
 

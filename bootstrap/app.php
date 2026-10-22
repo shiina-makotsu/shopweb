@@ -1,13 +1,24 @@
 <?php
 
+use App\Console\Commands\DatabaseHealthCommand;
+use App\Console\Commands\ExpirePendingPaymentOrdersCommand;
+use App\Console\Commands\PrewarmShopCacheCommand;
+use App\Console\Commands\PruneAiTrashCommand;
+use App\Console\Commands\RecordSystemMetricSnapshotCommand;
+use App\Console\Commands\RefreshCurrencySnapshotCommand;
+use App\Console\Commands\ShopInstallCommand;
+use App\Console\Commands\SyncFlashSaleCampaignsCommand;
+use App\Console\Commands\SyncTelegramCommand;
+use App\Http\Middleware\EnsureAdmin;
 use App\Http\Middleware\EnsureInstalled;
 use App\Http\Middleware\HandleNavigationPrefetch;
 use App\Http\Middleware\ProtectAgainstRequestAvalanche;
 use App\Http\Middleware\ShowFirstVisitLoadingPage;
 use App\Http\Middleware\TrackPageVisits;
-use Illuminate\Foundation\Application;
-use Illuminate\Console\Scheduling\Schedule;
+use App\Services\AlertBotService;
 use Illuminate\Auth\AuthenticationException;
+use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
@@ -19,14 +30,15 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withCommands([
-        App\Console\Commands\DatabaseHealthCommand::class,
-        App\Console\Commands\ExpirePendingPaymentOrdersCommand::class,
-        App\Console\Commands\PruneAiTrashCommand::class,
-        App\Console\Commands\PrewarmShopCacheCommand::class,
-        App\Console\Commands\RefreshCurrencySnapshotCommand::class,
-        App\Console\Commands\RecordSystemMetricSnapshotCommand::class,
-        App\Console\Commands\ShopInstallCommand::class,
-        App\Console\Commands\SyncFlashSaleCampaignsCommand::class,
+        DatabaseHealthCommand::class,
+        ExpirePendingPaymentOrdersCommand::class,
+        PruneAiTrashCommand::class,
+        PrewarmShopCacheCommand::class,
+        RefreshCurrencySnapshotCommand::class,
+        RecordSystemMetricSnapshotCommand::class,
+        ShopInstallCommand::class,
+        SyncFlashSaleCampaignsCommand::class,
+        SyncTelegramCommand::class,
     ])
     ->withSchedule(function (Schedule $schedule): void {
         $schedule->command('shop:orders-expire-pending-payments')->everyMinute()->withoutOverlapping();
@@ -35,8 +47,10 @@ return Application::configure(basePath: dirname(__DIR__))
         $schedule->command('shop:ai-trash-prune')->dailyAt('03:20')->withoutOverlapping();
         $schedule->command('shop:cache-prewarm')->everyTenMinutes()->withoutOverlapping();
         $schedule->command('shop:system-metrics-record')->everyMinute()->withoutOverlapping();
+        $schedule->command('shop:telegram-sync')->everyMinute()->withoutOverlapping();
     })
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->validateCsrfTokens(except: ['telegram/webhook']);
         $trustedProxies = trim((string) env('TRUSTED_PROXIES', '*'));
         $trustedProxyList = match (true) {
             strcasecmp($trustedProxies, 'none') === 0 => null,
@@ -63,7 +77,7 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         $middleware->alias([
-            'admin' => \App\Http\Middleware\EnsureAdmin::class,
+            'admin' => EnsureAdmin::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
@@ -95,7 +109,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $exceptions->report(function (Throwable $exception): void {
             try {
-                app(App\Services\AlertBotService::class)->notify('ShopWeb P0 未捕获异常', $exception->getMessage(), [
+                app(AlertBotService::class)->notify('ShopWeb P0 未捕获异常', $exception->getMessage(), [
                     'exception' => $exception::class,
                     'url' => request()?->fullUrl(),
                     'ip' => request()?->ip(),
