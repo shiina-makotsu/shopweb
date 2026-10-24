@@ -708,11 +708,12 @@ ShopWeb 是一个轻量自研商城系统，第一阶段不做复杂平台型商
 - 后台“客服 > Telegram 机器人”提供开关、只写 BotFather Token、只读机器人用户名及 Webhook 注册时间；使用 `AdminAccess::can('settings')` 限定超级管理员访问，直接调用保存和注册动作也必须鉴权。页面在显式面板页面列表和后台菜单注册表中注册。
 - Token 使用 `SiteSetting` 的 `encrypted` cast，Token 与 Webhook secret 均隐藏于序列化输出；`User` 的 Telegram 用户 ID、chat ID、用户名和默认会话 ID 同样隐藏于公共序列化。挂载时不把旧 Token 填入表单，空白保存保留原值，保存及校验失败后清空输入，禁止 Livewire 响应快照回显。替换 Token 清空旧机器人用户名和注册时间。
 - 普通保存只持久化配置；“保存并注册 Webhook”先保存，再调用 `App\Services\TelegramBotService::configureWebhook(): void`，由服务执行 `getMe` 和 `setWebhook`。必须使用公网 HTTPS Webhook 和 secret header 校验；失败不得返回含 Token 的原始 API 异常。
-- 后台用户可绑定唯一的正整数 Telegram 用户 ID（最长 32 位），开启/关闭个人通知，设置并发客服窗口上限（默认 1）。后台不允许编辑 chat ID；本人必须私聊机器人 `/start`，服务校验实际发送者后登记真实 chat ID。变更绑定 ID 时清空旧验证结果及默认会话。
+- 后台用户的绑定栏统一显示为“Telegram Chat ID（私聊）”，仅接受唯一的正整数数字 ID（最长 32 位），自动清理首尾空白；用户名和个人链接必须显示明确中文校验提示。本人先私聊机器人 `/start` 获取自己的 Chat ID，将数字填入后台并保存，再次 `/start` 完成验证；未绑定的人也能查询自己的 ID，但不能获得后台权限。兼容使用 `telegram_user_id` 存预配置值，已验证目标 `telegram_chat_id` 仍只能由机器人核对真实发送者后登记。变更绑定 ID 时清空旧验证结果及默认会话，可开启/关闭个人通知及设置并发客服窗口上限（默认 1）。编辑账号未填写新密码时不得回填密码哈希或改写原密码，不得导致当前会话意外退出。
 - 全体后台面板用户均可在绑定验证及启用个人通知后接收订单通知。客服接单、列出/切换会话和发消息另须 `AdminAccess::can('support', $user)`，每次命令、inline 回调及消息转发均重新验证权限和会话归属。
 - 客服命令支持 `/chat public_id`、`/sessions`、`/switch SESSION_ID` 和 `/end`，支持 inline 接单。普通消息使用默认会话；回复某条 Telegram 客户消息时，通过 (`chat_id`, `telegram_message_id`) 映射优先选择精确会话，无效映射不得退回默认会话误发。窗口满后按 `telegram_queued_at` 排队，释放窗口后继续分配。
 - Webhook update 持久去重，客服消息回复精确映射到所属会话。通知使用加密持久 outbox，内部 `_session_id` 元数据不得发送到 Telegram API；发送失败不得阻断订单或客服主流程。
 - 请求结束时立即尝试发送；应用内每分钟自动调度 `shop:telegram-sync` 同步客服状态并重试 outbox，生产环境必须运行 Laravel scheduler。发送失败持续重试，指数退避间隔最长 1 小时。部署、绑定、命令和排障见 [Telegram 机器人](telegram-bot.md)。
+- 可通过私有环境变量 `TELEGRAM_PROXY_URL` 为 Telegram API 和附件下载统一配置独立的 HTTP/SOCKS 代理，不影响其它 HTTP 请求，不关闭 HTTPS 证书验证，不记录含凭证的原始网络异常。代理必须可由实际 PHP 运行环境访问；Windows 本机或 Docker 宿主机的回环地址不得直接视为远程服务器或容器地址。关闭个人通知不得阻止本人主动发送 `/start` 查询 Chat ID。
 
 ## 19. 当前实现状态
 

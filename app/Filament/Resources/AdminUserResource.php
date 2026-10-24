@@ -109,11 +109,21 @@ class AdminUserResource extends Resource
                 ->default(false)
                 ->helperText('默认关闭。开启后，有新的待处理客服消息时会发送提醒到该后台用户邮箱。'),
             TextInput::make('telegram_user_id')
-                ->label('Telegram 用户 ID')
+                ->label('Telegram Chat ID（私聊）')
+                ->placeholder('例如：123456789')
+                ->helperText('先在机器人私聊中发送 /start，复制回复中的数字 Chat ID。不要填写 @用户名或 t.me 链接；保存后再次发送 /start 完成绑定验证。')
                 ->inputMode('numeric')
+                ->autocomplete('off')
+                ->trim()
+                ->formatStateUsing(fn (?string $state, ?User $record): ?string => $state ?? $record?->telegram_user_id)
                 ->regex('/\A[1-9][0-9]{0,31}\z/')
                 ->maxLength(32)
                 ->unique(ignoreRecord: true)
+                ->validationMessages([
+                    'regex' => '请输入机器人 /start 回复的纯数字 Chat ID，不要填写 @用户名或 t.me 链接。',
+                    'unique' => '此 Telegram Chat ID 已绑定其他后台账号。',
+                    'max' => 'Telegram Chat ID 最多为 32 位数字。',
+                ])
                 ->dehydrateStateUsing(fn (?string $state): ?string => filled($state) ? $state : null),
             Toggle::make('telegram_notifications_enabled')
                 ->label('接收 Telegram 通知')
@@ -129,6 +139,9 @@ class AdminUserResource extends Resource
                 ->label('密码')
                 ->password()
                 ->revealable()
+                ->autocomplete('new-password')
+                ->afterStateHydrated(fn (TextInput $component) => $component->state(''))
+                ->helperText(fn (string $operation): ?string => $operation === 'edit' ? '留空则保留当前密码。' : null)
                 ->required(fn (string $operation): bool => $operation === 'create')
                 ->minLength(8)
                 ->dehydrated(fn (?string $state): bool => filled($state))

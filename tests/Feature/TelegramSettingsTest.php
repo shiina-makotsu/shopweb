@@ -1,6 +1,7 @@
 <?php
 
 use App\Filament\Pages\TelegramBotSettingsPage;
+use App\Filament\Resources\AdminUserResource;
 use App\Filament\Resources\AdminUserResource\Pages\CreateAdminUser;
 use App\Filament\Resources\AdminUserResource\Pages\EditAdminUser;
 use App\Models\SiteSetting;
@@ -11,6 +12,7 @@ use App\Support\AdminMenuRegistry;
 use Filament\Facades\Filament;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\URL;
 use Livewire\Livewire;
@@ -256,3 +258,198 @@ it('allows an unchanged binding ID when editing its owner', function (): void {
 
     expect($user->refresh()->telegram_user_id)->toBe('123456789');
 });
+
+it('saves a private Telegram Chat ID as an unverified numeric binding', function (string $input): void {
+    $page = Livewire::test(CreateAdminUser::class)
+        ->assertSee('Telegram Chat ID（私聊）')
+        ->assertSee('/start')
+        ->assertFormFieldDoesNotExist('telegram_chat_id')
+        ->fillForm([
+            'name' => 'Telegram Operator',
+            'public_id' => 'staff_telegram_operator',
+            'email' => 'telegram-operator@example.test',
+            'password' => 'operator-password',
+            'role' => 'support',
+            'telegram_user_id' => $input,
+        ])
+        ->call('create')
+        ->assertHasNoFormErrors();
+
+    $user = User::query()->where('email', 'telegram-operator@example.test')->firstOrFail();
+
+    expect($user->telegram_user_id)->toBe('123456789')
+        ->and($user->telegram_chat_id)->toBeNull()
+        ->and($user->telegram_username)->toBeNull()
+        ->and(Hash::check('operator-password', $user->password))->toBeTrue();
+    $page->assertRedirect(AdminUserResource::getUrl());
+    Http::assertNothingSent();
+})->with(['digits' => '123456789', 'pasted whitespace' => " \t123456789\r\n "]);
+
+it('explains invalid Telegram Chat IDs in Chinese without changing an existing binding', function (string $input): void {
+    $user = User::factory()->create(['role' => 'support', 'telegram_user_id' => '123456789']);
+    $user->update(['telegram_chat_id' => '123456789', 'telegram_username' => 'verified_operator']);
+    $passwordHash = $user->password;
+
+    $page = Livewire::test(EditAdminUser::class, ['record' => $user->getRouteKey()])
+        ->fillForm(['telegram_user_id' => $input])
+        ->call('save')
+        ->assertHasFormErrors(['telegram_user_id' => 'regex']);
+
+    expect($page->errors()->get('data.telegram_user_id'))->toContain('请输入机器人 /start 回复的纯数字 Chat ID，不要填写 @用户名或 t.me 链接。')
+        ->and($user->refresh()->telegram_user_id)->toBe('123456789')
+        ->and($user->telegram_chat_id)->toBe('123456789')
+        ->and($user->telegram_username)->toBe('verified_operator')
+        ->and($user->password)->toBe($passwordHash);
+    Http::assertNothingSent();
+})->with([
+    'username' => '@shiina_makotsu',
+    'profile link' => 'https://t.me/shiina_makotsu',
+    'leading zero' => '0123456789',
+    'group ID' => '-100123456789',
+]);
+
+it('explains duplicate and overlong Telegram Chat IDs in Chinese', function (): void {
+    User::factory()->create(['role' => 'support', 'telegram_user_id' => '123456789']);
+    $user = User::factory()->create(['role' => 'support']);
+
+    $page = Livewire::test(EditAdminUser::class, ['record' => $user->getRouteKey()])
+        ->fillForm(['telegram_user_id' => ' 123456789 '])
+        ->call('save')
+        ->assertHasFormErrors(['telegram_user_id' => 'unique']);
+
+    expect($page->errors()->get('data.telegram_user_id'))->toContain('此 Telegram Chat ID 已绑定其他后台账号。');
+
+    $page->fillForm(['telegram_user_id' => str_repeat('1', 33)])
+        ->call('save')
+        ->assertHasFormErrors(['telegram_user_id' => 'max']);
+
+    expect($page->errors()->get('data.telegram_user_id'))->toContain('Telegram Chat ID 最多为 32 位数字。')
+        ->and($user->refresh()->telegram_user_id)->toBeNull();
+});
+
+it('keeps a verified binding when editing unrelated account information', function (): void {
+    $user = User::factory()->create(['role' => 'support', 'telegram_user_id' => '123456789']);
+    $user->update(['telegram_chat_id' => '123456789', 'telegram_username' => 'verified_operator']);
+    $passwordHash = $user->password;
+
+    Livewire::test(EditAdminUser::class, ['record' => $user->getRouteKey()])
+        ->assertSet('data.telegram_user_id', '123456789')
+        ->assertFormFieldDoesNotExist('telegram_chat_id')
+        ->assertFormFieldDoesNotExist('telegram_username')
+        ->fillForm(['profile_intro' => 'Updated profile without rebinding Telegram.'])
+        ->call('save')
+        ->assertHasNoFormErrors();
+
+    expect($user->refresh()->profile_intro)->toBe('Updated profile without rebinding Telegram.')
+        ->and($user->telegram_user_id)->toBe('123456789')
+        ->and($user->telegram_chat_id)->toBe('123456789')
+        ->and($user->telegram_username)->toBe('verified_operator')
+        ->and($user->password)->toBe($passwordHash);
+
+    Livewire::test(EditAdminUser::class, ['record' => $user->getRouteKey()])
+        ->assertSet('data.telegram_user_id', '123456789');
+});
+
+it('normalizes edited bindings and never accepts a forged verified chat ID', function (): void {
+    $user = User::factory()->create(['role' => 'support', 'telegram_user_id' => '111222333']);
+    $user->update(['telegram_chat_id' => '111222333', 'telegram_username' => 'verified_operator']);
+    $passwordHash = $user->password;
+
+    Livewire::test(EditAdminUser::class, ['record' => $user->getRouteKey()])
+        ->fillForm([
+            'telegram_user_id' => ' 123456789 ',
+            'telegram_chat_id' => '987654321',
+            'telegram_username' => 'forged_username',
+        ])
+        ->call('save')
+        ->assertHasNoFormErrors();
+
+    expect($user->refresh()->telegram_user_id)->toBe('123456789')
+        ->and($user->telegram_chat_id)->toBeNull()
+        ->and($user->telegram_username)->toBeNull()
+        ->and($user->password)->toBe($passwordHash);
+
+    Livewire::test(EditAdminUser::class, ['record' => $user->getRouteKey()])
+        ->assertSet('data.telegram_user_id', '123456789')
+        ->fillForm(['telegram_user_id' => '   '])
+        ->call('save')
+        ->assertHasNoFormErrors();
+
+    expect($user->refresh()->telegram_user_id)->toBeNull()
+        ->and($user->telegram_chat_id)->toBeNull()
+        ->and($user->password)->toBe($passwordHash);
+});
+
+it('keeps the password and authenticated session when binding its own account without a new password', function (?string $password): void {
+    $user = auth()->user();
+    $passwordHash = $user->password;
+    $this->withSession(['telegram_binding_marker' => 'still-authenticated'])
+        ->get(AdminUserResource::getUrl('edit', ['record' => $user]))
+        ->assertOk();
+    $sessionPasswordHash = session('password_hash_web');
+
+    $page = Livewire::test(EditAdminUser::class, ['record' => $user->getRouteKey()]);
+    expect($page->get('data.password'))->toBeIn([null, ''])
+        ->and(json_encode($page->snapshot))->not->toContain($passwordHash);
+
+    $page->fillForm(['telegram_user_id' => '123456789', ...($password === null ? [] : ['password' => $password])])
+        ->call('save')
+        ->assertHasNoFormErrors();
+
+    expect($user->fresh()->password)->toBe($passwordHash)
+        ->and($user->fresh()->telegram_user_id)->toBe('123456789')
+        ->and($user->fresh()->telegram_chat_id)->toBeNull()
+        ->and(json_encode($page->snapshot))->not->toContain($passwordHash);
+    $this->assertAuthenticatedAs($user);
+    $this->get(AdminUserResource::getUrl())
+        ->assertOk()
+        ->assertSessionHas('telegram_binding_marker', 'still-authenticated')
+        ->assertSessionHas('password_hash_web', $sessionPasswordHash);
+})->with(['empty password' => '', 'untouched password' => null]);
+
+it('never hydrates an existing password hash into the editable password field', function (): void {
+    $user = User::factory()->create(['role' => 'support']);
+    $page = Livewire::test(EditAdminUser::class, ['record' => $user->getRouteKey()]);
+
+    $page->instance()->form->fill([...$page->get('data'), 'password' => $user->password]);
+
+    expect($page->instance()->data['password'])->toBe('')
+        ->and(json_encode($page->snapshot))->not->toContain($user->password);
+});
+
+it('requires a valid new password only when creating or explicitly changing it', function (): void {
+    Livewire::test(CreateAdminUser::class)
+        ->fillForm([
+            'name' => 'New Operator', 'public_id' => 'staff_new_operator',
+            'email' => 'new-operator@example.test', 'password' => '',
+        ])
+        ->call('create')
+        ->assertHasFormErrors(['password' => 'required']);
+
+    $user = User::factory()->create(['role' => 'support']);
+    $oldHash = $user->password;
+    $page = Livewire::test(EditAdminUser::class, ['record' => $user->getRouteKey()])
+        ->fillForm(['password' => 'short'])
+        ->call('save')
+        ->assertHasFormErrors(['password' => 'min']);
+
+    expect($user->refresh()->password)->toBe($oldHash);
+
+    $page->fillForm(['password' => 'replacement-password'])
+        ->call('save')
+        ->assertHasNoFormErrors();
+
+    expect($user->refresh()->password)->not->toBe($oldHash)
+        ->and(Hash::check('replacement-password', $user->password))->toBeTrue();
+});
+
+it('does not let other roles edit administrator Telegram bindings', function (string $role): void {
+    $admin = auth()->user();
+    $this->actingAs(User::factory()->create(['role' => $role]));
+
+    $this->get(AdminUserResource::getUrl('edit', ['record' => $admin]))->assertForbidden();
+    Livewire::test(EditAdminUser::class, ['record' => $admin->getRouteKey()])->assertForbidden();
+
+    expect($admin->refresh()->telegram_user_id)->toBeNull();
+    Http::assertNothingSent();
+})->with(['operator', 'finance', 'warehouse', 'sales', 'purchasing', 'support', 'customer']);

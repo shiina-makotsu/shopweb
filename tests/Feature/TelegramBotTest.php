@@ -73,6 +73,60 @@ it('authenticates webhooks and only binds an explicitly configured private Teleg
     expect(DB::table('site_settings')->value('telegram_bot_token'))->not->toBe('123456:test_token');
 });
 
+it('returns the private chat ID on start before binding without granting account access', function (): void {
+    $admin = telegramTestAdmin('101');
+    $admin->update(['telegram_chat_id' => null]);
+    $update = telegramTestUpdate(1, '999', '/start');
+    $update['message']['from']['username'] = 'unbound_user';
+
+    $this->postJson(route('telegram.webhook'), $update, ['X-Telegram-Bot-Api-Secret-Token' => 'test-secret'])->assertOk();
+    $this->postJson(route('telegram.webhook'), $update, ['X-Telegram-Bot-Api-Secret-Token' => 'test-secret'])->assertOk();
+
+    $reply = TelegramOutbox::query()->sole()->payload;
+    expect($reply['chat_id'])->toBe('999')
+        ->and($reply['text'])->toContain('Telegram Chat ID：999', '尚未绑定')
+        ->not->toContain($admin->name, '/chat', '/sessions')
+        ->and($admin->fresh()->telegram_chat_id)->toBeNull()
+        ->and(User::query()->where('telegram_user_id', '999')->exists())->toBeFalse();
+
+    app(TelegramBotService::class)->handleUpdate(telegramTestUpdate(2, '999', '/chat somebody'));
+    expect(SupportChatSession::query()->count())->toBe(0);
+});
+
+it('includes the verified chat ID in the bound start response regardless of notification preference', function (bool $notificationsEnabled): void {
+    $admin = telegramTestAdmin('101');
+    $admin->update(['telegram_chat_id' => null, 'telegram_notifications_enabled' => $notificationsEnabled]);
+
+    app(TelegramBotService::class)->handleUpdate(telegramTestUpdate(1, '101', '/start'));
+
+    $reply = TelegramOutbox::query()->sole()->payload;
+    expect($reply['chat_id'])->toBe('101')
+        ->and($reply['text'])->toContain('Telegram Chat ID：101', '绑定成功', $admin->displayName())
+        ->and($admin->fresh()->telegram_chat_id)->toBe('101');
+
+    expect(app(TelegramTransport::class)->flush())->toBe(1);
+    Http::assertSent(fn ($request): bool => $request->url() === 'https://api.telegram.org/bot123456:test_token/sendMessage'
+        && $request['chat_id'] === '101'
+        && str_contains($request['text'], 'Telegram Chat ID：101')
+        && ! isset($request['_command_reply']));
+})->with(['notifications enabled' => true, 'notifications disabled' => false]);
+
+it('does not return IDs or bind administrators through groups or mismatched senders', function (string $case): void {
+    $admin = telegramTestAdmin('101');
+    $admin->update(['telegram_chat_id' => null]);
+    $update = telegramTestUpdate(1, '101', '/start');
+    if ($case === 'group') {
+        $update['message']['chat'] = ['id' => -100123, 'type' => 'supergroup'];
+    } else {
+        $update['message']['from']['id'] = 999;
+    }
+
+    app(TelegramBotService::class)->handleUpdate($update);
+
+    expect(TelegramOutbox::query()->count())->toBe(0)
+        ->and($admin->fresh()->telegram_chat_id)->toBeNull();
+})->with(['group', 'different sender']);
+
 it('lets only the first administrator accept a session and deduplicates updates', function (): void {
     $one = telegramTestAdmin('101');
     telegramTestAdmin('202');
@@ -181,24 +235,51 @@ it('retains failed notifications and retries without exposing tokens in stored p
     expect(app(TelegramTransport::class)->flush())->toBe(1)->and($entry->fresh()->sent_at)->not->toBeNull();
 });
 
-it('receives Telegram files into private support storage', function (): void {
+it('uses the configured Telegram proxy without changing unrelated HTTP clients', function (?string $proxy): void {
+    config(['services.telegram.proxy_url' => $proxy]);
+    Http::swap(new Factory);
+    $requests = 0;
+    Http::fake(function ($request, array $options) use ($proxy, &$requests) {
+        $requests++;
+        expect($options['proxy'] ?? null)->toBe($request->url() === 'https://example.test/' ? null : $proxy)
+            ->and($options['verify'] ?? true)->toBeTrue();
+
+        return Http::response(['ok' => true, 'result' => ['id' => 123456]]);
+    });
+
+    app(TelegramTransport::class)->request('getMe');
+    Http::get('https://example.test/');
+
+    expect($requests)->toBe(2);
+})->with(['direct' => null, 'HTTP proxy' => 'http://proxy.example.test:7890', 'SOCKS proxy' => 'socks5h://proxy.example.test:7890']);
+
+it('receives Telegram files into private support storage using the configured proxy', function (?string $proxy): void {
+    config(['services.telegram.proxy_url' => $proxy]);
     Storage::fake('support_attachments');
     telegramTestAdmin('101');
     $session = telegramTestSession();
     $bot = app(TelegramBotService::class);
     $bot->handleUpdate(telegramTestUpdate(1, '101', callback: 'accept:'.$session->id));
     Http::swap(new Factory);
-    Http::fake([
-        'https://api.telegram.org/bot*/getFile' => Http::response(['ok' => true, 'result' => ['file_path' => 'documents/file.txt']]),
-        'https://api.telegram.org/file/*' => Http::response('File content'),
-    ]);
+    $requests = 0;
+    Http::fake(function ($request, array $options) use ($proxy, &$requests) {
+        $requests++;
+        expect($options['proxy'] ?? null)->toBe($proxy)
+            ->and($options['verify'] ?? true)->toBeTrue()
+            ->and($options['allow_redirects'])->toBeFalse();
+
+        return str_contains($request->url(), '/getFile')
+            ? Http::response(['ok' => true, 'result' => ['file_path' => 'documents/file.txt']])
+            : Http::response('File content');
+    });
     $update = telegramTestUpdate(2, '101');
     $update['message']['document'] = ['file_id' => 'file1', 'file_name' => 'help.txt', 'mime_type' => 'text/plain', 'file_size' => 12];
     $bot->handleUpdate($update);
     $message = $session->messages()->where('sender_type', SupportChatMessage::SENDER_ADMIN)->sole();
     Storage::disk('support_attachments')->assertExists($message->attachment_path);
-    expect($message->attachment_original_name)->toBe('help.txt');
-});
+    expect($message->attachment_original_name)->toBe('help.txt')
+        ->and($requests)->toBe(2);
+})->with(['direct' => null, 'HTTP proxy' => 'http://proxy.example.test:7890', 'SOCKS proxy' => 'socks5h://proxy.example.test:7890']);
 
 it('requeues active sessions when an administrator disables Telegram and drops stale notifications', function (): void {
     $admin = telegramTestAdmin('101');

@@ -6,6 +6,7 @@ use App\Models\SiteSetting;
 use App\Models\TelegramOutbox;
 use App\Models\User;
 use App\Support\AdminAccess;
+use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -15,6 +16,17 @@ use Throwable;
 
 class TelegramTransport
 {
+    public function client(): PendingRequest
+    {
+        $client = Http::connectTimeout(5)->timeout(15)->withoutRedirecting();
+        $proxy = config('services.telegram.proxy_url');
+        if (filled($proxy)) {
+            $client->withOptions(['proxy' => $proxy]);
+        }
+
+        return $client;
+    }
+
     public function request(string $method, array $payload = [], ?string $attachmentPath = null, ?string $attachmentName = null): array
     {
         // Read through the model so the encrypted token is decrypted.
@@ -25,7 +37,7 @@ class TelegramTransport
 
         $stream = null;
         try {
-            $http = Http::connectTimeout(5)->timeout(15)->withoutRedirecting();
+            $http = $this->client();
             if ($attachmentPath !== null) {
                 $stream = Storage::disk('support_attachments')->readStream($attachmentPath);
                 if (! is_resource($stream)) {
@@ -71,7 +83,7 @@ class TelegramTransport
         ]);
     }
 
-    public function sendText(string $chatId, string $text, array $buttons = [], ?int $sessionId = null): void
+    public function sendText(string $chatId, string $text, array $buttons = [], ?int $sessionId = null, bool $isCommandReply = false): void
     {
         $payload = ['chat_id' => $chatId, 'text' => mb_substr($text, 0, 4000)];
         if ($buttons !== []) {
@@ -79,6 +91,9 @@ class TelegramTransport
         }
         if ($sessionId !== null) {
             $payload['_session_id'] = $sessionId;
+        }
+        if ($isCommandReply) {
+            $payload['_command_reply'] = true;
         }
         $this->queue('sendMessage', $payload);
     }
@@ -111,9 +126,11 @@ class TelegramTransport
                     $attachment = $payload['_attachment_path'] ?? null;
                     $attachmentName = $payload['_attachment_name'] ?? null;
                     $recipientId = $payload['_recipient_user_id'] ?? null;
+                    $isCommandReply = (bool) ($payload['_command_reply'] ?? false);
                     if ($recipientId) {
                         $recipient = User::query()->find($recipientId);
-                        if (! $recipient || ! AdminAccess::canAccessPanel($recipient) || ! $recipient->telegram_notifications_enabled
+                        if (! $recipient || ! AdminAccess::canAccessPanel($recipient)
+                            || (! $recipient->telegram_notifications_enabled && ! $isCommandReply)
                             || $recipient->telegram_chat_id !== (string) $payload['chat_id']
                             || ($sessionId && ! AdminAccess::can('support', $recipient))) {
                             $entry->update(['sent_at' => now()]);
@@ -121,7 +138,7 @@ class TelegramTransport
                             return 0;
                         }
                     }
-                    unset($payload['_session_id'], $payload['_attachment_path'], $payload['_attachment_name'], $payload['_recipient_user_id']);
+                    unset($payload['_session_id'], $payload['_attachment_path'], $payload['_attachment_name'], $payload['_recipient_user_id'], $payload['_command_reply']);
                     $result = $this->request($entry->method, $payload, $attachment, $attachmentName);
                     if ($sessionId && isset($result['message_id'], $payload['chat_id'])) {
                         DB::table('telegram_message_links')->insertOrIgnore([

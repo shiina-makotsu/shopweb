@@ -24,6 +24,10 @@ return [
         'cooldown_seconds' => env('LOCAL_AI_COOLDOWN_SECONDS', 600),
     ],
 
+    'telegram' => [
+        'proxy_url' => env('TELEGRAM_PROXY_URL'),
+    ],
+
     'payment_proof_ocr' => [
         'binary' => env('PAYMENT_PROOF_OCR_BINARY', 'tesseract'),
         'languages' => env('PAYMENT_PROOF_OCR_LANGUAGES', 'chi_sim+eng'),

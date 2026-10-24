@@ -12,7 +12,6 @@ use App\Support\AdminAccess;
 use App\Support\Money;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -64,7 +63,8 @@ class TelegramBotService
             $admin = User::query()->whereIn('role', AdminAccess::panelRoles())
                 ->where('telegram_user_id', (string) ($from['id'] ?? ''))->lockForUpdate()->first();
             if (! $admin) {
-                $this->transport->sendText($chatId, '此 Telegram 用户尚未绑定后台账号，请由超级管理员填写你的 Telegram 用户 ID。');
+                $this->transport->sendText($chatId,
+                    "你的 Telegram Chat ID：{$chatId}\n尚未绑定后台账号。请由超级管理员将此数字填写到后台用户的 Telegram Chat ID，保存后再发送 /start 完成验证。不要填写 @用户名或 t.me 链接。");
                 if ($callback) {
                     $this->answer($callback['id'], '账号尚未绑定。');
                 }
@@ -218,7 +218,7 @@ class TelegramBotService
         $text = trim((string) ($message['text'] ?? $message['caption'] ?? ''));
         if (preg_match('~^/(start|help)(?:@\w+)?(?:\s|$)~u', $text)) {
             $this->transport->sendText($admin->telegram_chat_id,
-                "绑定成功：{$admin->displayName()}\n/chat 网站用户ID：主动联系\n/sessions：查看接待窗口\n/switch 会话编号：切换窗口\n/end：结束当前会话\n也可直接回复某条会话消息。只有客服权限账号可接待。");
+                "你的 Telegram Chat ID：{$admin->telegram_chat_id}\n绑定成功：{$admin->displayName()}\n/chat 网站用户ID：主动联系\n/sessions：查看接待窗口\n/switch 会话编号：切换窗口\n/end：结束当前会话\n也可直接回复某条会话消息。只有客服权限账号可接待。", isCommandReply: true);
 
             return;
         }
@@ -323,7 +323,7 @@ class TelegramBotService
         }
         $token = SiteSetting::query()->first()?->telegram_bot_token;
         try {
-            $response = Http::connectTimeout(5)->timeout(20)->withoutRedirecting()->get('https://api.telegram.org/file/bot'.$token.'/'.$remotePath);
+            $response = $this->transport->client()->timeout(20)->get('https://api.telegram.org/file/bot'.$token.'/'.$remotePath);
             if (! $response->successful()) {
                 throw new RuntimeException('Telegram 附件暂时下载失败，请重试。');
             }
